@@ -76,7 +76,7 @@ def resolve(path):
     return WORK_DIR / path
 
 # ─── tool definitions ────────────────────────────────────
-SYSTEM_PROMPT = """CRITICAL: You are a coding AGENT with tools. You DO NOT describe or explain tools. You CALL them.
+SYSTEM_PROMPT = "CRITICAL: You are a coding AGENT with tools running on Windows. You DO NOT describe or explain tools. You CALL them.\n\nWORKSPACE: " + str(WORK_DIR) + """ — project root.
 
 When user asks something, your FIRST response must be a ```tool block. Nothing else.
 
@@ -106,7 +106,7 @@ Format (copy exactly):
 {"tool": "grep", "pattern": "...", "include": "..."}
 ```
 
-After tool result, either call another tool or reply to user. NEVER explain available tools. NEVER write code blocks (python, bash, etc). ONLY ```tool blocks.
+After tool result, either call another tool or reply to user. NEVER explain available tools. NEVER write code blocks. ONLY ```tool blocks.
 
 Available tools: read, write, edit, bash, glob, grep, list, web, diff, commit, undo, verify.
 Paths: use forward slashes. Absolute paths like C:/Users/... work anywhere."""
@@ -268,6 +268,27 @@ def chat(req: ChatReq):
         if not name:
             full += "[tool: missing 'tool' key in JSON]"
             continue
+
+        # confirmation for destructive actions
+        DESTRUCTIVE = ("write", "edit", "bash", "commit", "undo")
+        if name in DESTRUCTIVE:
+            last = msgs[-1]["content"].strip().lower() if msgs else ""
+            if last in ("yes", "y", "go ahead", "да", "ok", "continue", "proceed", "do it"):
+                # user confirmed, execute
+                result = execute_tool(name, tc)
+                result_str = f"[tool:{name}] {result[:2000]}"
+                full += result_str + "\n"
+                msgs.append({"role": "assistant", "content": f"(called tool: {name})"})
+                msgs.append({"role": "user", "content": result_str})
+            else:
+                # ask for confirmation
+                ask_msg = f"Allow {name}?\nArgs: {json.dumps(tc, ensure_ascii=False)[:300]}\nReply 'yes' to proceed."
+                full += f"\n[CONFIRM] {ask_msg}\n"
+                msgs.append({"role": "assistant", "content": content})
+                msgs.append({"role": "user", "content": ask_msg})
+                break  # wait for user reply in next request
+            continue
+
         result = execute_tool(name, tc)
         result_str = f"[tool:{name}] {result[:2000]}"
         full += result_str + "\n"
