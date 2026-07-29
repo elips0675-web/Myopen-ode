@@ -23,51 +23,55 @@ python agent.py
 http://localhost:8765/
 ```
 
-## Что умеет
+## Инструменты (14)
 
 | Инструмент | Описание |
 |---|---|
-| `read` | Читать файлы (локальные пути + URL) |
+| `read` | Читать файлы (путь или URL) |
 | `write` | Создавать файлы (в любой папке) |
 | `edit` | Заменять текст в файлах |
 | `bash` | Выполнять команды |
 | `glob` | Искать файлы по шаблону |
 | `grep` | Искать текст в файлах |
-| `list` | Просмотр содержимого папок |
+| `list` | Содержимое папок |
 | `web` | Загружать веб-страницы |
-| `diff` | Показать git diff |
+| `diff` | Git diff |
 | `commit` | Git add + commit |
 | `undo` | Откатить изменения |
 | `verify` | Проверить синтаксис |
-| `plan` | Составить план перед работой |
-
-## Архитектура
-
-Один файл `agent.py` (~500 строк), zero зависимостей кроме `fastapi+uvicorn+requests`:
-
-- **FastAPI** сервер на порту 8765
-- **HTML UI** — встроенный, без npm
-- **SSE streaming** — ответ приходит по токену
-- **Agent loop** — до 12 итераций: модель → ```tool → исполнение → результат
-- **Prompt-based tool calling** — qwen2.5-coder:7b не поддерживает native tool_calls в Ollama, но агент работает через парсинг ```tool блоков
+| `plan` | Составить план, пользователь подтверждает |
+| `search` | Семантический поиск по codebase (RAG) |
 
 ## Безопасность
 
-- Бэкапы перед каждым write/edit (до 50 версий, в `.agent_backups/`)
+- Бэкапы перед write/edit (до 50 версий в `.agent_backups/`)
 - Подтверждение перед write/edit/bash/commit/undo
+- `plan` инструмент — модель предлагает шаги, пользователь подтверждает
 - Проверка синтаксиса после изменений (py_compile, tsc, json.tool)
-- Автоsummarization контекста при длинных диалогах
+- 60s таймаут на agent loop, 3 retries при битом JSON
+- JSON Schema валидация всех tool вызовов
+
+## Архитектура
+
+Один файл `agent.py` (~600 строк), зависимости: `fastapi`, `uvicorn`, `requests`.
+
+- **FastAPI** сервер на порту 8765, SSE streaming
+- **Agent loop**: до 12 итераций, 60s timeout, 3 JSON retries
+- **Prompt-based tool calling** — qwen2.5-coder:7b не поддерживает native tool_calls
+- **HTML UI** — встроенный (zero npm), Cancel, diff view
+- **Context**: автоsummarization через qwen2.5-coder:1.5b при >4K символов
+- **32K контекстное окно**
+- **RAG**: семантический поиск через Ollama `/api/embed` + cosine similarity
 
 ## Файлы
 
 | Файл | Назначение |
 |---|---|
-| `agent.py` | Агент (сервер + UI + agent loop) |
+| `agent.py` | Агент (сервер + UI + agent loop + RAG) |
 | `test_agent.py` | Smoke-тесты (11 тестов) |
 | `context.txt` | Описание проекта для ревью |
 | `TODO.md` | Что сделано и что осталось |
 | `opencode.json` | Конфиг opencode CLI |
-| `desktop.py` | Версия с Monaco Editor (архив) |
 
 ## Тесты
 
