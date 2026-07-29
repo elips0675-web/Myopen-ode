@@ -76,35 +76,40 @@ def resolve(path):
     return WORK_DIR / path
 
 # ─── tool definitions ────────────────────────────────────
-SYSTEM_PROMPT = """You are a coding agent. agent.py is your source code — reading it is reading yourself.
+SYSTEM_PROMPT = """CRITICAL: You are a coding AGENT with tools. You DO NOT describe or explain tools. You CALL them.
 
-TOOLS (output as ```tool blocks):
-read   — file content (local path or http/https URL). Use absolute paths for files outside project.
-write  — create file. Use absolute path for outside project.
-edit   — replace old text with new. Supports absolute paths.
-bash   — run shell command. Add "cwd": "path" to run elsewhere.
-glob   — find files by pattern. Supports absolute paths.
-grep   — search file contents. Add "cwd": "path" for other dirs.
-list   — list directory. Supports absolute paths.
-web    — fetch URL content.
-diff   — git diff.
-commit — git add -A + commit.
-undo   — restore previous version.
-verify — syntax check a file.
+When user asks something, your FIRST response must be a ```tool block. Nothing else.
 
-RULES:
-- Read before edit. Verify after edit. Commit changes.
-- NEVER write Python/shell to simulate tools. ONLY use the tools above.
-- Absolute paths start with C:/ D:/ etc. Use forward slashes.
+Format (copy exactly):
+```tool
+{"tool": "read", "path": "..."}
+```
+```tool
+{"tool": "list", "path": "..."}
+```
+```tool
+{"tool": "bash", "cmd": "..."}
+```
+```tool
+{"tool": "web", "url": "..."}
+```
+```tool
+{"tool": "write", "path": "...", "content": "..."}
+```
+```tool
+{"tool": "edit", "path": "...", "old": "...", "new": "..."}
+```
+```tool
+{"tool": "glob", "pattern": "..."}
+```
+```tool
+{"tool": "grep", "pattern": "...", "include": "..."}
+```
 
-EXAMPLES:
-{"tool": "read", "path": "C:/Users/admin/config.json"}
-{"tool": "read", "path": "https://example.com"}
-{"tool": "web", "url": "https://pypi.org/project/requests/"}
-{"tool": "list", "path": "D:/projects"}
-{"tool": "bash", "cmd": "dir", "cwd": "C:/Users/admin"}
-{"tool": "glob", "pattern": "C:/Users/admin/projects/**/*.py"}
-{"tool": "grep", "pattern": "TODO", "include": "*.py", "cwd": "D:/code"}"""
+After tool result, either call another tool or reply to user. NEVER explain available tools. NEVER write code blocks (python, bash, etc). ONLY ```tool blocks.
+
+Available tools: read, write, edit, bash, glob, grep, list, web, diff, commit, undo, verify.
+Paths: use forward slashes. Absolute paths like C:/Users/... work anywhere."""
 
 def call_ollama(messages):
     try:
@@ -131,6 +136,7 @@ def execute_tool(name, args):
                 except Exception as e: return f"Error fetching URL: {e}"
             pp = resolve(p)
             if not pp.exists(): return f"Error: {p} not found"
+            if pp.is_dir(): return f"'{p}' is a directory. Use list tool to see contents."
             return pp.read_text("utf-8")
         elif name == "web":
             url = args.get("url", "")
@@ -205,7 +211,9 @@ def index(): return HTMLResponse(HTML)
 def chat(req: ChatReq):
     msgs = [{"role": "system", "content": SYSTEM_PROMPT}] + req.messages
     full = ""
-    tool_pat = re.compile('```tool\n(.*?)\n```', re.DOTALL)
+    tool_pat = re.compile('```(?:tool|json)\n(.*?)\n```', re.DOTALL)
+    # also detect bare JSON tool objects
+    bare_tool_pat = re.compile(r'\{\s*"tool"\s*:\s*"[^"]+"\s*.*?\}', re.DOTALL)
     max_iter = 12
 
     for it in range(max_iter):
@@ -215,6 +223,19 @@ def chat(req: ChatReq):
 
         # check for tool block
         m = tool_pat.search(content)
+        # also check for bare JSON like {"tool": "read", "path": "..."} outside code blocks
+        bare = None
+        if not m:
+            for match in bare_tool_pat.finditer(content):
+                try:
+                    j = json.loads(match.group())
+                    if "tool" in j and j["tool"] in ("read","write","edit","bash","glob","grep","list","web","diff","commit","undo","verify"):
+                        bare = match
+                        break
+                except: pass
+            if bare:
+                m = bare
+
         if not m:
             full += content
             break
@@ -226,7 +247,8 @@ def chat(req: ChatReq):
             msgs.append({"role": "assistant", "content": before})
 
         # parse and execute tool
-        raw_json = m.group(1).strip()
+        try: raw_json = m.group(1).strip()  # captured from ```tool block
+        except IndexError: raw_json = m.group(0).strip()  # bare JSON match
         try:
             tc = json.loads(raw_json)
         except:
