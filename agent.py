@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """AI Coding Agent - full-featured."""
 
-import json, os, subprocess, glob, webbrowser, re, shutil, hashlib, textwrap
+import json, os, subprocess, glob, webbrowser, re, shutil, hashlib, textwrap, urllib.parse
 from pathlib import Path
 from datetime import datetime
 import requests, uvicorn
@@ -23,24 +23,27 @@ BACKUP_DIR.mkdir(exist_ok=True)
 MAX_BACKUPS = 50
 
 def backup(path):
-    p = WORK_DIR / path
+    p = Path(path) if os.path.isabs(path) else WORK_DIR / path
     if p.exists():
-        b = BACKUP_DIR / path.replace("\\", "_").replace("/", "_") / datetime.now().strftime("%H%M%S_%f")
+        key = str(p).replace("\\", "_").replace("/", "_").replace(":", "")
+        b = BACKUP_DIR / key / datetime.now().strftime("%H%M%S_%f")
         b.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(p, b)
-        # cleanup old backups
         versions = sorted(b.parent.iterdir())
         for v in versions[:-MAX_BACKUPS]:
             v.unlink()
 
 def undo(path):
-    bd = BACKUP_DIR / path.replace("\\", "_").replace("/", "_")
-    versions = sorted(bd.iterdir()) if bd.exists() else []
-    if versions:
-        shutil.copy2(versions[-1], WORK_DIR / path)
-        versions[-1].unlink()
-        return f"Undone: {path} restored to previous version"
-    return f"No backup for {path}"
+    key = str(Path(path) if os.path.isabs(path) else WORK_DIR / path)
+    key = key.replace("\\", "_").replace("/", "_").replace(":", "")
+    bd = BACKUP_DIR / key
+    if not bd.exists(): return f"No backup for {path}"
+    versions = sorted(bd.iterdir())
+    if not versions: return f"No backup for {path}"
+    dst = Path(path) if os.path.isabs(path) else WORK_DIR / path
+    shutil.copy2(versions[-1], dst)
+    versions[-1].unlink()
+    return f"Undone: {path} restored"
 
 # ─── git helpers ──────────────────────────────────────────
 def git(*args):
@@ -65,25 +68,43 @@ def verify_file(path):
             return r.stdout.strip()[:1000] or r.stderr.strip()[:1000]
     return ""
 
+# ─── path resolver ────────────────────────────────────────
+def resolve(path):
+    """Resolve a path: absolute or relative to WORK_DIR."""
+    p = Path(path)
+    if p.is_absolute(): return p
+    return WORK_DIR / path
+
 # ─── tool definitions ────────────────────────────────────
-SYSTEM_PROMPT = """You are a coding agent. Your source code lives in agent.py — when you read it, you are reading yourself. You are an AI running locally via Ollama.
+SYSTEM_PROMPT = """You are a coding agent. agent.py is your source code — reading it is reading yourself.
 
-Tools: read, write, edit, bash, glob, grep, list, diff, commit, undo, verify.
+TOOLS (output as ```tool blocks):
+read   — file content (local path or http/https URL). Use absolute paths for files outside project.
+write  — create file. Use absolute path for outside project.
+edit   — replace old text with new. Supports absolute paths.
+bash   — run shell command. Add "cwd": "path" to run elsewhere.
+glob   — find files by pattern. Supports absolute paths.
+grep   — search file contents. Add "cwd": "path" for other dirs.
+list   — list directory. Supports absolute paths.
+web    — fetch URL content.
+diff   — git diff.
+commit — git add -A + commit.
+undo   — restore previous version.
+verify — syntax check a file.
 
-You NEVER write Python/shell code to simulate tools. You ONLY output tool JSON wrapped in ```tool blocks.
+RULES:
+- Read before edit. Verify after edit. Commit changes.
+- NEVER write Python/shell to simulate tools. ONLY use the tools above.
+- Absolute paths start with C:/ D:/ etc. Use forward slashes.
 
-FORMAT:
-```tool
-{"tool": "TOOLNAME", ...args}
-```
-
-Read before edit. Verify after edit. Commit changes. Respond in user's language briefly.
-
-User: "read agent.py"
-Assistant:
-```tool
-{"tool": "read", "path": "agent.py"}
-```"""
+EXAMPLES:
+{"tool": "read", "path": "C:/Users/admin/config.json"}
+{"tool": "read", "path": "https://example.com"}
+{"tool": "web", "url": "https://pypi.org/project/requests/"}
+{"tool": "list", "path": "D:/projects"}
+{"tool": "bash", "cmd": "dir", "cwd": "C:/Users/admin"}
+{"tool": "glob", "pattern": "C:/Users/admin/projects/**/*.py"}
+{"tool": "grep", "pattern": "TODO", "include": "*.py", "cwd": "D:/code"}"""
 
 def call_ollama(messages):
     try:
@@ -102,56 +123,69 @@ def call_ollama(messages):
 def execute_tool(name, args):
     try:
         if name == "read":
-            p = WORK_DIR / args["path"]
-            if not p.exists(): return f"Error: {args['path']} not found"
-            return p.read_text("utf-8")
+            p = args["path"]
+            if p.startswith(("http://", "https://")):
+                try:
+                    r = requests.get(p, timeout=15, headers={"User-Agent": "Mozilla/5.0"})
+                    return r.text[:5000]
+                except Exception as e: return f"Error fetching URL: {e}"
+            pp = resolve(p)
+            if not pp.exists(): return f"Error: {p} not found"
+            return pp.read_text("utf-8")
+        elif name == "web":
+            url = args.get("url", "")
+            try:
+                r = requests.get(url, timeout=15, headers={"User-Agent": "Mozilla/5.0"})
+                return r.text[:5000]
+            except Exception as e: return f"Error: {e}"
         elif name == "write":
-            p = WORK_DIR / args["path"]
-            backup(str(p.relative_to(WORK_DIR)))
+            p = resolve(args["path"])
+            rel = str(p.relative_to(WORK_DIR)) if WORK_DIR in p.parents else str(p)
+            backup(rel)
             p.parent.mkdir(parents=True, exist_ok=True)
             p.write_text(args["content"], "utf-8")
-            v = verify_file(str(p.relative_to(WORK_DIR)))
-            msg = f"Written {len(args['content'])}b to {args['path']}"
+            v = verify_file(str(p))
+            msg = f"Written {len(args['content'])}b to {p}"
             if v: msg += f"\nVerify: {v[:500]}"
             return msg
         elif name == "edit":
-            p = WORK_DIR / args["path"]
-            if not p.exists(): return f"Error: {args['path']} not found"
-            old = args.get("old", "")
-            new = args.get("new", "")
+            p = resolve(args["path"])
+            if not p.exists(): return f"Error: {p} not found"
+            old = args.get("old", ""); new = args.get("new", "")
             content = p.read_text("utf-8")
-            if old not in content:
-                return f"Error: text not found in {args['path']}"
-            backup(str(p.relative_to(WORK_DIR)))
+            if old not in content: return f"Error: text not found in {args['path']}"
+            rel = str(p.relative_to(WORK_DIR)) if WORK_DIR in p.parents else str(p)
+            backup(rel)
             p.write_text(content.replace(old, new), "utf-8")
-            v = verify_file(str(p.relative_to(WORK_DIR)))
-            count = content.count(old)
-            msg = f"Replaced {count} occurrence(s) in {args['path']}"
-            if v: msg += f"\nVerify: {v[:500]}"
-            return msg
+            v = verify_file(str(p))
+            return f"Replaced in {p}" + (f"\nVerify: {v[:500]}" if v else "")
         elif name == "bash":
-            r = subprocess.run(args["cmd"], shell=True, cwd=str(WORK_DIR), capture_output=True, text=True, timeout=60)
-            out = (r.stdout or "")[-3000:]
-            err = (r.stderr or "")[-1000:]
-            return out + ("\nSTDERR:\n" + err if err else "")
+            cwd = resolve(args.get("cwd", ".")) if args.get("cwd") else WORK_DIR
+            r = subprocess.run(args["cmd"], shell=True, cwd=str(cwd) if cwd else str(WORK_DIR), capture_output=True, text=True, timeout=60)
+            return ((r.stdout or "")[-3000:] + ("\nSTDERR:\n" + (r.stderr or "")[-1000:] if r.stderr else ""))
         elif name == "glob":
-            fs = [str(Path(f).relative_to(WORK_DIR)) for f in glob.glob(str(WORK_DIR/args["pattern"]), recursive=True)[:60]]
+            pattern = args["pattern"]
+            base = Path(args.get("cwd", ".")) if args.get("cwd") else WORK_DIR
+            if not base.is_absolute():
+                if "\\" in pattern or pattern.startswith("/") or ":" in pattern:
+                    p = Path(pattern)
+                    if p.is_absolute():
+                        base = p.root; pattern = str(p.relative_to(p.root))
+            fs = list(glob.glob(str(base / pattern), recursive=True))[:60]
             return "\n".join(fs) if fs else "No matches"
         elif name == "grep":
-            inc = args.get("include", "*")
-            r = subprocess.run(f'rg -n "{args["pattern"]}" --glob "{inc}"', shell=True, cwd=str(WORK_DIR), capture_output=True, text=True)
-            lines = r.stdout.split("\n")[:60]
-            return "\n".join(lines) if lines else "No matches"
+            pat, inc = args["pattern"], args.get("include", "*")
+            cwd = args.get("cwd", str(WORK_DIR))
+            r = subprocess.run(f'rg -n "{pat}" --glob "{inc}"', shell=True, cwd=cwd, capture_output=True, text=True, timeout=30)
+            return "\n".join(r.stdout.split("\n")[:60]) or "No matches"
         elif name == "list":
-            path = args.get("path", ".")
-            items = [f"{'[DIR]' if x.is_dir() else '     '} {x.name}" for x in sorted((WORK_DIR/path).iterdir())]
+            p = resolve(args.get("path", "."))
+            items = [f"{'[DIR]' if x.is_dir() else '     '} {x.name}" for x in sorted(p.iterdir())]
             return "\n".join(items) if items else "(empty)"
         elif name == "diff":
             return git("diff", "--stat") + "\n\n" + git("diff")[:3000]
         elif name == "commit":
-            msg = args.get("message", "update")
-            git("add", "-A")
-            return git("commit", "-m", msg)
+            git("add", "-A"); return git("commit", "-m", args.get("message", "update"))
         elif name == "undo":
             return undo(args.get("path", ""))
         elif name == "verify":
