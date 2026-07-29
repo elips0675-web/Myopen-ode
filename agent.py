@@ -76,11 +76,18 @@ def resolve(path):
     return WORK_DIR / path
 
 # ─── tool definitions ────────────────────────────────────
-SYSTEM_PROMPT = "CRITICAL: You are a coding AGENT with tools running on Windows. You DO NOT describe or explain tools. You CALL them.\n\nWORKSPACE: " + str(WORK_DIR) + """ — project root.
+SYSTEM_PROMPT = "CRITICAL: You are a coding AGENT with tools on Windows.\n\nWORKSPACE: " + str(WORK_DIR) + """ — project root.
 
-When user asks something, your FIRST response must be a ```tool block. Nothing else.
+RULES:
+1. For complex tasks — FIRST call plan tool with steps, user confirms, then execute.
+2. For simple tasks — call tool directly. Ask before destructive actions (write/edit/bash/commit/undo).
+3. Your response MUST start with ```tool block if you need to do anything. NEVER describe tools.
+4. NEVER write code blocks. ONLY ```tool blocks.
 
-Format (copy exactly):
+TOOLS:
+```tool
+{"tool": "plan", "steps": ["read config", "edit main.py", "verify", "commit"]}
+```
 ```tool
 {"tool": "read", "path": "..."}
 ```
@@ -105,11 +112,20 @@ Format (copy exactly):
 ```tool
 {"tool": "grep", "pattern": "...", "include": "..."}
 ```
+```tool
+{"tool": "diff"}
+```
+```tool
+{"tool": "commit", "message": "..."}
+```
+```tool
+{"tool": "undo", "path": "..."}
+```
+```tool
+{"tool": "verify", "path": "..."}
+```
 
-After tool result, either call another tool or reply to user. NEVER explain available tools. NEVER write code blocks. ONLY ```tool blocks.
-
-Available tools: read, write, edit, bash, glob, grep, list, web, diff, commit, undo, verify.
-Paths: use forward slashes. Absolute paths like C:/Users/... work anywhere."""
+Paths: use forward slashes. C:/Users/... works."""
 
 def call_ollama(messages):
     try:
@@ -202,6 +218,33 @@ def execute_tool(name, args):
     except Exception as e:
         return f"Error: {e}"
 
+# ─── context management ──────────────────────────────────
+def summarize_context(msgs):
+    """Summarize old messages when context gets too long."""
+    total = sum(len(m.get("content","")) for m in msgs)
+    if total < 4000: return msgs  # no need to summarize
+
+    keep = msgs[:1]  # system prompt
+    # keep the last user+assistant exchange
+    tail = msgs[-6:] if len(msgs) > 6 else msgs[1:]
+    to_summarize = msgs[1:-6] if len(msgs) > 6 else []
+
+    if to_summarize:
+        text = "\n".join(f"{m['role']}: {m['content'][:200]}" for m in to_summarize)
+        prompt = f"Summarize this conversation in 2-3 sentences:\n\n{text[:1500]}"
+        try:
+            r = requests.post(f"{OLLAMA}/api/generate", json={
+                "model": "qwen2.5-coder:1.5b", "prompt": prompt,
+                "stream": False, "options": {"temperature": 0.1, "num_predict": 256}
+            }, timeout=30)
+            summary = r.json().get("response", "")
+            if summary:
+                keep.append({"role": "system", "content": f"[Summary of previous conversation]: {summary[:500]}"})
+        except: pass
+
+    keep.extend(tail)
+    return keep
+
 class ChatReq(BaseModel): messages: list; model: str = ""
 
 @app.get("/")
@@ -210,6 +253,7 @@ def index(): return HTMLResponse(HTML)
 @app.post("/api/chat")
 def chat(req: ChatReq):
     msgs = [{"role": "system", "content": SYSTEM_PROMPT}] + req.messages
+    msgs = summarize_context(msgs)
     full = ""
     tool_pat = re.compile('```(?:tool|json)\n(.*?)\n```', re.DOTALL)
     # also detect bare JSON tool objects
@@ -269,24 +313,31 @@ def chat(req: ChatReq):
             full += "[tool: missing 'tool' key in JSON]"
             continue
 
-        # confirmation for destructive actions
+        # plan tool — show plan to user, wait for confirmation
+        if name == "plan":
+            steps = tc.get("steps", [])
+            plan_text = "\n".join(f"  {i+1}. {s}" for i, s in enumerate(steps))
+            full += f"\n[PLAN]\n{plan_text}\n\nReply 'yes' to execute plan.\n"
+            msgs.append({"role": "assistant", "content": content})
+            msgs.append({"role": "user", "content": f"Plan proposed:\n{plan_text}\nReply 'yes' to execute."})
+            break
+
+        # confirmation for destructive actions (only if no plan was shown)
         DESTRUCTIVE = ("write", "edit", "bash", "commit", "undo")
         if name in DESTRUCTIVE:
             last = msgs[-1]["content"].strip().lower() if msgs else ""
             if last in ("yes", "y", "go ahead", "да", "ok", "continue", "proceed", "do it"):
-                # user confirmed, execute
                 result = execute_tool(name, tc)
                 result_str = f"[tool:{name}] {result[:2000]}"
                 full += result_str + "\n"
                 msgs.append({"role": "assistant", "content": f"(called tool: {name})"})
                 msgs.append({"role": "user", "content": result_str})
             else:
-                # ask for confirmation
                 ask_msg = f"Allow {name}?\nArgs: {json.dumps(tc, ensure_ascii=False)[:300]}\nReply 'yes' to proceed."
                 full += f"\n[CONFIRM] {ask_msg}\n"
                 msgs.append({"role": "assistant", "content": content})
                 msgs.append({"role": "user", "content": ask_msg})
-                break  # wait for user reply in next request
+                break
             continue
 
         result = execute_tool(name, tc)
