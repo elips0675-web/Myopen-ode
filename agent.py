@@ -71,62 +71,172 @@ def verify_file(path):
 
 # ─── path resolver ────────────────────────────────────────
 def resolve(path):
-    """Resolve a path: absolute or relative to WORK_DIR."""
     p = Path(path)
     if p.is_absolute(): return p
     return WORK_DIR / path
+
+# ─── RAG / embeddings ────────────────────────────────────
+RAG_INDEX = None
+RAG_CHUNKS = []
+RAG_DIRTY = True
+
+def rag_index():
+    global RAG_INDEX, RAG_CHUNKS, RAG_DIRTY
+    if not RAG_DIRTY and RAG_INDEX: return
+    RAG_CHUNKS = []
+    files = list(glob.glob(str(WORK_DIR / "**/*.py"), recursive=True))[:200]
+    files += list(glob.glob(str(WORK_DIR / "**/*.js"), recursive=True))[:100]
+    files += list(glob.glob(str(WORK_DIR / "**/*.ts"), recursive=True))[:100]
+    files += list(glob.glob(str(WORK_DIR / "**/*.json"), recursive=True))[:50]
+    files += list(glob.glob(str(WORK_DIR / "**/*.md"), recursive=True))[:50]
+    for fp in files:
+        p = Path(fp)
+        if ".git" in p.parts or "__pycache__" in p.parts or ".agent_backups" in p.parts: continue
+        try:
+            text = p.read_text("utf-8", errors="ignore")
+            rel = str(p.relative_to(WORK_DIR))
+            # split into chunks by function/class boundaries
+            chunks = []
+            parts = text.split("\n")
+            current = []; current_start = 0
+            for i, line in enumerate(parts):
+                if line.startswith(("def ", "class ", "async def ")) and len(current) > 5:
+                    chunks.append(("\n".join(current), rel, current_start))
+                    current = [line]; current_start = i
+                else:
+                    current.append(line)
+            if current:
+                chunks.append(("\n".join(current), rel, current_start))
+            for chunk_text, chunk_file, chunk_line in chunks:
+                RAG_CHUNKS.append({"text": chunk_text[:500], "file": chunk_file, "line": chunk_line})
+        except: pass
+
+    if not RAG_CHUNKS: return
+
+    # embed all chunks using Ollama
+    try:
+        texts = [c["text"] for c in RAG_CHUNKS]
+        r = requests.post(f"{OLLAMA}/api/embed", json={
+            "model": "qwen2.5-coder:1.5b", "input": texts
+        }, timeout=120)
+        data = r.json()
+        if "embeddings" in data:
+            RAG_INDEX = data["embeddings"]
+            RAG_DIRTY = False
+    except: pass
+
+def _cos_sim(a, b):
+    dot = sum(x*y for x,y in zip(a,b))
+    na = sum(x*x for x in a)**0.5
+    nb = sum(y*y for y in b)**0.5
+    return dot / (na * nb + 1e-10)
+
+def rag_search(query, top_k=5):
+    rag_index()
+    if RAG_INDEX is None or not RAG_CHUNKS: return "RAG not available"
+    try:
+        r = requests.post(f"{OLLAMA}/api/embed", json={
+            "model": "qwen2.5-coder:1.5b", "input": [query]
+        }, timeout=30)
+        q_emb = r.json().get("embeddings", [[]])[0]
+        if not q_emb: return "No embedding for query"
+        scores = [(_cos_sim(q_emb, emb), i) for i, emb in enumerate(RAG_INDEX)]
+        scores.sort(key=lambda x: -x[0])
+        results = []
+        for score, idx in scores[:top_k]:
+            c = RAG_CHUNKS[idx]
+            results.append(f"[{score:.2f}] {c['file']}:{c['line']}\n{c['text'][:300]}")
+        return "\n---\n".join(results)
+    except Exception as e:
+        return f"RAG search error: {e}"
+
+# ─── tool schema validation ──────────────────────────────
+TOOL_SCHEMAS = {
+    "read":   {"required": ["path"]},
+    "write":  {"required": ["path", "content"]},
+    "edit":   {"required": ["path", "old", "new"]},
+    "bash":   {"required": ["cmd"]},
+    "glob":   {"required": ["pattern"]},
+    "grep":   {"required": ["pattern"]},
+    "list":   {},
+    "web":    {"required": ["url"]},
+    "diff":   {},
+    "commit": {},
+    "undo":   {"required": ["path"]},
+    "verify": {"required": ["path"]},
+    "plan":   {"required": ["steps"]},
+    "search": {"required": ["query"]},
+}
+
+def validate_tool(tc):
+    name = tc.get("tool", "")
+    schema = TOOL_SCHEMAS.get(name)
+    if not schema: return f"Unknown tool '{name}'"
+    missing = [k for k in schema.get("required", []) if k not in tc]
+    if missing: return f"Missing required fields: {', '.join(missing)} in {name}"
+    extra = [k for k in tc if k not in ("tool", *schema.get("required", []), *schema.get("optional", []),
+              "old","new","content","path","cmd","pattern","include","url","steps","message","cwd")]
+    # type check common fields
+    if "path" in tc and not isinstance(tc["path"], str): return "path must be string"
+    if "content" in tc and not isinstance(tc["content"], str): return "content must be string"
+    return ""
 
 # ─── tool definitions ────────────────────────────────────
 SYSTEM_PROMPT = "CRITICAL: You are a coding AGENT with tools on Windows.\n\nWORKSPACE: " + str(WORK_DIR) + """ — project root.
 
 RULES:
-1. For complex tasks — FIRST call plan tool with steps, user confirms, then execute.
-2. For simple tasks — call tool directly. Ask before destructive actions (write/edit/bash/commit/undo).
-3. Your response MUST start with ```tool block if you need to do anything. NEVER describe tools.
+1. Complex tasks: call plan FIRST with steps, user confirms, then execute.
+2. Simple tasks: call tool directly. Ask before write/edit/bash/commit/undo.
+3. Your response MUST start with a ```tool block. NEVER describe tools.
 4. NEVER write code blocks. ONLY ```tool blocks.
+5. Every tool call MUST include ALL required fields. Missing fields will be rejected.
 
-TOOLS:
+TOOLS (required fields in bold):
 ```tool
-{"tool": "plan", "steps": ["read config", "edit main.py", "verify", "commit"]}
+{"tool": "plan", "steps": ["step1", "step2"]}
 ```
 ```tool
-{"tool": "read", "path": "..."}
+{"tool": "read", "path": "file.py"}
 ```
 ```tool
-{"tool": "list", "path": "..."}
+{"tool": "list", "path": "dir"}
 ```
 ```tool
-{"tool": "bash", "cmd": "..."}
+{"tool": "bash", "cmd": "echo hi"}
 ```
 ```tool
-{"tool": "web", "url": "..."}
+{"tool": "web", "url": "https://..."}
 ```
 ```tool
-{"tool": "write", "path": "...", "content": "..."}
+{"tool": "write", "path": "file", "content": "text"}
 ```
 ```tool
-{"tool": "edit", "path": "...", "old": "...", "new": "..."}
+{"tool": "edit", "path": "file", "old": "...", "new": "..."}
 ```
 ```tool
-{"tool": "glob", "pattern": "..."}
+{"tool": "glob", "pattern": "**/*.py"}
 ```
 ```tool
-{"tool": "grep", "pattern": "...", "include": "..."}
+{"tool": "grep", "pattern": "TODO", "include": "*.py"}
 ```
 ```tool
 {"tool": "diff"}
 ```
 ```tool
-{"tool": "commit", "message": "..."}
+{"tool": "commit", "message": "desc"}
 ```
 ```tool
-{"tool": "undo", "path": "..."}
+{"tool": "undo", "path": "file"}
 ```
 ```tool
-{"tool": "verify", "path": "..."}
+{"tool": "verify", "path": "file"}
+```
+```tool
+{"tool": "search", "query": "function that handles auth"}
 ```
 
-Paths: use forward slashes. C:/Users/... works."""
+Paths: forward slashes. C:/Users/... or relative to workspace.
+Search: semantic code search — type what you're looking for in plain words."""
 
 def call_ollama(messages):
     try:
@@ -214,6 +324,8 @@ def execute_tool(name, args):
         elif name == "verify":
             path = args.get("path", "")
             return verify_file(path) if path else "No path specified"
+        elif name == "search":
+            return rag_search(args.get("query", ""), args.get("top_k", 5))
         else:
             return f"Unknown tool: {name}"
     except Exception as e:
@@ -278,7 +390,7 @@ def chat(req: ChatReq):
             for match in bare_tool_pat.finditer(content):
                 try:
                     j = json.loads(match.group())
-                    if "tool" in j and j["tool"] in ("read","write","edit","bash","glob","grep","list","web","diff","commit","undo","verify","plan"):
+                    if "tool" in j and j["tool"] in ("read","write","edit","bash","glob","grep","list","web","diff","commit","undo","verify","plan","search"):
                         bare = match
                         break
                 except: pass
@@ -333,6 +445,14 @@ def chat(req: ChatReq):
         name = tc.pop("tool", "")
         if not name:
             full += "[tool: missing 'tool' key in JSON]"
+            continue
+
+        # schema validation
+        validation_error = validate_tool({**tc, "tool": name})
+        if validation_error:
+            full += f"\n[tool: validation error — {validation_error}]\n"
+            msgs.append({"role": "assistant", "content": content})
+            msgs.append({"role": "user", "content": f"Validation error: {validation_error}. Fix the JSON and retry."})
             continue
 
         # plan tool — show plan to user, wait for confirmation
