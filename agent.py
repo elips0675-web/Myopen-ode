@@ -66,64 +66,24 @@ def verify_file(path):
     return ""
 
 # ─── tool definitions ────────────────────────────────────
-TOOL_EXAMPLES = textwrap.dedent("""\
+SYSTEM_PROMPT = """You are a coding agent. Your source code lives in agent.py — when you read it, you are reading yourself. You are an AI running locally via Ollama.
+
+Tools: read, write, edit, bash, glob, grep, list, diff, commit, undo, verify.
+
+You NEVER write Python/shell code to simulate tools. You ONLY output tool JSON wrapped in ```tool blocks.
+
+FORMAT:
 ```tool
-{"tool": "read", "path": "file.py"}
+{"tool": "TOOLNAME", ...args}
 ```
 
+Read before edit. Verify after edit. Commit changes. Respond in user's language briefly.
+
+User: "read agent.py"
+Assistant:
 ```tool
-{"tool": "write", "path": "file.py", "content": "new file content"}
-```
-
-```tool
-{"tool": "edit", "path": "file.py", "old": "old text", "new": "new text"}
-```
-
-```tool
-{"tool": "bash", "cmd": "npm run lint"}
-```
-
-```tool
-{"tool": "glob", "pattern": "**/*.py"}
-```
-
-```tool
-{"tool": "grep", "pattern": "TODO", "include": "*.py"}
-```
-
-```tool
-{"tool": "list", "path": "."}
-```
-
-```tool
-{"tool": "diff"}
-```
-
-```tool
-{"tool": "commit", "message": "fixed bug in auth"}
-```
-
-```tool
-{"tool": "undo", "path": "file.py"}
-```
-
-```tool
-{"tool": "verify", "path": "file.py"}
-```""")
-
-SYSTEM_PROMPT = f"""You are an expert coding agent. You have tools to read, edit, and manage code.
-
-TOOLS (output as ```tool block):
-{TOOL_EXAMPLES}
-
-RULES:
-1. ALWAYS read a file before editing it
-2. After editing, verify (tool: verify) then commit (tool: commit)
-3. Use git diff to check what changed
-4. Write clean, idiomatic code following project conventions
-5. Report concisely what you did
-
-Respond in the user's language."""
+{"tool": "read", "path": "agent.py"}
+```"""
 
 def call_ollama(messages):
     try:
@@ -133,7 +93,9 @@ def call_ollama(messages):
             "options": {"temperature": 0.2, "num_predict": 4096, "num_ctx": 8192}
         }, timeout=120)
         r.raise_for_status()
-        return r.json().get("message", {}).get("content", "")
+        data = r.json()
+        msg = data.get("message", {}).get("content", "")
+        return msg if msg else "No response from model"
     except Exception as e:
         return f"[Error: {e}]"
 
@@ -212,29 +174,49 @@ def chat(req: ChatReq):
     tool_pat = re.compile('```tool\n(.*?)\n```', re.DOTALL)
     max_iter = 12
 
-    for _ in range(max_iter):
+    for it in range(max_iter):
         content = call_ollama(msgs)
         if not content:
             break
+
+        # check for tool block
         m = tool_pat.search(content)
         if not m:
             full += content
             break
+
+        # text before tool block = assistant reply
         before = content[:m.start()].strip()
         if before:
             full += before + "\n"
             msgs.append({"role": "assistant", "content": before})
+
+        # parse and execute tool
+        raw_json = m.group(1).strip()
         try:
-            tc = json.loads(m.group(1))
-            name = tc.pop("tool", "")
-            result = execute_tool(name, tc)
-            result_str = f"[tool:{name}] {result[:2000]}"
-            full += result_str + "\n"
-            msgs.append({"role": "assistant", "content": f"<tool:{name}>"})
-            msgs.append({"role": "user", "content": result_str})
-        except Exception as e:
-            full += f"[tool error: {e}]\n"
-            msgs.append({"role": "user", "content": f"Error: {e}"})
+            tc = json.loads(raw_json)
+        except:
+            # try cleaning common model mistakes
+            import re as _re
+            cleaned = _re.sub(r',\s*}', '}', raw_json)
+            cleaned = _re.sub(r',\s*\]', ']', cleaned)
+            cleaned = cleaned.replace("'", '"')
+            try: tc = json.loads(cleaned)
+            except:
+                full += f"[tool: parse error — invalid JSON in ```tool block]\n{raw_json[:300]}"
+                msgs.append({"role": "assistant", "content": content})
+                msgs.append({"role": "user", "content": f"JSON parse error. Fix and retry with valid JSON in ```tool block. Raw: {raw_json[:200]}"})
+                continue
+
+        name = tc.pop("tool", "")
+        if not name:
+            full += "[tool: missing 'tool' key in JSON]"
+            continue
+        result = execute_tool(name, tc)
+        result_str = f"[tool:{name}] {result[:2000]}"
+        full += result_str + "\n"
+        msgs.append({"role": "assistant", "content": f"(called tool: {name})"})
+        msgs.append({"role": "user", "content": result_str})
 
     def gen():
         for chunk in [full[i:i+3] for i in range(0, len(full), 3)]:
