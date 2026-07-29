@@ -4,7 +4,7 @@
   "agent": {
     "build": {
       "mode": "primary",
-      "model": "ollama/qwen3.5:9b",
+      "model": "ollama/qwen2.5-coder:7b",
       "prompt": "{file:./prompts/build.txt}",
       "temperature": 0.3,
       "permission": {
