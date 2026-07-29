@@ -370,8 +370,9 @@ def chat(req: ChatReq):
     full = ""
     tool_pat = re.compile('```(?:tool|json)\n(.*?)\n```', re.DOTALL)
     bare_tool_pat = re.compile(r'\{\s*"tool"\s*:\s*"[^"]+"\s*.*?\}', re.DOTALL)
+    VALID_TOOLS = ("read","write","edit","bash","glob","grep","list","web","diff","commit","undo","verify","plan","search")
     max_iter = 12
-    max_time = 60.0  # total agent loop timeout in seconds
+    max_time = 60.0
     start_time = __import__("time").time()
     retries = {}  # tool_name -> retry count
 
@@ -384,109 +385,81 @@ def chat(req: ChatReq):
         if not content:
             break
 
-        m = tool_pat.search(content)
-        bare = None
-        if not m:
+        # find ALL tool blocks in this response
+        tool_blocks = []
+        for m in tool_pat.finditer(content):
+            raw = m.group(1).strip()
+            try: j = json.loads(raw); tool_blocks.append((m, raw, j))
+            except:
+                try: j = json.loads(raw.replace("'", '"')); tool_blocks.append((m, raw, j))
+                except: pass
+
+        # also find bare JSON tool blocks
+        if not tool_blocks:
             for match in bare_tool_pat.finditer(content):
                 try:
                     j = json.loads(match.group())
-                    if "tool" in j and j["tool"] in ("read","write","edit","bash","glob","grep","list","web","diff","commit","undo","verify","plan","search"):
-                        bare = match
+                    if "tool" in j and j["tool"] in VALID_TOOLS:
+                        tool_blocks.append((match, match.group(), j))
                         break
                 except: pass
-            if bare:
-                m = bare
 
-        if not m:
+        if not tool_blocks:
             full += content
             break
 
-        before = content[:m.start()].strip()
+        # text before first tool block = assistant reply
+        before = content[:tool_blocks[0][0].start()].strip()
         if before:
             full += before + "\n"
             msgs.append({"role": "assistant", "content": before})
 
-        try: raw_json = m.group(1).strip()
-        except IndexError: raw_json = m.group(0).strip()
-
-        tc = None
-        parse_error = ""
-        for attempt in range(3):
-            try:
-                tc = json.loads(raw_json)
-                break
-            except:
-                import re as _re
-                cleaned = _re.sub(r',\s*}', '}', raw_json)
-                cleaned = _re.sub(r',\s*\]', ']', cleaned)
-                cleaned = cleaned.replace("'", '"')
-                cleaned = _re.sub(r'//.*?\n', '', cleaned)  # strip JS comments
-                try:
-                    tc = json.loads(cleaned)
-                    break
-                except Exception as e:
-                    parse_error = str(e)
-                    if attempt < 2:
-                        raw_json = cleaned  # try again with cleaned version
-
-        if tc is None:
-            name_guess = "unknown"
-            for guess in ("read","write","edit","bash","glob","grep","list","web","diff","commit","undo","verify","plan"):
-                if guess in raw_json[:100].lower(): name_guess = guess; break
-            retries[name_guess] = retries.get(name_guess, 0) + 1
-            if retries[name_guess] >= 3:
-                full += f"\n[tool: giving up on {name_guess} after 3 retries]\n"
-                break
-            full += f"\n[tool: parse error — {parse_error}]\n"
-            msgs.append({"role": "assistant", "content": content})
-            msgs.append({"role": "user", "content": f"JSON error: {parse_error}. Output ONLY: ```tool\n{{...}}\n``` Fix the JSON."})
-            continue
-
-        name = tc.pop("tool", "")
-        if not name:
-            full += "[tool: missing 'tool' key in JSON]"
-            continue
-
-        # schema validation
-        validation_error = validate_tool({**tc, "tool": name})
-        if validation_error:
-            full += f"\n[tool: validation error — {validation_error}]\n"
-            msgs.append({"role": "assistant", "content": content})
-            msgs.append({"role": "user", "content": f"Validation error: {validation_error}. Fix the JSON and retry."})
-            continue
-
-        # plan tool — show plan to user, wait for confirmation
-        if name == "plan":
-            steps = tc.get("steps", [])
-            plan_text = "\n".join(f"  {i+1}. {s}" for i, s in enumerate(steps))
-            full += f"\n[PLAN]\n{plan_text}\n\nReply 'yes' to execute plan.\n"
-            msgs.append({"role": "assistant", "content": content})
-            msgs.append({"role": "user", "content": f"Plan proposed:\n{plan_text}\nReply 'yes' to execute."})
-            break
-
-        # confirmation for destructive actions (only if no plan was shown)
+        # execute all tool blocks (until one needs confirmation)
+        all_results = []
+        calls_made = []
+        needs_break = False
         DESTRUCTIVE = ("write", "edit", "bash", "commit", "undo")
-        if name in DESTRUCTIVE:
-            last = msgs[-1]["content"].strip().lower() if msgs else ""
-            if last in ("yes", "y", "go ahead", "да", "ok", "continue", "proceed", "do it"):
-                result = execute_tool(name, tc)
-                result_str = f"[tool:{name}] {result[:2000]}"
-                full += result_str + "\n"
-                msgs.append({"role": "assistant", "content": f"(called tool: {name})"})
-                msgs.append({"role": "user", "content": result_str})
-            else:
-                ask_msg = f"Allow {name}?\nArgs: {json.dumps(tc, ensure_ascii=False)[:300]}\nReply 'yes' to proceed."
-                full += f"\n[CONFIRM] {ask_msg}\n"
-                msgs.append({"role": "assistant", "content": content})
-                msgs.append({"role": "user", "content": ask_msg})
-                break
-            continue
+        for idx, (match, raw_json, tc) in enumerate(tool_blocks):
+            name = tc.get("tool", "")
+            raw_tc = dict(tc)  # keep original for logging
+            tc.pop("tool", None)
+            if not name:
+                all_results.append(f"[tool: missing 'tool' key in block {idx+1}]")
+                continue
+            ve = validate_tool({**tc, "tool": name})
+            if ve:
+                all_results.append(f"[tool:{name}] {ve}")
+                calls_made.append(name)
+                continue
+            if name == "plan":
+                plan_text = "\n".join(f"  {i+1}. {s}" for i,s in enumerate(tc.get("steps",[])))
+                full += f"\n[PLAN]\n{plan_text}\n\nReply 'yes' to execute plan.\n"
+                msgs.append({"role":"assistant","content":content})
+                msgs.append({"role":"user","content":f"Plan proposed:\n{plan_text}\nReply 'yes' to execute."})
+                needs_break=True; break
+            if name in DESTRUCTIVE:
+                last = (msgs[-1]["content"].strip().lower() if msgs else "")[:5]
+                if last in ("yes","y","go a","да","ok","cont","proc","do i"):
+                    r = execute_tool(name,tc)
+                    all_results.append(f"[tool:{name}] {r[:2000]}")
+                    calls_made.append(name)
+                else:
+                    ask = f"Allow {name}?\nArgs: {json.dumps(tc, ensure_ascii=False)[:300]}"
+                    full += f"\n[CONFIRM] {ask}\nReply 'yes' to proceed.\n"
+                    msgs.append({"role":"assistant","content":content})
+                    msgs.append({"role":"user","content":ask})
+                    needs_break=True; break
+                continue
+            r = execute_tool(name,tc)
+            all_results.append(f"[tool:{name}] {r[:2000]}")
+            calls_made.append(name)
 
-        result = execute_tool(name, tc)
-        result_str = f"[tool:{name}] {result[:2000]}"
-        full += result_str + "\n"
-        msgs.append({"role": "assistant", "content": f"(called tool: {name})"})
-        msgs.append({"role": "user", "content": result_str})
+        if needs_break: break
+        if all_results:
+            combined = "\n".join(all_results)
+            full += combined + "\n"
+            msgs.append({"role":"assistant","content":f"(called: {', '.join(calls_made)})"})
+            msgs.append({"role":"user","content":combined})
 
     def gen():
         for chunk in [full[i:i+3] for i in range(0, len(full), 3)]:
@@ -508,50 +481,49 @@ HTML = r"""<!DOCTYPE html>
 <head><meta charset="UTF-8"><title>AI Coder</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
-body{font-family:-apple-system,sans-serif;background:#f5f5f5;color:#1a1a1a;height:100vh;display:flex;flex-direction:column}
-#bar{display:flex;align-items:center;padding:4px 10px;border-bottom:1px solid #ddd;background:#fff;gap:6px;flex-shrink:0;font-size:13px}
-#bar .b{font-weight:700;color:#2563eb}
-#bar select{font-size:11px;padding:1px 5px;border:1px solid #ccc;border-radius:3px}
-#bar #prj{font-size:11px;color:#888;margin-left:auto}
-#bar #st2{font-size:10px;color:#999;margin-left:8px}
+:root{--bg:#f5f5f5;--fg:#1a1a1a;--bar-bg:#fff;--bar-border:#ddd;--msg-u:#e8f0fe;--msg-a:#fff;--msg-a-border:#eee;--pre-bg:#f8f9fa;--code-bg:#f0f0f0;--inp-bg:#fff;--inp-border:#ccc;--btn:#2563eb;--cnl-btn:#6b7280;--stat-bg:#fff;--st-c:#999;--diff-add:#dcfce7;--diff-add-fg:#166534;--diff-del:#fce7f3;--diff-del-fg:#991b1b;--diff-hdr:#f0f0f0;--plan:#eff6ff;--plan-fg:#1e40af;--sp:10px;--s:#2563eb}
+body.dark{--bg:#1a1a2e;--fg:#e0e0e0;--bar-bg:#16213e;--bar-border:#2a2a4a;--msg-u:#1e3a5f;--msg-a:#16213e;--msg-a-border:#2a2a4a;--pre-bg:#0f3460;--code-bg:#0f3460;--inp-bg:#16213e;--inp-border:#2a2a4a;--btn:#0f3460;--cnl-btn:#533483;--stat-bg:#16213e;--st-c:#888;--diff-add:#064e3b;--diff-add-fg:#6ee7b7;--diff-del:#7f1d1d;--diff-del-fg:#fca5a5;--diff-hdr:#374151;--plan:#1e3a5f;--plan-fg:#93c5fd;--sp:5px}
+body{font-family:-apple-system,sans-serif;background:var(--bg);color:var(--fg);height:100vh;display:flex;flex-direction:column}
+#bar{display:flex;align-items:center;padding:4px 10px;border-bottom:1px solid var(--bar-border);background:var(--bar-bg);gap:6px;flex-shrink:0;font-size:13px}
+#bar .b{font-weight:700;color:var(--btn)}
+#bar select{font-size:11px;padding:1px 5px;border:1px solid var(--inp-border);border-radius:3px;background:var(--inp-bg);color:var(--fg)}
+#bar #prj{font-size:11px;color:var(--st-c);margin-left:auto}
+#bar #st2{font-size:10px;color:var(--st-c);margin-left:8px}
+#bar #tm{font-size:10px;color:var(--st-c);cursor:pointer;margin-left:6px;padding:0 4px;border:1px solid var(--bar-border);border-radius:3px}
 #main{flex:1;display:flex;min-height:0}
 #chat{flex:1;display:flex;flex-direction:column;min-width:0}
 #msgs{flex:1;overflow-y:auto;padding:8px}
 .msg{margin:5px 0;padding:7px 12px;border-radius:7px;font-size:13px;line-height:1.5;word-wrap:break-word}
-.msg.u{background:#e8f0fe;margin-left:auto;border-bottom-right-radius:3px;max-width:88%}
-.msg.a{background:#fff;margin-right:auto;border:1px solid #eee;border-bottom-left-radius:3px;max-width:88%}
+.msg.u{background:var(--msg-u);margin-left:auto;border-bottom-right-radius:3px;max-width:88%}
+.msg.a{background:var(--msg-a);margin-right:auto;border:1px solid var(--msg-a-border);border-bottom-left-radius:3px;max-width:88%}
 .msg.t{font-size:11px;padding:3px 10px;margin:2px auto;text-align:center;max-width:none;border-radius:4px}
-.msg.t.ok{background:#f0fdf4;color:#166534}
-.msg.t.err{background:#fef2f2;color:#991b1b}
+.msg.t.ok{background:var(--diff-add);color:var(--diff-add-fg)}
+.msg.t.err{background:var(--diff-del);color:var(--diff-del-fg)}
 .msg.t.warn{background:#fffbeb;color:#92400e}
-.msg.t.info{background:#eff6ff;color:#1e40af}
-.msg.s{text-align:center;font-size:11px;color:#999;margin:3px 0;background:none!important;max-width:none}
-.msg .l{font-size:10px;color:#999;margin-bottom:2px;font-weight:500}
-.msg pre{background:#f8f9fa;padding:8px;border-radius:4px;overflow-x:auto;font-size:12px;margin:4px 0;border:1px solid #eee}
-.msg code{background:#f0f0f0;padding:1px 3px;border-radius:2px;font-size:12px}
+.msg.t.info{background:var(--plan);color:var(--plan-fg)}
+.msg.s{text-align:center;font-size:11px;color:var(--st-c);margin:3px 0;background:none!important;max-width:none}
+.msg pre{background:var(--pre-bg);padding:8px;border-radius:4px;overflow-x:auto;font-size:12px;margin:4px 0;border:1px solid var(--msg-a-border)}
+.msg code{background:var(--code-bg);padding:1px 3px;border-radius:2px;font-size:12px}
 .msg pre code{background:none;padding:0;border:none}
-.msg .dp{font-family:monospace;font-size:12px;line-height:1.4;white-space:pre-wrap;background:#f8f9fa;padding:6px;border-radius:4px;border:1px solid #eee;margin:4px 0}
-.msg .dp .a{background:#dcfce7;color:#166534;display:block}
-.msg .dp .d{background:#fce7f3;color:#991b1b;display:block}
-.msg .dp .h{background:#f0f0f0;color:#666;display:block}
-.msg .cn{font-size:11px;color:#2563eb;cursor:pointer;margin-top:2px;display:inline-block}
-.msg .cn:hover{text-decoration:underline}
-.sp{display:inline-block;width:10px;height:10px;border:2px solid #ddd;border-top-color:#2563eb;border-radius:50%;animation:s .5s infinite linear;vertical-align:middle}
+.msg .dp{font-family:monospace;font-size:12px;line-height:1.4;white-space:pre-wrap;background:var(--pre-bg);padding:6px;border-radius:4px;border:1px solid var(--msg-a-border);margin:4px 0}
+.msg .dp .a{background:var(--diff-add);color:var(--diff-add-fg);display:block}
+.msg .dp .d{background:var(--diff-del);color:var(--diff-del-fg);display:block}
+.msg .dp .h{background:var(--diff-hdr);color:var(--st-c);display:block}
+.sp{display:inline-block;width:var(--sp);height:var(--sp);border:2px solid var(--msg-a-border);border-top-color:var(--s);border-radius:50%;animation:s .5s infinite linear;vertical-align:middle}
 @keyframes s{to{transform:rotate(360deg)}}
-#inp{display:flex;padding:6px 8px;border-top:1px solid #ddd;background:#fff;gap:6px;flex-shrink:0}
-#inp textarea{flex:1;padding:7px;border:1px solid #ccc;border-radius:7px;resize:none;font-size:13px;outline:none;font-family:inherit;min-height:34px;max-height:90px}
-#inp textarea:focus{border-color:#2563eb}
-#inp button{background:#2563eb;color:#fff;border:none;border-radius:7px;padding:5px 16px;cursor:pointer;font-size:13px;font-weight:500;align-self:flex-end}
+#inp{display:flex;padding:6px 8px;border-top:1px solid var(--bar-border);background:var(--inp-bg);gap:6px;flex-shrink:0}
+#inp textarea{flex:1;padding:7px;border:1px solid var(--inp-border);border-radius:7px;resize:none;font-size:13px;outline:none;font-family:inherit;min-height:34px;max-height:90px;background:var(--msg-a);color:var(--fg)}
+#inp textarea:focus{border-color:var(--btn)}
+#inp button{background:var(--btn);color:#fff;border:none;border-radius:7px;padding:5px 16px;cursor:pointer;font-size:13px;font-weight:500;align-self:flex-end}
 #inp button:hover{opacity:.85}
 #inp button:disabled{opacity:.3}
-#inp #cnl{background:#6b7280;display:none}
-#inp #cnl:hover{opacity:.85}
-#stat{height:17px;border-top:1px solid #ddd;background:#fff;font-size:10px;color:#999;padding:1px 10px;display:flex;align-items:center;gap:8px;flex-shrink:0}
+#inp #cnl{background:var(--cnl-btn);display:none}
+#stat{height:17px;border-top:1px solid var(--bar-border);background:var(--stat-bg);font-size:10px;color:var(--st-c);padding:1px 10px;display:flex;align-items:center;gap:8px;flex-shrink:0}
 #stat .g{width:6px;height:6px;border-radius:50%;background:#16a34a;display:inline-block}
 #stat .r{width:6px;height:6px;border-radius:50%;background:#dc2626;display:inline-block}
-::-webkit-scrollbar{width:4px}::-webkit-scrollbar-thumb{background:#ddd;border-radius:3px}
+::-webkit-scrollbar{width:4px}::-webkit-scrollbar-thumb{background:var(--bar-border);border-radius:3px}
 </style></head><body>
-<div id="bar"><span class="b">AI Coder</span><select id="chm"></select><span id="prj"></span><span id="st2"></span></div>
+<div id="bar"><span class="b">AI Coder</span><select id="chm"></select><span id="tm" onclick="toggleTheme()">&#9790;</span><span id="prj"></span><span id="st2"></span></div>
 <div id="main"><div id="chat">
 <div id="msgs">
 <div class="msg s">Agent ready. Try: "list project" or "read agent.py"</div>
@@ -603,6 +575,8 @@ function init(){
   cl();$('ta').focus()
 }
 function cl(){fetch(A+'/api/models').then(function(){$('old').className='g';$('ols').textContent='Ollama OK'}).catch(function(){$('old').className='r';$('ols').textContent='Ollama -';setTimeout(cl,3000)})}
+function toggleTheme(){document.body.classList.toggle('dark');localStorage.setItem('theme',document.body.classList.contains('dark')?'dark':'light')}
+if(localStorage.getItem('theme')=='dark')document.body.classList.add('dark')
 function send(){
   var ta=$('ta'),txt=ta.value.trim();if(!txt||sd)return;ta.value='';ah();
   am('u',fm(txt));ms.push({role:'user',content:txt});
