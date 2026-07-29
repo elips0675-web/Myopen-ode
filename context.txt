@@ -6,63 +6,82 @@ Date: 2026-07-29
 
 PURPOSE
 -------
-Local AI coding assistant that replaces cloud-based tools (like DeepSeek Cursor).
+Local AI coding assistant that replaces cloud-based tools.
 Runs entirely offline on RTX 3060, powered by Ollama + qwen2.5-coder:7b.
 User types a task in browser, model calls tools to read, edit, write, run code.
 
 KEY ACHIEVEMENT
 ---------------
-Model (qwen2.5-coder:7b) does NOT natively support tool_calls in Ollama.
-BUT we engineered a prompt-based agent loop: model outputs ```tool blocks,
-backend parses them, executes, feeds result back. This works and is verified.
+qwen2.5-coder:7b does NOT support native tool_calls in Ollama.
+Engineered a prompt-based agent loop: model outputs ```tool blocks,
+backend parses them, executes, feeds result back. Verified working.
 
 ARCHITECTURE
 ------------
-agent.py (~380 lines) — single file, zero pip dependencies beyond fastapi+uvicorn.
+agent.py (~500 lines) — single file, zero pip dependencies beyond fastapi+uvicorn.
 
 1. FastAPI server on port 8765
-2. HTML UI served at GET / (inline, no npm)
+2. HTML UI served at GET / (inline, no npm, no build tools)
 3. POST /api/chat — SSE streaming endpoint
-4. Agent loop: up to 12 iterations of model -> tool -> result -> model
+4. Agent loop: up to 12 iterations, 60s timeout, 3 JSON retries
 5. File versioning: backups in .agent_backups before every write/edit
 6. Verify step: py_compile for .py, tsc --noEmit for .ts, json.tool for .json
 7. Git integration: diff + auto-commit
+8. Context management: auto-summarization via qwen2.5-coder:1.5b when >4K chars
 
-TOOLS (10 total)
+TOOLS (13 total)
 ----------------
-read    — read file content
-write   — write new file (with backup + verify)
-edit    — replace oldString with newString in file (with backup)
-bash    — run shell command
-glob    — find files by pattern
-grep    — search file contents
-list    — list directory
-diff    — git diff (changes since last commit)
+read    — file content (absolute/relative paths + http/https URLs)
+write   — create file anywhere (with backup + verify)
+edit    — replace text in file (with backup)
+bash    — run shell command (with cwd support)
+glob    — find files by pattern (any directory)
+grep    — search file contents (with cwd support)
+list    — list directory (any path)
+web     — fetch URL content
+diff    — git diff
 commit  — git add -A + git commit
-undo    — restore previous backup of a file
+undo    — restore previous backup
 verify  — syntax check a file
+plan    — propose multi-step plan, user confirms
+
+SAFETY
+------
+- Confirmation before write/edit/bash/commit/undo
+- Plan tool: model proposes steps, user confirms before execution
+- Backups in .agent_backups/ (up to 50 versions)
+- Timeout: 60s total, 3 retries on JSON parse errors
+- 32K context window (maximized from 8K)
 
 HOW AGENT LOOP WORKS
 --------------------
-1. System prompt instructs model to output ```tool blocks
-2. Model responds with explanation + ```tool {"tool":"read","path":"..."}
+1. System prompt tells model it has tools and must output ```tool blocks
+2. Model responds: text + ```tool {"tool":"read","path":"file.py"}
 3. Backend parses JSON, executes tool, appends result as user message
-4. Model sees result and continues (reads, edits, verifies, commits)
+4. Model gets result, decides next step (read more, edit, verify, commit)
 5. Loop ends when model responds without a tool block
 
-Example flow: model reads file -> edits -> verifies -> commits, all autonomously.
-
-MODEL USED
-----------
-qwen2.5-coder:7b (quantized, running on RTX 3060 12GB via Ollama)
-Also available: qwen2.5-coder:1.5b, qwen2.5-coder:3b, deepseek-r1:7b, qwen3:8b
+MODELS
+------
+Primary: qwen2.5-coder:7b (RTX 3060, ~5.5GB VRAM, ~47 tok/s)
+Also available: 1.5b, 3b, deepseek-r1:7b, qwen3:8b
 
 RUNNING
 -------
-http://localhost:8765/ — open in browser, type any coding task.
-Agent will ask for confirmation before destructive actions.
+python agent.py  ->  http://localhost:8765/
+python test_agent.py  ->  11/11 smoke tests pass
 
 STATUS
 ------
 Working. Self-hosted. Self-documented. Self-pushed to GitHub.
 The agent wrote its own code improvements and committed them.
+
+COMPARISON
+----------
+| Aspect        | My OpenCode   | Cursor/Windsurf | Claude Code |
+|---------------|--------------|-----------------|-------------|
+| On-premise    | YES          | No (cloud)      | No (cloud)  |
+| Cost          | $0           | $20/mo          | $20/mo      |
+| Model         | 7B local     | GPT-4/Claude    | Claude 3.5  |
+| Tool calling  | Prompt-based | Native          | Native      |
+| Speed         | Fast (local) | Network-dep     | Network-dep |
