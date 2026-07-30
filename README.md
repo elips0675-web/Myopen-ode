@@ -39,6 +39,9 @@
 - ✅ **Subagents** — @explore (read-only), @scout (web), @general (full access) с разными правами
 - ✅ **Multi-project** — переключение между проектами из UI, отдельные сессии/файлы/RAG на проект
 - ✅ **LSP интеграция** — goToDefinition, findReferences, hover, documentSymbols через pylsp/typescript-language-server
+- ✅ **MCP сервер** — Model Context Protocol для интеграции с VS Code, Cursor, Claude Desktop
+- ✅ **Tab completion** — автодополнение путей по Tab в чате
+- ✅ **Progress bar** — SSE прогресс при pull модели
 - ✅ **Slash-команды** — /test, /deploy, /review, /fix, /doc в чате
 - ✅ **Todo tracking** — todo-лист внутри сессии (add/complete/list)
 - ✅ **DeepSeek-V4-Flash** — поддержка 1M контекста через FLASH_PROVIDER/FLASH_API_KEY
@@ -104,6 +107,7 @@ ui.py      — HTML UI (встроенный, без зависимостей)
 | `/api/projects` | GET/POST | Список / добавить проект |
 | `/api/projects/switch` | POST | Переключить активный проект |
 | `/api/projects/{idx}` | DELETE | Удалить проект |
+| `/api/models/pull/stream` | GET | SSE прогресс скачивания модели |
 | `/api/upload` | POST | Drag-and-drop загрузка файлов |
 
 ## LSP серверы (установка)
@@ -166,6 +170,9 @@ Local AI coding agent powered by Ollama. Free, private, offline alternative to C
 - ✅ **Subagents** — @explore (read-only), @scout (web), @general (full access) with different permissions
 - ✅ **Multi-project** — switch between projects from UI, separate sessions/files/RAG per project
 - ✅ **LSP integration** — goToDefinition, findReferences, hover, documentSymbols via pylsp/typescript-language-server
+- ✅ **MCP server** — Model Context Protocol for VS Code, Cursor, Claude Desktop integration
+- ✅ **Tab completion** — path completion via Tab key in chat
+- ✅ **Progress bar** — SSE progress stream for model pull
 - ✅ **Slash commands** — /test, /deploy, /review, /fix, /doc in chat
 - ✅ **Todo tracking** — in-session todo list (add/complete/list)
 - ✅ **DeepSeek-V4-Flash** — 1M context support via FLASH_PROVIDER/FLASH_API_KEY

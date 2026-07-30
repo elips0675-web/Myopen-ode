@@ -360,7 +360,7 @@ function init(){
     if(ds){$('chm').value=ds;$('model-badge').textContent='DeepSeek'}
   }).catch(function(){});
   fetch(A+'/api/project').then(function(r){return r.json()}).then(function(p){$('prj').textContent=p.name}).catch(function(){});
-  loadProjects();loadFiles();loadSessions();loadSkills();cl();$('ta').focus();
+  loadProjects();loadFiles();loadSessions();loadSkills();loadTabPaths();cl();$('ta').focus();
 }
 function cl(){fetch(A+'/api/models').then(function(){$('old').className='g';$('ols').textContent='Ollama OK'}).catch(function(){$('old').className='r';$('ols').textContent='Ollama -';setTimeout(cl,3000)})}
 
@@ -438,9 +438,13 @@ document.addEventListener('drop',function(e){
 function pullModel(){
   var name=prompt('Model name to pull (e.g. llama3.2:3b):');if(!name)return;
   var btn=event.target;btn.disabled=1;btn.textContent='...';
-  fetch(A+'/api/models/pull?name='+encodeURIComponent(name),{method:'POST'})
-  .then(function(r){return r.json()}).then(function(d){alert(d.status||'done');init()})
-  .catch(function(e){alert('Error')}).finally(function(){btn.disabled=0;btn.textContent='+Pull'});
+  var msgEl=am('t info','<span class="sp"></span> Pulling <b>'+esc(name)+'</b>...');
+  var evtSrc=new EventSource(A+'/api/models/pull/stream?name='+encodeURIComponent(name));
+  evtSrc.onmessage=function(e){
+    if(e.data=='[DONE]'){msgEl.innerHTML='<span style="color:var(--diff-add-fg)">✅ Pulled: '+esc(name)+'</span>';evtSrc.close();init();btn.disabled=0;btn.textContent='+Pull'}
+    else{try{var d=JSON.parse(e.data);msgEl.innerHTML='<span class="sp"></span> '+esc(d.status||d.digest||e.data)}catch(ex){msgEl.innerHTML='<span class="sp"></span> '+esc(e.data)}}
+  };
+  evtSrc.onerror=function(){evtSrc.close();msgEl.innerHTML='❌ Error pulling '+esc(name);btn.disabled=0;btn.textContent='+Pull'};
 }
 function delModel(){
   var sel=$('chm'),name=sel.value;if(!confirm('Delete "'+name+'"?'))return;
@@ -450,7 +454,35 @@ function delModel(){
   .catch(function(e){alert('Error')}).finally(function(){btn.disabled=0;btn.textContent='-Del'});
 }
 
-$('ta').addEventListener('keydown',function(e){if(e.key=='Enter'&&!e.shiftKey){e.preventDefault();send()}});
+// Tab completion for paths
+var tabPaths=[], tabIdx=0;
+function loadTabPaths(){
+  fetch(A+'/api/files?path=').then(function(r){return r.json()}).then(function(d){
+    tabPaths=[];
+    function walk(nodes,prefix){nodes.forEach(function(n){var p=prefix+n.name;tabPaths.push(p);if(n.children)walk(n.children,p+'/')})}
+    walk(d.tree||[],'');
+  }).catch(function(){})
+}
+$('ta').addEventListener('keydown',function(e){
+  if(e.key=='Enter'&&!e.shiftKey){e.preventDefault();send()}
+  else if(e.key=='Tab'){
+    e.preventDefault();
+    var ta=$('ta'),val=ta.value,cursor=ta.selectionStart;
+    var before=val.slice(0,cursor),after=val.slice(cursor);
+    var wordMatch=before.match(/([\w\/\\\.\-]+)$/);
+    if(wordMatch){
+      var partial=wordMatch[1].toLowerCase();
+      var matches=tabPaths.filter(function(p){return p.toLowerCase().includes(partial)});
+      if(matches.length){
+        var match=matches[tabIdx%matches.length];
+        ta.value=before.slice(0,-partial.length)+match+after;
+        ta.selectionStart=ta.selectionEnd=before.length-partial.length+match.length;
+        tabIdx=(tabIdx+1)%matches.length;
+        ah();
+      }
+    }
+  }
+});
 $('ta').addEventListener('input',ah);init();
 </script>
 </body></html>"""

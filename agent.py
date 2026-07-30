@@ -329,6 +329,20 @@ def pull_model(name: str = ""):
     except Exception as e:
         return {"error": str(e)}
 
+@app.get("/api/models/pull/stream")
+def pull_model_stream(name: str = ""):
+    if not name: return {"error": "Model name required"}
+    async def gen():
+        try:
+            r = requests.post(f"{OLLAMA_URL}/api/pull", json={"name": name}, stream=True, timeout=600)
+            for line in r.iter_lines(decode_unicode=True):
+                if line:
+                    yield f"data: {line}\n\n"
+            yield "data: [DONE]\n\n"
+        except Exception as e:
+            yield f"data: {json.dumps({'error': str(e)})}\n\n"
+    return StreamingResponse(gen(), media_type="text/event-stream")
+
 @app.delete("/api/models/{name}")
 def delete_model(name: str):
     try:
