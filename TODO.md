@@ -1,113 +1,53 @@
-# My OpenCode — Что сделано и что осталось
+# My OpenCode — Status
 
-## Что сделано
+## Что сделано (Core)
 
-### Ядро агента (`agent.py`)
-- [x] FastAPI сервер на порту 8765, SSE streaming
-- [x] Agent loop: до 12 итераций модель → ```tool → исполнение → результат
-- [x] 14 инструментов: read, write, edit, bash, glob, grep, list, web, diff, commit, undo, verify, plan, search
-- [x] Prompt-based tool calling (qwen2.5-coder:7b не поддерживает native tool_calls)
-- [x] Парсинг ```tool, ```json и голого JSON
-- [x] Поддержка абсолютных путей (C:/Users/...)
-- [x] Поддержка URL в read (http/https)
-- [x] Web инструмент для загрузки страниц
-- [x] Fallback auto-execute при "yes"/"да" без tool block
-- [x] DeepSeek-R1 reasoning (<think>) авто-фильтрация
-- [x] Параллельный tool calling — несколько ```tool блоков в одном ответе
+- [x] FastAPI сервер, SSE streaming, agent loop (12 итераций)
+- [x] 15 инструментов: read, write, edit, bash, glob, grep, list, web, websearch, diff, commit, undo, verify, plan, search
+- [x] Prompt-based tool calling (```tool блоки)
+- [x] Сессии (.agent_sessions/), API CRUD
+- [x] UI: файловое дерево, сессии, тёмная тема, drag-and-drop, confirm-диалоги
+- [x] Бэкапы (50 версий в .agent_backups)
+- [x] RAG (семантический поиск), расширен на .go, .rs, .java, .yml, .toml, .env, .cfg, .ini
+- [x] Multi-agent (PLANNER_MODEL + MODEL)
+- [x] Fallback OpenAI/Claude API
+- [x] WebSearch (DuckDuckGo)
+- [x] Agent memory (.agent_memory/)
+- [x] Управление моделями (+Pull/-Del в UI)
+- [x] Async rewrite (asyncio.to_thread)
+- [x] CI/CD (.github/workflows/test.yml)
+- [x] 11 smoke-тестов (test_agent.py)
 
-### Сессии
-- [x] Сохранение истории в `.agent_sessions/*.json`
-- [x] API: GET/POST/DELETE /api/sessions
-- [x] UI: боковая панель сессий, создание/удаление/переключение
-- [x] Авто-загрузка сессии при отправке сообщения
-- [x] Авто-сохранение после каждого ответа агента
-
-### UI
-- [x] Встроенный HTML (без npm, zero зависимостей)
-- [x] SSE streaming ответа
-- [x] Переключение моделей
-- [x] Статус Ollama (online/offline)
-- [x] Боковая панель: файловое дерево + сессии
-- [x] Просмотр файлов (file viewer overlay)
-- [x] Тёмная тема с сохранением в localStorage
-- [x] Cancel (AbortController)
-- [x] Diff view — подсветка ```diff (+/-) в UI
-- [x] Confirm box с кнопками Yes/No в сообщении
+## Доработано по ревью (DeepSeek + Kimi)
 
 ### Безопасность
-- [x] Бэкапы перед каждой write/edit (до 50 версий в .agent_backups)
-- [x] Undo — откат до предыдущей версии файла
-- [x] Подтверждение перед write/edit/bash/commit/undo
-- [x] Verify — авто-проверка синтаксиса (py_compile, tsc --noEmit, json.tool)
-- [x] JSON Schema валидация всех 14 инструментов
-- [x] 60s таймаут + 3 JSON retries
-- [x] 32K контекстное окно
+- [x] **Защита от directory traversal** — ensure_safe_path() для всех файловых инструментов
+- [x] **Bash sandbox** — чёрный список команд (rm -rf /, mkfs, dd, curl | sh и т.д.)
+- [x] **Path validation** для glob/grep/list
 
-### Планирование
-- [x] `plan` инструмент — модель составляет список шагов
-- [x] Пользователь подтверждает "yes" перед выполнением плана
-- [x] Auto-execute плана при "yes" без повторного tool block
+### Производительность
+- [x] **Точный подсчёт токенов** — eval_count из ответа Ollama (вместо len/4)
+- [x] **Суммаризация контекста внутри loop** — каждые 3 итерации
+- [x] **RAG cache на диск** — .rag_cache/, не пересчитывается при каждом запуске
+- [x] **Настраиваемые лимиты** — AGENT_TIMEOUT, AGENT_MAX_ITER, AGENT_MEMORY_LIMIT
 
-### Контекст
-- [x] Автосуммаризация старых сообщений через 1.5b модель
-- [x] Срабатывает при >4000 символов в истории
+### Стабильность
+- [x] **Retry с exponential backoff** в call_ollama (3 попытки, 2^attempt сек)
+- [x] **Configurable bash timeout** — AGENT_TIMEOUT применяется и к bash
 
-### RAG / Поиск
-- [x] Семантический поиск по codebase через Ollama embeddings
-- [x] Индексация .py, .js, .ts, .json, .md файлов
-- [x] Разбивка на чанки по def/class
-- [x] Cosine similarity поиск
+### UI
+- [x] **Подсветка синтаксиса** в просмотре файлов (Python, JS, TS, Go, Rust, Java, JSON, YAML, TOML, INI, .env)
 
-### Git
-- [x] diff — показать изменения
-- [x] commit — git add -A + commit
-- [x] Репозиторий на GitHub
+### Документация
+- [x] **Все env vars описаны** (включая AGENT_MAX_ITER, AGENT_TIMEOUT, AGENT_MEMORY_LIMIT, DEBUG)
+- [x] **English версия README**
+- [x] **TODO.md обновлён**
 
-### Тесты
-- [x] `test_agent.py` — 11 smoke-тестов (read, write, edit, bash, glob, list, URL, backup, undo, verify)
+## Что ещё можно сделать (некритично)
 
-### Инфраструктура
-- [x] Один файл agent.py, zero зависимостей кроме fastapi+uvicorn+requests
-- [x] context.txt для ревью проекта
-- [x] README.md с описанием
-- [x] NO_CONFIRM=1 для отключения подтверждений
-- [x] Переменные окружения: AI_MODEL, EMBED_MODEL, WORK_DIR, PORT, OLLAMA_URL
-
----
-
-## Оценки проекта
-
-### Оценка Kimi: 8.2 / 10
-| Критерий | Балл |
-|----------|------|
-| Архитектура и код | 8/10 |
-| Функциональность | 9/10 |
-| Безопасность | 8/10 |
-| UX/UI | 7/10 |
-| Потенциал | 9/10 |
-
-### Оценка DeepSeek: 8.5 / 10
-"Проект является рабочим, продуманным и надёжным решением для локальной AI-помощи в разработке."
-
----
-
-## Что осталось
-
-### Важное
-- [x] **Лимит по токенам** — MAX_TOKENS env var, агент останавливается при превышении
-- [x] **Управление моделями** — pull/delete через UI (кнопки +Pull/-Del в топбаре)
-- [x] **WebSearch** — поиск через DuckDuckGo (без API ключа)
-
-### Среднее
-- [x] **Структурный diff** — показывать только изменённые строки с файлами
-- [x] **Лучшая обработка ошибок** — логирование, Ollama health check, fallback
-- [x] **Расширение RAG** — поддержка .go, .rs, .java, .env, .yml, .toml, .cfg, .ini
-- [x] **Async rewrite** — /api/chat через asyncio.to_thread, сервер не блокируется
-
-### Долгосрочное
-- [x] **Мультиагентность** — PLANNER_MODEL (1.5b) + MODEL (7b)
-- [x] **Agent memory** — .agent_memory/, summary между сессиями
-- [x] **Claude/GPT API** — FALLBACK_MODEL + OPENAI/ANTHROPIC ключи
-- [x] **CI/CD** — .github/workflows/test.yml
-- [x] **File drag-and-drop** — drop zone overlay + /api/upload
-- [x] **Рефакторинг** — tools.py, rag.py, ui.py, agent.py
+- [ ] MCP-протокол для интеграции с IDE
+- [ ] Native tool calling (когда Ollama поддержит)
+- [ ] Юнит-тесты для каждого инструмента
+- [ ] Автодополнение (tab completion) для путей в UI
+- [ ] Прогресс-бар для pull модели
+- [ ] Mobile-responsive sidebar

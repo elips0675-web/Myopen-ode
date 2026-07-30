@@ -1,6 +1,6 @@
-"""RAG - semantic code search via Ollama embeddings."""
+"""RAG - semantic code search via Ollama embeddings with disk caching."""
 
-import json, os, glob, logging
+import json, os, glob, logging, hashlib
 from pathlib import Path
 import requests
 
@@ -12,16 +12,63 @@ EMBED_MODEL = "nomic-embed-text"
 RAG_INDEX = None
 RAG_CHUNKS = []
 RAG_DIRTY = True
+RAG_CACHE_DIR = None
 
 def init_rag(**kw):
-    global OLLAMA_URL, WORK_DIR, EMBED_MODEL
+    global OLLAMA_URL, WORK_DIR, EMBED_MODEL, RAG_CACHE_DIR
     for k, v in kw.items():
         if v is not None:
             globals()[k] = v
+    if RAG_CACHE_DIR is None:
+        RAG_CACHE_DIR = WORK_DIR / ".rag_cache"
+        RAG_CACHE_DIR.mkdir(exist_ok=True)
+
+def _cache_key():
+    """Generate a cache key based on project files."""
+    files = sorted(glob.glob(str(WORK_DIR / "**/*.py"), recursive=True))[:50]
+    files += sorted(glob.glob(str(WORK_DIR / "**/*.js"), recursive=True))[:30]
+    h = hashlib.md5()
+    for fp in files[:20]:
+        try: h.update((fp + str(Path(fp).stat().st_mtime)).encode())
+        except: pass
+    return h.hexdigest()[:16]
+
+def _save_cache(key, chunks, index):
+    if not RAG_CACHE_DIR: return
+    cf = RAG_CACHE_DIR / f"{key}.json"
+    try:
+        data = {"chunks": chunks, "index": index, "model": EMBED_MODEL}
+        cf.write_text(json.dumps(data), "utf-8")
+        log.info("RAG cache saved: %s (%d chunks)", key, len(chunks))
+    except Exception as e:
+        log.warning("RAG cache save failed: %s", e)
+
+def _load_cache(key):
+    if not RAG_CACHE_DIR: return None
+    cf = RAG_CACHE_DIR / f"{key}.json"
+    if not cf.exists(): return None
+    try:
+        data = json.loads(cf.read_text())
+        if data.get("model") != EMBED_MODEL: return None
+        log.info("RAG cache loaded: %s (%d chunks)", key, len(data.get("chunks", [])))
+        return data
+    except Exception as e:
+        log.warning("RAG cache load failed: %s", e)
+        return None
 
 def rag_index():
     global RAG_INDEX, RAG_CHUNKS, RAG_DIRTY
     if not RAG_DIRTY and RAG_INDEX: return
+
+    # Try loading from cache first
+    ck = _cache_key()
+    cached = _load_cache(ck) if ck else None
+    if cached:
+        RAG_CHUNKS = cached["chunks"]
+        RAG_INDEX = cached["index"]
+        RAG_DIRTY = False
+        return
+
     RAG_CHUNKS = []
     files = list(glob.glob(str(WORK_DIR / "**/*.py"), recursive=True))[:200]
     files += list(glob.glob(str(WORK_DIR / "**/*.js"), recursive=True))[:100]
@@ -71,6 +118,7 @@ def rag_index():
         if "embeddings" in data:
             RAG_INDEX = data["embeddings"]
             RAG_DIRTY = False
+            _save_cache(ck, RAG_CHUNKS, RAG_INDEX)
     except Exception as e:
         log.warning("RAG embed failed: %s", e)
 

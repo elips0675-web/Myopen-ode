@@ -9,7 +9,8 @@ from agent import WORK_DIR
 init_config(WORK_DIR=WORK_DIR, OLLAMA_URL="http://localhost:11434", MODEL="test", NO_CONFIRM=True)
 init_backup()
 
-TMP = Path(tempfile.mkdtemp())
+TMP = WORK_DIR / ".test_tmp"
+TMP.mkdir(exist_ok=True)
 
 def test_read():
     r = execute_tool("read", {"path": "agent.py"})
@@ -87,4 +88,6 @@ if __name__ == "__main__":
             passed += 1
         except Exception as e:
             print(f"  [FAIL] {t.__name__}: {e}")
+    import shutil
+    shutil.rmtree(TMP, ignore_errors=True)
     print(f"\n{'='*40}\n{passed}/{len(tests)} passed")

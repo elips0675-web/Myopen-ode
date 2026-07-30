@@ -4,5 +4,6 @@ __pycache__/
 .agent_backups/
 .agent_sessions/
 .agent_memory/
+.rag_cache/
 *.log
 *.err

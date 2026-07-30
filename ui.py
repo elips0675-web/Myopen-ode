@@ -93,7 +93,7 @@ body[data-theme="dark"]{--bg:#0f1117;--fg:#e2e8f0;--sidebar:#161b22;--sidebar-bo
 #fileview .fv-bar{padding:10px 16px;border-bottom:1px solid var(--sidebar-border);display:flex;align-items:center;gap:10px}
 #fileview .fv-bar .fv-name{font-weight:600;font-size:13px}
 #fileview .fv-bar .fv-close{margin-left:auto;background:none;border:none;color:var(--st-c);cursor:pointer;font-size:18px}
-#fileview pre{flex:1;padding:16px;overflow:auto;font-size:12px;line-height:1.6;background:var(--pre-bg);margin:0}
+#fileview .s{color:#ce9178}#fileview .k{color:#569cd6}#fileview .c{color:#6a9955}#fileview .n{color:#b5cea8}
 
 #dropzone{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(37,99,235,.15);z-index:999;display:none;align-items:center;justify-content:center;pointer-events:none;backdrop-filter:blur(4px)}
 #dropzone.show{display:flex}
@@ -130,7 +130,7 @@ body[data-theme="dark"]{--bg:#0f1117;--fg:#e2e8f0;--sidebar:#161b22;--sidebar-bo
   </div>
   <div id="stat"><span id="old"></span><span id="ols">Ollama...</span></div>
 </div>
-<div id="fileview"><div class="fv-bar"><span class="fv-name" id="fv-name"></span><button class="fv-close" onclick="closeFile()">&times;</button></div><pre id="fv-content"></pre></div>
+<div id="fileview"><div class="fv-bar"><span class="fv-name" id="fv-name"></span><button class="fv-close" onclick="closeFile()">&times;</button></div><div id="fv-content" style="flex:1;padding:16px;overflow:auto;font-size:12px;line-height:1.6;background:var(--pre-bg);margin:0;font-family:monospace;white-space:pre"></div></div>
 <div id="dropzone"><div class="dz-box"><svg viewBox="0 0 24 24"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg><div class="dz-title">Drop files here</div><div class="dz-sub">Upload to workspace</div></div></div>
 <script>
 var A=window.location.origin,ms=[],sd=0,ac=null,curSid="",allSessions=[];
@@ -238,6 +238,34 @@ function openFile(path){
   });
 }
 function closeFile(){$('fileview').classList.remove('open')}
+
+// Basic syntax highlighting for file viewer
+function highlightSyntax(code, ext){
+  var lang = ext.split('.').pop();
+  var h = esc(code);
+  if(['py','js','ts','jsx','tsx','java','go','rs','c','cpp','h','cs','json','yml','yaml','toml','ini','cfg','env'].includes(lang)){
+    if(lang==='py') h=h.replace(/(^|\n)([ \t]*#.*?)(?=\n|$)/g, '$1<span class="c">$2</span>');
+    else if(['yml','yaml'].includes(lang)) h=h.replace(/(^|\n)([ \t]*#.*?)(?=\n|$)/g, '$1<span class="c">$2</span>');
+    else if(['ini','cfg','env'].includes(lang)) h=h.replace(/(^|\n)([ \t]*[;#].*?)(?=\n|$)/g, '$1<span class="c">$2</span>');
+    else h=h.replace(/(^|\n)([ \t]*\/\/.*?)(?=\n|$)/g, '$1<span class="c">$2</span>');
+  }
+  if(['json','jsonc'].includes(lang)){
+    h=h.replace(/(&quot;[^&quot;]*&quot;)(\s*:)/g,'<span class="k">$1</span>$2');
+  }
+  h=h.replace(/(&quot;[^&quot;]*&quot;|&#39;[^&#39;]*&#39;|`[^`]*`)/g,'<span class="s">$1</span>');
+  var kw = lang==='py'
+    ? ['\\b(def|class|if|else|elif|for|while|return|import|from|as|try|except|finally|with|yield|async|await|pass|raise|in|not|and|or|True|False|None)\\b']
+    : ['\\b(function|class|if|else|for|while|return|import|from|try|catch|finally|throw|async|await|const|let|var|new|this|typeof|instanceof|switch|case|break|continue|export|default|extends|static|get|set|true|false|null|undefined|void|yield|of|in|interface|type|enum|implements|abstract|readonly|private|protected|public|declare|namespace|module|any|string|number|boolean)\\b'];
+  kw.forEach(function(p){h=h.replace(new RegExp(p,'g'),'<span class="k">$1</span>')});
+  h=h.replace(/\b(\d+\.?\d*)\b/g,'<span class="n">$1</span>');
+  return h;
+}
+function openFile(path){
+  fetch(A+'/api/file?path='+encodeURIComponent(path)).then(function(r){return r.json()}).then(function(d){
+    if(d.error)return;$('fv-name').textContent=path;
+    $('fv-content').innerHTML=highlightSyntax(d.content,path);$('fileview').classList.add('open');
+  });
+}
 
 // Init
 function toggleTheme(){var d=document.body.getAttribute("data-theme")==="dark";document.body.setAttribute("data-theme",d?"":"dark");$("theme-btn").textContent=d?"&#127769;":"&#9728;&#65039;";localStorage.setItem("theme",d?"":"dark")}

@@ -19,18 +19,32 @@ MAX_TOKENS = 0
 OPENAI_KEY = ""
 ANTHROPIC_KEY = ""
 FALLBACK_MODEL = ""
+BASH_TIMEOUT = 60
 
 def init_config(**kw):
     global OLLAMA_URL, MODEL, PLANNER_MODEL, WORK_DIR, EMBED_MODEL, NO_CONFIRM, MAX_TOKENS, OPENAI_KEY, ANTHROPIC_KEY, FALLBACK_MODEL
     for k, v in kw.items():
         if v is not None:
             globals()[k] = v
+    # Apply AGENT_TIMEOUT to bash tool if set
+    bash_timeout = os.environ.get("AGENT_TIMEOUT", "")
+    if bash_timeout:
+        try: globals()["BASH_TIMEOUT"] = int(float(bash_timeout))
+        except: pass
 
-# ─── path resolver ────────────────────────────────────────
+# ─── path resolver with security ──────────────────────────
 def resolve(path):
     p = Path(path)
     if p.is_absolute(): return p
     return WORK_DIR / path
+
+def ensure_safe_path(path):
+    """Resolve path and verify it stays within WORK_DIR to prevent directory traversal."""
+    p = resolve(path).resolve()
+    wk = WORK_DIR.resolve()
+    if wk not in p.parents and p != wk:
+        return f"Error: path '{path}' is outside workspace '{WORK_DIR}'"
+    return None
 
 # ─── file versioning ──────────────────────────────────────
 BACKUP_DIR = None
@@ -190,20 +204,29 @@ Multi-agent: planning uses a smaller model; execution uses the main model."""
 # ─── call Ollama with fallback ────────────────────────────
 def call_ollama(messages, model=None):
     m = model or MODEL
-    try:
-        r = requests.post(f"{OLLAMA_URL}/api/chat", json={
-            "model": m, "messages": [msg for msg in messages if msg.get("content")],
-            "stream": False, "keep_alive": -1,
-            "options": {"temperature": 0.2, "num_predict": 4096, "num_ctx": 32768}
-        }, timeout=120)
-        r.raise_for_status()
-        data = r.json()
-        msg = data.get("message", {}).get("content", "")
-        msg = re.sub(r'<think>.*?</think>', '', msg, flags=re.DOTALL)
-        return msg if msg else "No response from model"
-    except Exception as e:
-        log.warning("Ollama failed: %s. Trying fallback...", e)
-        return call_fallback(messages, m)
+    max_retries = 3
+    for attempt in range(max_retries):
+        try:
+            r = requests.post(f"{OLLAMA_URL}/api/chat", json={
+                "model": m, "messages": [msg for msg in messages if msg.get("content")],
+                "stream": False, "keep_alive": -1,
+                "options": {"temperature": 0.2, "num_predict": 4096, "num_ctx": 32768}
+            }, timeout=120)
+            r.raise_for_status()
+            data = r.json()
+            msg = data.get("message", {}).get("content", "")
+            tokens_used = data.get("eval_count", 0)
+            msg = re.sub(r'<think>.*?</think>', '', msg, flags=re.DOTALL)
+            return msg if msg else "No response from model", tokens_used
+        except Exception as e:
+            log.warning("Ollama attempt %d/%d failed: %s", attempt+1, max_retries, e)
+            if attempt < max_retries - 1:
+                wait = 2 ** attempt
+                log.info("Retrying in %ds...", wait)
+                time.sleep(wait)
+            else:
+                log.warning("All Ollama retries exhausted. Trying fallback...")
+                return call_fallback(messages, m), 0
 
 def call_fallback(messages, model_name):
     fallback = FALLBACK_MODEL or ""
@@ -252,6 +275,20 @@ def extract_pending_tool(msgs):
             except: pass
     return None, None
 
+# ─── bash sandbox ─────────────────────────────────────────
+BASH_BLACKLIST = [
+    "rm -rf /", "rm -rf ~", "rm -rf .", "rm -rf *", "rm -rf --no-preserve-root",
+    "mkfs.", "format ", "dd if=", "dd of=", ":(){ :|:& };:", "fork bomb",
+    "> /dev/sda", "| sh", "| bash", "curl ", "wget ", "chmod 777",
+    "sudo ", "su ", "passwd",
+]
+def check_bash(cmd):
+    cmd_lower = cmd.lower()
+    for dangerous in BASH_BLACKLIST:
+        if dangerous in cmd_lower:
+            return f"Blocked: command matching blacklist pattern '{dangerous}' is not allowed"
+    return None
+
 # ─── execute tool ─────────────────────────────────────────
 def execute_tool(name, args):
     try:
@@ -262,6 +299,8 @@ def execute_tool(name, args):
                     r = requests.get(p, timeout=15, headers={"User-Agent": "Mozilla/5.0"})
                     return r.text[:5000]
                 except Exception as e: return f"Error fetching URL: {e}"
+            err = ensure_safe_path(p)
+            if err: return err
             pp = resolve(p)
             if not pp.exists(): return f"Error: {p} not found"
             if pp.is_dir(): return f"'{p}' is a directory. Use list tool to see contents."
@@ -273,6 +312,8 @@ def execute_tool(name, args):
                 return r.text[:5000]
             except Exception as e: return f"Error: {e}"
         elif name == "write":
+            err = ensure_safe_path(args["path"])
+            if err: return err
             p = resolve(args["path"])
             rel = str(p.relative_to(WORK_DIR)) if WORK_DIR in p.parents else str(p)
             backup(rel)
@@ -283,6 +324,8 @@ def execute_tool(name, args):
             if v: msg += f"\nVerify: {v[:500]}"
             return msg
         elif name == "edit":
+            err = ensure_safe_path(args["path"])
+            if err: return err
             p = resolve(args["path"])
             if not p.exists(): return f"Error: {p} not found"
             old = args.get("old", ""); new = args.get("new", "")
@@ -294,12 +337,19 @@ def execute_tool(name, args):
             v = verify_file(str(p))
             return f"Replaced in {p}" + (f"\nVerify: {v[:500]}" if v else "")
         elif name == "bash":
+            cmd = args["cmd"]
+            blocked = check_bash(cmd)
+            if blocked: return blocked
             cwd = resolve(args.get("cwd", ".")) if args.get("cwd") else WORK_DIR
-            r = subprocess.run(args["cmd"], shell=True, cwd=str(cwd) if cwd else str(WORK_DIR), capture_output=True, text=True, timeout=60)
+            bt = globals().get("BASH_TIMEOUT", 60)
+            r = subprocess.run(cmd, shell=True, cwd=str(cwd) if cwd else str(WORK_DIR), capture_output=True, text=True, timeout=bt)
             return ((r.stdout or "")[-3000:] + ("\nSTDERR:\n" + (r.stderr or "")[-1000:] if r.stderr else ""))
         elif name == "glob":
             pattern = args["pattern"]
-            base = Path(args.get("cwd", ".")) if args.get("cwd") else WORK_DIR
+            cwd_arg = args.get("cwd", ".")
+            err = ensure_safe_path(cwd_arg)
+            if err: return err
+            base = Path(cwd_arg) if args.get("cwd") else WORK_DIR
             if not base.is_absolute():
                 if "\\" in pattern or pattern.startswith("/") or ":" in pattern:
                     p = Path(pattern)
@@ -309,10 +359,15 @@ def execute_tool(name, args):
             return "\n".join(fs) if fs else "No matches"
         elif name == "grep":
             pat, inc = args["pattern"], args.get("include", "*")
-            cwd = args.get("cwd", str(WORK_DIR))
+            cwd = args.get("cwd", ".")
+            err = ensure_safe_path(cwd)
+            if err: return err
+            cwd = str(resolve(cwd))
             r = subprocess.run(f'rg -n "{pat}" --glob "{inc}"', shell=True, cwd=cwd, capture_output=True, text=True, timeout=30)
             return "\n".join(r.stdout.split("\n")[:60]) or "No matches"
         elif name == "list":
+            err = ensure_safe_path(args.get("path", "."))
+            if err: return err
             p = resolve(args.get("path", "."))
             items = [f"{'[DIR]' if x.is_dir() else '     '} {x.name}" for x in sorted(p.iterdir())]
             return "\n".join(items) if items else "(empty)"
@@ -339,9 +394,14 @@ def execute_tool(name, args):
         elif name == "commit":
             git("add", "-A"); return git("commit", "-m", args.get("message", "update"))
         elif name == "undo":
+            err = ensure_safe_path(args.get("path", ""))
+            if err: return err
             return undo(args.get("path", ""))
         elif name == "verify":
             path = args.get("path", "")
+            if path:
+                err = ensure_safe_path(path)
+                if err: return err
             return verify_file(path) if path else "No path specified"
         elif name == "search":
             from .rag import rag_search

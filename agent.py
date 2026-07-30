@@ -46,10 +46,11 @@ SESSIONS_DIR.mkdir(exist_ok=True)
 
 MEMORY_DIR = WORK_DIR / ".agent_memory"
 MEMORY_DIR.mkdir(exist_ok=True)
+AGENT_MEMORY_LIMIT = int(os.environ.get("AGENT_MEMORY_LIMIT", "10"))
 
 def load_memory():
     mems = []
-    for f in sorted(MEMORY_DIR.glob("*.json"), key=lambda x: x.stat().st_mtime, reverse=True)[:10]:
+    for f in sorted(MEMORY_DIR.glob("*.json"), key=lambda x: x.stat().st_mtime, reverse=True)[:AGENT_MEMORY_LIMIT]:
         try:
             data = json.loads(f.read_text())
             if data.get("summary"):
@@ -135,10 +136,20 @@ def run_agent_loop(msgs, session_id):
         if time.time() - start_time > max_time:
             full += f"\n[tool: TIMEOUT — agent loop exceeded {int(max_time)}s]\n"
             break
+
+        # Summarize context every 3 iterations to keep token usage in check
+        if it > 0 and it % 3 == 0:
+            msgs = summarize_context(msgs)
+
         current_model = PLANNER_MODEL if it == 0 else MODEL
-        content = call_ollama(msgs, current_model)
+        result = call_ollama(msgs, current_model)
+        if isinstance(result, tuple):
+            content, tokens_used = result
+        else:
+            content = result
+            tokens_used = 0
         if not content: break
-        total_tokens += len(content) / 4
+        total_tokens += tokens_used or (len(content) / 4)
 
         tool_blocks = []
         for m in tool_pat.finditer(content):
