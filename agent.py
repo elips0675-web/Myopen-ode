@@ -26,6 +26,9 @@ MAX_TOKENS = int(os.environ.get("MAX_TOKENS", "0"))
 OPENAI_KEY = os.environ.get("OPENAI_API_KEY", "")
 ANTHROPIC_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
 FALLBACK_MODEL = os.environ.get("FALLBACK_MODEL", "")
+FLASH_PROVIDER = os.environ.get("FLASH_PROVIDER", "")
+FLASH_API_KEY = os.environ.get("FLASH_API_KEY", "")
+FLASH_MODEL = os.environ.get("FLASH_MODEL", "deepseek-v4-flash")
 
 # ─── import tools & rag ───────────────────────────────────
 from tools import (init_config, execute_tool, validate_tool, call_ollama,
@@ -126,7 +129,7 @@ def run_agent_loop(msgs, session_id):
     full = ""
     tool_pat = re.compile('```(?:tool|json)\n(.*?)\n```', re.DOTALL)
     bare_tool_pat = re.compile(r'\{\s*"tool"\s*:\s*"[^"]+"\s*.*?\}', re.DOTALL)
-    VALID_TOOLS = ("read","write","edit","bash","glob","grep","list","web","diff","commit","undo","verify","plan","search","websearch","question","skill","patch")
+    VALID_TOOLS = ("read","write","edit","bash","glob","grep","list","web","diff","commit","undo","verify","plan","search","websearch","question","skill","patch","task","todo")
     max_iter = int(os.environ.get("AGENT_MAX_ITER", "12"))
     max_time = float(os.environ.get("AGENT_TIMEOUT", "60.0"))
     start_time = time.time()
@@ -298,6 +301,15 @@ def delete_model(name: str):
 
 @app.get("/api/project")
 def get_project(): return {"name": WORK_DIR.name, "path": str(WORK_DIR)}
+
+@app.get("/api/task/{agent_type}")
+async def run_task(agent_type: str, prompt: str = ""):
+    if not prompt: return {"error": "prompt required"}
+    from tools import SUBAGENT_PROMPTS, call_ollama, PLANNER_MODEL
+    sub_prompt = SUBAGENT_PROMPTS.get(agent_type, SUBAGENT_PROMPTS["general"])
+    msgs = [{"role": "system", "content": sub_prompt}, {"role": "user", "content": prompt}]
+    result, _ = call_ollama(msgs, PLANNER_MODEL)
+    return {"result": result[:3000]}
 
 @app.get("/api/skills")
 def list_skills():

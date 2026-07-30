@@ -20,6 +20,12 @@ OPENAI_KEY = ""
 ANTHROPIC_KEY = ""
 FALLBACK_MODEL = ""
 BASH_TIMEOUT = 60
+# DeepSeek-V4-Flash provider URLs (и т.д. бесплатные)
+FLASH_PROVIDERS = {
+    "fireworks": "https://api.fireworks.ai/inference/v1",
+    "together": "https://api.together.xyz/v1",
+    "groq": "https://api.groq.com/openai/v1",
+}
 
 def init_config(**kw):
     global OLLAMA_URL, MODEL, PLANNER_MODEL, WORK_DIR, EMBED_MODEL, NO_CONFIRM, MAX_TOKENS, OPENAI_KEY, ANTHROPIC_KEY, FALLBACK_MODEL
@@ -124,6 +130,8 @@ TOOL_SCHEMAS = {
     "question": {"required": ["text", "options"]},
     "skill": {"required": ["name"]},
     "patch": {"required": ["path", "diff"]},
+    "task": {"required": ["agent", "prompt"]},
+    "todo": {"required": ["action"]},
 }
 
 def validate_tool(tc):
@@ -213,6 +221,18 @@ TOOLS (required fields in bold):
 ```tool
 {"tool": "patch", "path": "file.py", "diff": "--- a/file.py\n+++ b/file.py\n@@ -1 +1 @@\n-old\n+new"}
 ```
+```tool
+{"tool": "task", "agent": "explore", "prompt": "Find all async functions in src/"}
+```
+```tool
+{"tool": "todo", "action": "add", "items": ["task1", "task2"]}
+```
+```tool
+{"tool": "todo", "action": "complete", "index": 1}
+```
+```tool
+{"tool": "todo", "action": "list"}
+```
 
 Paths: forward slashes. C:/Users/... or relative to workspace.
 Search: semantic code search via RAG.
@@ -220,7 +240,33 @@ WebSearch: internet search via DuckDuckGo.
 Question: ask user with multiple choice options.
 Skill: load SKILL.md instructions from .agent_skills/ directory.
 Patch: apply unified diff to a file.
-Multi-agent: planning uses a smaller model; execution uses the main model."""
+Multi-agent: planning uses a smaller model; execution uses the main model.
+Task: delegate to subagent. Agents: explore (read-only research), scout (web/external research), general (complex multi-step).
+Todo: manage task list within session — add, complete, list items."""
+
+# ─── in-memory todo store ─────────────────────────────────
+TODO_LIST = []
+
+# ─── subagent prompts ────────────────────────────────────
+EXPLORE_PROMPT = "You are EXPLORE agent — read-only codebase researcher.\n\nWORKSPACE: " + str(WORK_DIR) + """
+You can ONLY use: read, glob, grep, list, search (RAG).
+NEVER write, edit, bash, commit, or any destructive tools.
+Your job is to find information, explore code structure, and report findings concisely."""
+
+SCOUT_PROMPT = "You are SCOUT agent — external research specialist.\n\nWORKSPACE: " + str(WORK_DIR) + """
+You can ONLY use: web, websearch, read (URLs only).
+Your job is to research external dependencies, documentation, and APIs.
+Report findings with sources."""
+
+GENERAL_PROMPT = "You are GENERAL agent — full-access subagent for complex tasks.\n\nWORKSPACE: " + str(WORK_DIR) + """
+You have access to ALL tools: read, write, edit, bash, glob, grep, list, web, websearch, diff, commit, undo, verify, plan, search, question, skill, patch.
+Follow the same rules as the main agent: confirm before destructive operations, verify after write/edit, prefer edit over write."""
+
+SUBAGENT_PROMPTS = {
+    "explore": EXPLORE_PROMPT,
+    "scout": SCOUT_PROMPT,
+    "general": GENERAL_PROMPT,
+}
 
 # ─── call Ollama with fallback ────────────────────────────
 def call_ollama(messages, model=None):
@@ -251,9 +297,23 @@ def call_ollama(messages, model=None):
 
 def call_fallback(messages, model_name):
     fallback = FALLBACK_MODEL or ""
-    if not fallback:
+    flash_provider = os.environ.get("FLASH_PROVIDER", "")
+    flash_key = os.environ.get("FLASH_API_KEY", OPENAI_KEY)
+    if not fallback and not flash_provider:
         return "[Error: Ollama unavailable, no fallback configured]"
     try:
+        # DeepSeek-V4-Flash via provider
+        if flash_provider and flash_key:
+            base = FLASH_PROVIDERS.get(flash_provider, flash_provider)
+            h = {"Authorization": f"Bearer {flash_key}", "Content-Type": "application/json"}
+            flash_model = os.environ.get("FLASH_MODEL", "deepseek-v4-flash")
+            body = {"model": flash_model, "messages": [m for m in messages if m.get("content")], "temperature": 0.2, "max_tokens": 8192, "max_context": 1048576}
+            try:
+                r = requests.post(f"{base}/chat/completions", json=body, headers=h, timeout=180)
+                r.raise_for_status()
+                return r.json()["choices"][0]["message"]["content"]
+            except Exception as e:
+                log.warning("Flash provider failed: %s", e)
         if OPENAI_KEY and ("gpt" in fallback or "o1" in fallback or "o3" in fallback or "/" not in fallback):
             h = {"Authorization": f"Bearer {OPENAI_KEY}", "Content-Type": "application/json"}
             body = {"model": fallback, "messages": [m for m in messages if m.get("content")], "temperature": 0.2, "max_tokens": 4096}
@@ -517,6 +577,37 @@ def execute_tool(name, args):
             msg = f"Patch applied to {path} ({len(pp.read_text('utf-8'))}b)"
             if v: msg += f"\nVerify: {v[:500]}"
             return msg
+        elif name == "task":
+            agent_type = args.get("agent", "general")
+            user_prompt = args.get("prompt", "")
+            sub_prompt = SUBAGENT_PROMPTS.get(agent_type, GENERAL_PROMPT)
+            msgs = [
+                {"role": "system", "content": sub_prompt},
+                {"role": "user", "content": user_prompt},
+            ]
+            result, _ = call_ollama(msgs, PLANNER_MODEL)
+            return f"[SUBAGENT:{agent_type}]\n{result[:3000]}"
+        elif name == "todo":
+            action = args.get("action", "list")
+            items = args.get("items", [])
+            idx = args.get("index", None)
+            if action == "add":
+                for item in (items if isinstance(items, list) else [items]):
+                    TODO_LIST.append({"text": item, "done": False})
+                return f"[TODO] Added {len(items) if isinstance(items, list) else 1} item(s). Total: {len(TODO_LIST)}"
+            elif action == "complete":
+                if idx is None: return "[TODO] Need index"
+                if idx < 1 or idx > len(TODO_LIST): return f"[TODO] Invalid index {idx}"
+                TODO_LIST[idx-1]["done"] = True
+                return f"[TODO] Completed: {TODO_LIST[idx-1]['text']}"
+            elif action == "list":
+                if not TODO_LIST: return "[TODO] List is empty"
+                lines = []
+                for i, t in enumerate(TODO_LIST):
+                    mark = "✅" if t["done"] else "⬜"
+                    lines.append(f"  {i+1}. {mark} {t['text']}")
+                return "[TODO]\n" + "\n".join(lines)
+            return f"[TODO] Unknown action: {action}"
         else:
             return f"Unknown tool: {name}"
     except Exception as e:

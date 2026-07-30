@@ -112,6 +112,12 @@ body[data-theme="dark"]{--bg:#0f1117;--fg:#e2e8f0;--sidebar:#161b22;--sidebar-bo
   </div>
   <input id="sess-search" placeholder="Search sessions..." oninput="filterSessions(this.value)">
   <div id="sess-list"></div>
+  <div class="section">Agents</div>
+  <div style="display:flex;gap:4px;padding:4px 12px;flex-wrap:wrap">
+    <button onclick="useAgent('explore')" style="padding:3px 8px;background:var(--code-bg);border:1px solid var(--sidebar-border);border-radius:4px;cursor:pointer;font-size:10px;color:var(--st-c);font-family:inherit">@explore</button>
+    <button onclick="useAgent('scout')" style="padding:3px 8px;background:var(--code-bg);border:1px solid var(--sidebar-border);border-radius:4px;cursor:pointer;font-size:10px;color:var(--st-c);font-family:inherit">@scout</button>
+    <button onclick="useAgent('general')" style="padding:3px 8px;background:var(--code-bg);border:1px solid var(--sidebar-border);border-radius:4px;cursor:pointer;font-size:10px;color:var(--st-c);font-family:inherit">@general</button>
+  </div>
   <div class="section">Skills</div>
   <div id="skills-list" style="padding:4px 12px;font-size:11px;color:var(--st-c);max-height:100px;overflow-y:auto"></div>
   <div class="section">Files</div>
@@ -129,9 +135,11 @@ body[data-theme="dark"]{--bg:#0f1117;--fg:#e2e8f0;--sidebar:#161b22;--sidebar-bo
   <div id="chat">
     <div id="msgs"><div class="msg s">Agent ready. Try: &quot;create a fibonacci function&quot;</div></div>
     <div id="inp">
-      <textarea id="ta" rows="1" placeholder="Ask something..."></textarea>
-      <button id="cnl" onclick="cancel()">Cancel</button>
-      <button id="snd" onclick="send()">Send</button>
+      <textarea id="ta" rows="1" placeholder="Ask something... /test /review /fix /doc /deploy"></textarea>
+      <div style="display:flex;flex-direction:column;gap:4px;align-self:flex-end">
+        <button id="snd" onclick="send()" style="height:auto;padding:4px 14px">Send</button>
+        <button id="cnl" onclick="cancel()" style="display:none;height:auto;padding:4px 14px">Cancel</button>
+      </div>
     </div>
   </div>
   <div id="stat"><span id="old"></span><span id="ols">Ollama...</span></div>
@@ -312,6 +320,7 @@ function loadSkills(){
   }).catch(function(){})
 }
 function loadSkill(name){$('ta').value='@skill '+name;ah()}
+function useAgent(type){var ta=$('ta');ta.value='@'+type+' ';ta.focus();ah()}
 
 function init(){
   fetch(A+'/api/models').then(function(r){return r.json()}).then(function(mm){
@@ -324,8 +333,29 @@ function init(){
 }
 function cl(){fetch(A+'/api/models').then(function(){$('old').className='g';$('ols').textContent='Ollama OK'}).catch(function(){$('old').className='r';$('ols').textContent='Ollama -';setTimeout(cl,3000)})}
 
+// Slash commands config
+var SLASH_COMMANDS={
+  'test': {icon:'🧪',desc:'Run tests',prompt:'Run the project tests and report results.'},
+  'deploy': {icon:'🚀',desc:'Deploy project',prompt:'Prepare a deployment plan for this project.'},
+  'review': {icon:'🔍',desc:'Review changes',prompt:'Review all uncommitted changes and suggest improvements.'},
+  'fix': {icon:'🔧',desc:'Fix errors',prompt:'Find and fix any errors in the codebase.'},
+  'doc': {icon:'📝',desc:'Generate docs',prompt:'Generate documentation for the project.'},
+};
+
 function send(){
   var ta=$('ta'),txt=ta.value.trim();if(!txt||sd)return;ta.value='';ah();
+  // Handle @agent and @skill shortcuts
+  var agentMatch=txt.match(/^@(explore|scout|general)\s+(.*)/);
+  var skillMatch=txt.match(/^@skill\s+(\w+)\s*(.*)/);
+  var slashMatch=txt.match(/^\/(\w+)\s*(.*)/);
+  if(agentMatch){var agent=agentMatch[1],prompt=agentMatch[2];am('u',fm('[@'+agent+'] '+prompt));ms.push({role:'user',content:'[@'+agent+'] '+prompt});sd=1;$('snd').disabled=1;$('cnl').style.display='inline-block';ac=new AbortController();var fl='',be=am('a','<span class="sp"></span>');$('st2').textContent='['+agent+']...';fetch(A+'/api/task/'+agent+'?prompt='+encodeURIComponent(prompt)).then(function(r){return r.json()}).then(function(d){fl=d.result||'No response';ms.push({role:'assistant',content:fl});be.innerHTML=fm(fl);sd=0;$('snd').disabled=0;$('cnl').style.display='none';$('st2').textContent=''}).catch(function(e){be.innerHTML='Error: '+esc(e.message);sd=0;$('snd').disabled=0;$('cnl').style.display='none'});return}
+  if(skillMatch){var sk=skillMatch[1];fetch(A+'/api/skills').then(function(r){return r.json()}).then(function(skills){var found=skills.find(function(s){return s.name===sk});if(found){txt='I loaded the '+sk+' skill. '+found.preview+(skillMatch[2]?'\n\n'+skillMatch[2]:'')}else{txt='Skill "'+sk+'" not found'};am('u',fm(txt));ms.push({role:'user',content:txt})});}
+  // Handle slash commands
+  if(slashMatch){
+    var cmd=SLASH_COMMANDS[slashMatch[1]];
+    if(cmd){txt=cmd.prompt+(slashMatch[2]?'\n\n'+slashMatch[2]:'');am('u',fm('/'+slashMatch[1]+' '+slashMatch[2]));ms.push({role:'user',content:txt})}
+    else{am('t err','Unknown command: /'+slashMatch[1]+'. Available: '+Object.keys(SLASH_COMMANDS).join(', '));return}
+  }
   am('u',fm(txt));ms.push({role:'user',content:txt});
   var m=$('chm').value||'deepseek-r1:7b';sd=1;$('snd').disabled=1;$('cnl').style.display='inline-block';ac=new AbortController();
   var fl='',be=am('a','<span class="sp"></span>');$('st2').textContent='thinking...';

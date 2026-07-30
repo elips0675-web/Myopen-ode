@@ -6,7 +6,7 @@
 
 ## Возможности
 
-- **18 инструментов**: read, write, edit, bash, glob, grep, list, web, websearch, diff, commit, undo, verify, plan, search (RAG), **question**, **skill**, **patch**
+- **21 инструмент**: read, write, edit, bash, glob, grep, list, web, websearch, diff, commit, undo, verify, plan, search (RAG), **question**, **skill**, **patch**, **task**, **todo**
 - **UI**: файловое дерево + сессии, тёмная тема, подсветка синтаксиса, diff, drag-and-drop, confirm-диалоги
 - **RAG**: семантический поиск по codebase с **дисковым кешированием** — .py, .js, .ts, .go, .rs, .java, .yml, .toml, .env, .cfg, .ini
 - **Multi-agent**: PLANNER_MODEL (лёгкая 1.5b) планирует, основная модель исполняет
@@ -36,8 +36,10 @@
 - ✅ **Skills система** — `.agent_skills/*.md` — переиспользуемые инструкции для агента
 - ✅ **Patch tool** — применение unified diff к файлам
 - ✅ **Session sharing** — экспорт/импорт сессий через JSON
-
-## Быстрый старт
+- ✅ **Subagents** — @explore (read-only), @scout (web), @general (full access) с разными правами
+- ✅ **Slash-команды** — /test, /deploy, /review, /fix, /doc в чате
+- ✅ **Todo tracking** — todo-лист внутри сессии (add/complete/list)
+- ✅ **DeepSeek-V4-Flash** — поддержка 1M контекста через FLASH_PROVIDER/FLASH_API_KEY
 
 ```bash
 ollama pull deepseek-r1:7b
@@ -66,6 +68,9 @@ python agent.py
 | `AGENT_TIMEOUT` | `60` | Таймаут цикла агента (сек) |
 | `AGENT_MEMORY_LIMIT` | `10` | Сколько сессий хранить в памяти |
 | `DEBUG` | `""` | `1` = включить debug-логи |
+| `FLASH_PROVIDER` | `""` | Провайдер DeepSeek-V4-Flash (`fireworks`, `together`, `groq`) |
+| `FLASH_API_KEY` | `""` | API ключ для flash провайдера |
+| `FLASH_MODEL` | `deepseek-v4-flash` | Модель flash провайдера |
 
 ## Архитектура
 
@@ -92,6 +97,8 @@ ui.py      — HTML UI (встроенный, без зависимостей)
 | `/api/skills` | GET | Список доступных навыков |
 | `/api/sessions/{id}/export` | GET | Экспорт сессии в JSON |
 | `/api/sessions/import` | POST | Импорт сессии из JSON |
+| `/api/task/{agent}` | GET | Запустить subagent (`explore`, `scout`, `general`) |
+| `/api/skills` | GET | Список навыков |
 | `/api/upload` | POST | Drag-and-drop загрузка файлов |
 
 ## Рекомендуемые модели
@@ -113,7 +120,7 @@ Local AI coding agent powered by Ollama. Free, private, offline alternative to C
 
 ## Features
 
-- **18 tools**: read, write, edit, bash, glob, grep, list, web, websearch, diff, commit, undo, verify, plan, search (RAG), **question**, **skill**, **patch**
+- **21 tools**: read, write, edit, bash, glob, grep, list, web, websearch, diff, commit, undo, verify, plan, search (RAG), **question**, **skill**, **patch**, **task**, **todo**
 - **UI**: file tree explorer + session management, dark theme, **syntax highlighting**, diff view, drag-and-drop, confirm dialogs
 - **RAG**: semantic code search with **disk caching** — .py, .js, .ts, .go, .rs, .java, .yml, .toml, .env, .cfg, .ini
 - **Multi-agent**: PLANNER_MODEL (lightweight 1.5b) plans, main model executes
@@ -143,8 +150,10 @@ Local AI coding agent powered by Ollama. Free, private, offline alternative to C
 - ✅ **Skills system** — `.agent_skills/*.md` — reusable instructions for the agent
 - ✅ **Patch tool** — apply unified diffs to files
 - ✅ **Session sharing** — export/import sessions as JSON
-
-## Quick Start
+- ✅ **Subagents** — @explore (read-only), @scout (web), @general (full access) with different permissions
+- ✅ **Slash commands** — /test, /deploy, /review, /fix, /doc in chat
+- ✅ **Todo tracking** — in-session todo list (add/complete/list)
+- ✅ **DeepSeek-V4-Flash** — 1M context support via FLASH_PROVIDER/FLASH_API_KEY
 
 ```bash
 ollama pull deepseek-r1:7b
@@ -173,6 +182,9 @@ python agent.py
 | `AGENT_TIMEOUT` | `60` | Agent loop timeout (seconds) |
 | `AGENT_MEMORY_LIMIT` | `10` | Number of sessions to keep in memory |
 | `DEBUG` | `""` | `1` = enable debug logging |
+| `FLASH_PROVIDER` | `""` | DeepSeek-V4-Flash provider (`fireworks`, `together`, `groq`) |
+| `FLASH_API_KEY` | `""` | API key for flash provider |
+| `FLASH_MODEL` | `deepseek-v4-flash` | Flash model name |
 
 ## Architecture
 
