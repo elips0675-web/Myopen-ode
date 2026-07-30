@@ -87,6 +87,8 @@ body[data-theme="dark"]{--bg:#0f1117;--fg:#e2e8f0;--sidebar:#161b22;--sidebar-bo
 .sp{display:inline-block;width:var(--sp);height:var(--sp);border:2px solid var(--msg-a-border);border-top-color:var(--s);border-radius:50%;animation:s .5s infinite linear;vertical-align:middle}
 @keyframes s{to{transform:rotate(360deg)}}
 ::-webkit-scrollbar{width:5px}::-webkit-scrollbar-thumb{background:var(--sidebar-border);border-radius:3px}
+@media(max-width:768px){#sidebar{width:100%;position:fixed;z-index:50;height:auto;max-height:40%;border-right:none;border-bottom:1px solid var(--sidebar-border);display:none}#sidebar.open{display:flex}#main{padding-top:0}#menu-toggle{display:block!important;background:none;border:none;color:var(--st-c);cursor:pointer;font-size:18px;padding:4px 8px;margin-right:4px}#fileview{width:100%}}
+#menu-toggle{display:none}
 
 #fileview{position:fixed;top:0;right:0;width:50%;height:100%;background:var(--sidebar);border-left:1px solid var(--sidebar-border);transform:translateX(100%);transition:transform .2s;z-index:100;display:flex;flex-direction:column}
 #fileview.open{transform:translateX(0)}
@@ -129,6 +131,7 @@ body[data-theme="dark"]{--bg:#0f1117;--fg:#e2e8f0;--sidebar:#161b22;--sidebar-bo
 </div>
 <div id="main">
   <div id="topbar">
+    <button id="menu-toggle" onclick="toggleSidebar()">☰</button>
     <select id="chm" style="width:160px"></select>
     <button onclick="pullModel()" title="Pull model" style="background:var(--btn);color:#fff;border:none;border-radius:4px;padding:2px 8px;cursor:pointer;font-size:11px">+Pull</button>
     <button onclick="delModel()" title="Delete model" style="background:var(--cnl-btn);color:#fff;border:none;border-radius:4px;padding:2px 8px;cursor:pointer;font-size:11px">-Del</button>
@@ -324,6 +327,7 @@ function loadSkills(){
   }).catch(function(){})
 }
 function loadSkill(name){$('ta').value='@skill '+name;ah()}
+function toggleSidebar(){document.getElementById('sidebar').classList.toggle('open')}
 function useAgent(type){var ta=$('ta');ta.value='@'+type+' ';ta.focus();ah()}
 
 // Project management

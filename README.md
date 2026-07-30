@@ -6,7 +6,7 @@
 
 ## Возможности
 
-- **21 инструмент**: read, write, edit, bash, glob, grep, list, web, websearch, diff, commit, undo, verify, plan, search (RAG), **question**, **skill**, **patch**, **task**, **todo**
+- **22 инструмента**: read, write, edit, bash, glob, grep, list, web, websearch, diff, commit, undo, verify, plan, search (RAG), **question**, **skill**, **patch**, **task**, **todo**, **lsp**
 - **UI**: файловое дерево + сессии, тёмная тема, подсветка синтаксиса, diff, drag-and-drop, confirm-диалоги
 - **RAG**: семантический поиск по codebase с **дисковым кешированием** — .py, .js, .ts, .go, .rs, .java, .yml, .toml, .env, .cfg, .ini
 - **Multi-agent**: PLANNER_MODEL (лёгкая 1.5b) планирует, основная модель исполняет
@@ -38,6 +38,7 @@
 - ✅ **Session sharing** — экспорт/импорт сессий через JSON
 - ✅ **Subagents** — @explore (read-only), @scout (web), @general (full access) с разными правами
 - ✅ **Multi-project** — переключение между проектами из UI, отдельные сессии/файлы/RAG на проект
+- ✅ **LSP интеграция** — goToDefinition, findReferences, hover, documentSymbols через pylsp/typescript-language-server
 - ✅ **Slash-команды** — /test, /deploy, /review, /fix, /doc в чате
 - ✅ **Todo tracking** — todo-лист внутри сессии (add/complete/list)
 - ✅ **DeepSeek-V4-Flash** — поддержка 1M контекста через FLASH_PROVIDER/FLASH_API_KEY
@@ -105,6 +106,14 @@ ui.py      — HTML UI (встроенный, без зависимостей)
 | `/api/projects/{idx}` | DELETE | Удалить проект |
 | `/api/upload` | POST | Drag-and-drop загрузка файлов |
 
+## LSP серверы (установка)
+
+```bash
+pip install python-lsp-server    # Python
+npm i -g typescript-language-server  # JS/TS
+go install golang.org/x/tools/gopls@latest  # Go
+```
+
 ## Рекомендуемые модели
 
 | Модель | VRAM | Для чего |
@@ -124,7 +133,7 @@ Local AI coding agent powered by Ollama. Free, private, offline alternative to C
 
 ## Features
 
-- **21 tools**: read, write, edit, bash, glob, grep, list, web, websearch, diff, commit, undo, verify, plan, search (RAG), **question**, **skill**, **patch**, **task**, **todo**
+- **22 tools**: read, write, edit, bash, glob, grep, list, web, websearch, diff, commit, undo, verify, plan, search (RAG), **question**, **skill**, **patch**, **task**, **todo**, **lsp**
 - **UI**: file tree explorer + session management, dark theme, **syntax highlighting**, diff view, drag-and-drop, confirm dialogs
 - **RAG**: semantic code search with **disk caching** — .py, .js, .ts, .go, .rs, .java, .yml, .toml, .env, .cfg, .ini
 - **Multi-agent**: PLANNER_MODEL (lightweight 1.5b) plans, main model executes
@@ -156,6 +165,7 @@ Local AI coding agent powered by Ollama. Free, private, offline alternative to C
 - ✅ **Session sharing** — export/import sessions as JSON
 - ✅ **Subagents** — @explore (read-only), @scout (web), @general (full access) with different permissions
 - ✅ **Multi-project** — switch between projects from UI, separate sessions/files/RAG per project
+- ✅ **LSP integration** — goToDefinition, findReferences, hover, documentSymbols via pylsp/typescript-language-server
 - ✅ **Slash commands** — /test, /deploy, /review, /fix, /doc in chat
 - ✅ **Todo tracking** — in-session todo list (add/complete/list)
 - ✅ **DeepSeek-V4-Flash** — 1M context support via FLASH_PROVIDER/FLASH_API_KEY

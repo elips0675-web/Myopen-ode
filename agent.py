@@ -165,7 +165,7 @@ def run_agent_loop(msgs, session_id):
     full = ""
     tool_pat = re.compile('```(?:tool|json)\n(.*?)\n```', re.DOTALL)
     bare_tool_pat = re.compile(r'\{\s*"tool"\s*:\s*"[^"]+"\s*.*?\}', re.DOTALL)
-    VALID_TOOLS = ("read","write","edit","bash","glob","grep","list","web","diff","commit","undo","verify","plan","search","websearch","question","skill","patch","task","todo")
+    VALID_TOOLS = ("read","write","edit","bash","glob","grep","list","web","diff","commit","undo","verify","plan","search","websearch","question","skill","patch","task","todo","lsp")
     max_iter = int(os.environ.get("AGENT_MAX_ITER", "12"))
     max_time = float(os.environ.get("AGENT_TIMEOUT", "60.0"))
     start_time = time.time()

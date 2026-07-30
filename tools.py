@@ -132,6 +132,7 @@ TOOL_SCHEMAS = {
     "patch": {"required": ["path", "diff"]},
     "task": {"required": ["agent", "prompt"]},
     "todo": {"required": ["action"]},
+    "lsp": {"required": ["operation", "path"]},
 }
 
 def validate_tool(tc):
@@ -233,6 +234,18 @@ TOOLS (required fields in bold):
 ```tool
 {"tool": "todo", "action": "list"}
 ```
+```tool
+{"tool": "lsp", "operation": "definition", "path": "main.py", "line": 10, "character": 5}
+```
+```tool
+{"tool": "lsp", "operation": "references", "path": "main.py", "line": 10, "character": 5}
+```
+```tool
+{"tool": "lsp", "operation": "hover", "path": "main.py", "line": 10, "character": 5}
+```
+```tool
+{"tool": "lsp", "operation": "symbols", "path": "main.py"}
+```
 
 Paths: forward slashes. C:/Users/... or relative to workspace.
 Search: semantic code search via RAG.
@@ -242,7 +255,8 @@ Skill: load SKILL.md instructions from .agent_skills/ directory.
 Patch: apply unified diff to a file.
 Multi-agent: planning uses a smaller model; execution uses the main model.
 Task: delegate to subagent. Agents: explore (read-only research), scout (web/external research), general (complex multi-step).
-Todo: manage task list within session — add, complete, list items."""
+Todo: manage task list within session — add, complete, list items.
+LSP: code intelligence — definition, references, hover, symbols per file."""
 
 # ─── in-memory todo store ─────────────────────────────────
 TODO_LIST = []
@@ -608,6 +622,24 @@ def execute_tool(name, args):
                     lines.append(f"  {i+1}. {mark} {t['text']}")
                 return "[TODO]\n" + "\n".join(lines)
             return f"[TODO] Unknown action: {action}"
+        elif name == "lsp":
+            from .lsp import LSPClient
+            op = args.get("operation", "")
+            path = args.get("path", "")
+            line = int(args.get("line", 0))
+            char = int(args.get("character", 0))
+            if not hasattr(execute_tool, '_lsp_client'):
+                execute_tool._lsp_client = LSPClient(WORK_DIR)
+            client = execute_tool._lsp_client
+            if op == "definition":
+                return client.goto_definition(path, line, char)
+            elif op == "references":
+                return client.find_references(path, line, char)
+            elif op == "hover":
+                return client.hover(path, line, char)
+            elif op == "symbols":
+                return client.document_symbols(path)
+            return f"Unknown LSP operation: {op}"
         else:
             return f"Unknown tool: {name}"
     except Exception as e:
