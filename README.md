@@ -2,11 +2,11 @@
 
 Локальный AI-агент-программист на Ollama. Замена Cursor/Windsurf/Claude Code — бесплатно, приватно, офлайн.
 
-**Оценки:** Kimi 8.2/10 · DeepSeek 8.5/10 · Рекомендации из оценок реализованы (см. ниже)
+**Оценки:** Kimi 8.2/10 · DeepSeek 8.5/10 · Рекомендации из оценок реализованы
 
 ## Возможности
 
-- **15 инструментов**: read, write, edit, bash, glob, grep, list, web, websearch, diff, commit, undo, verify, plan, search (RAG)
+- **18 инструментов**: read, write, edit, bash, glob, grep, list, web, websearch, diff, commit, undo, verify, plan, search (RAG), **question**, **skill**, **patch**
 - **UI**: файловое дерево + сессии, тёмная тема, подсветка синтаксиса, diff, drag-and-drop, confirm-диалоги
 - **RAG**: семантический поиск по codebase с **дисковым кешированием** — .py, .js, .ts, .go, .rs, .java, .yml, .toml, .env, .cfg, .ini
 - **Multi-agent**: PLANNER_MODEL (лёгкая 1.5b) планирует, основная модель исполняет
@@ -32,6 +32,10 @@
 
 ### UI (добавлено по ревью)
 - ✅ **Подсветка синтаксиса** в просмотре файлов (Python, JS, TS, Go, Rust, Java, JSON, YAML, TOML, INI и др.)
+- ✅ **Question tool** — агент задаёт вопросы с вариантами ответа, пользователь выбирает кнопкой
+- ✅ **Skills система** — `.agent_skills/*.md` — переиспользуемые инструкции для агента
+- ✅ **Patch tool** — применение unified diff к файлам
+- ✅ **Session sharing** — экспорт/импорт сессий через JSON
 
 ## Быстрый старт
 
@@ -85,6 +89,9 @@ ui.py      — HTML UI (встроенный, без зависимостей)
 | `/api/sessions` | GET/POST | Список / создание сессий |
 | `/api/sessions/{id}` | GET/DELETE | Загрузка / удаление сессии |
 | `/api/project` | GET | Информация о проекте |
+| `/api/skills` | GET | Список доступных навыков |
+| `/api/sessions/{id}/export` | GET | Экспорт сессии в JSON |
+| `/api/sessions/import` | POST | Импорт сессии из JSON |
 | `/api/upload` | POST | Drag-and-drop загрузка файлов |
 
 ## Рекомендуемые модели
@@ -106,7 +113,7 @@ Local AI coding agent powered by Ollama. Free, private, offline alternative to C
 
 ## Features
 
-- **15 tools**: read, write, edit, bash, glob, grep, list, web, websearch, diff, commit, undo, verify, plan, search (RAG)
+- **18 tools**: read, write, edit, bash, glob, grep, list, web, websearch, diff, commit, undo, verify, plan, search (RAG), **question**, **skill**, **patch**
 - **UI**: file tree explorer + session management, dark theme, **syntax highlighting**, diff view, drag-and-drop, confirm dialogs
 - **RAG**: semantic code search with **disk caching** — .py, .js, .ts, .go, .rs, .java, .yml, .toml, .env, .cfg, .ini
 - **Multi-agent**: PLANNER_MODEL (lightweight 1.5b) plans, main model executes
@@ -132,6 +139,10 @@ Local AI coding agent powered by Ollama. Free, private, offline alternative to C
 
 ### UI
 - ✅ **Syntax highlighting** in file viewer (Python, JS, TS, Go, Rust, Java, JSON, YAML, TOML, INI, etc.)
+- ✅ **Question tool** — agent asks questions with answer buttons
+- ✅ **Skills system** — `.agent_skills/*.md` — reusable instructions for the agent
+- ✅ **Patch tool** — apply unified diffs to files
+- ✅ **Session sharing** — export/import sessions as JSON
 
 ## Quick Start
 

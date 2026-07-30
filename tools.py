@@ -121,6 +121,9 @@ TOOL_SCHEMAS = {
     "plan":   {"required": ["steps"]},
     "search": {"required": ["query"]},
     "websearch": {"required": ["query"]},
+    "question": {"required": ["text", "options"]},
+    "skill": {"required": ["name"]},
+    "patch": {"required": ["path", "diff"]},
 }
 
 def validate_tool(tc):
@@ -136,6 +139,12 @@ def validate_tool(tc):
             tc["steps"] = [s.strip() for s in re.split(r'[.,;\n]+', tc["steps"]) if s.strip()]
         elif not isinstance(tc["steps"], list):
             return "plan.steps must be an array of strings"
+    if tc.get("tool") == "question" and "options" in tc:
+        if isinstance(tc["options"], str):
+            tc["options"] = [o.strip() for o in tc["options"].split(",") if o.strip()]
+    if tc.get("tool") == "patch" and "diff" in tc:
+        err = _validate_patch(tc["diff"])
+        if err: return err
     return ""
 
 # ─── system prompt ────────────────────────────────────────
@@ -195,10 +204,22 @@ TOOLS (required fields in bold):
 ```tool
 {"tool": "websearch", "query": "python async await example", "max_results": 5}
 ```
+```tool
+{"tool": "question", "text": "Which approach?", "options": ["Option A", "Option B"]}
+```
+```tool
+{"tool": "skill", "name": "testing"}
+```
+```tool
+{"tool": "patch", "path": "file.py", "diff": "--- a/file.py\n+++ b/file.py\n@@ -1 +1 @@\n-old\n+new"}
+```
 
 Paths: forward slashes. C:/Users/... or relative to workspace.
 Search: semantic code search via RAG.
 WebSearch: internet search via DuckDuckGo.
+Question: ask user with multiple choice options.
+Skill: load SKILL.md instructions from .agent_skills/ directory.
+Patch: apply unified diff to a file.
 Multi-agent: planning uses a smaller model; execution uses the main model."""
 
 # ─── call Ollama with fallback ────────────────────────────
@@ -287,6 +308,50 @@ def check_bash(cmd):
     for dangerous in BASH_BLACKLIST:
         if dangerous in cmd_lower:
             return f"Blocked: command matching blacklist pattern '{dangerous}' is not allowed"
+    return None
+
+# ─── unified diff parser ──────────────────────────────────
+def _apply_diff(content, diff_text):
+    """Apply a unified diff to content and return the result."""
+    import difflib
+    lines = content.splitlines(keepends=True)
+    old_lines = []
+    new_lines = []
+    in_hunk = False
+    for line in diff_text.split("\n"):
+        if line.startswith("--- "): continue
+        if line.startswith("+++ "): continue
+        if line.startswith("@@"):
+            if in_hunk and new_lines:
+                content = "".join(new_lines)
+                lines = content.splitlines(keepends=True)
+                new_lines = []
+            in_hunk = True
+            parts = line.split(" ")
+            if len(parts) >= 2:
+                try:
+                    old_start = int(parts[1].split(",")[0].lstrip("-"))
+                except: old_start = 1
+            continue
+        if in_hunk:
+            if line.startswith("+") and not line.startswith("+++"):
+                new_lines.append(line[1:] + "\n")
+            elif line.startswith("-") and not line.startswith("---"):
+                pass  # skip removed lines
+            elif line.startswith(" "):
+                new_lines.append(line[1:] + "\n")
+            else:
+                new_lines.append(line + "\n")
+    if in_hunk and new_lines:
+        content = "".join(new_lines)
+    return content
+
+def _validate_patch(diff_text):
+    """Validate unified diff format."""
+    if not any(line.startswith("@@") for line in diff_text.split("\n")):
+        return "Invalid diff: no hunk headers (@@)"
+    if "--- " not in diff_text or "+++ " not in diff_text:
+        return "Invalid diff: missing file headers"
     return None
 
 # ─── execute tool ─────────────────────────────────────────
@@ -417,6 +482,41 @@ def execute_tool(name, args):
                 return "\n\n".join(results) if results else "No results found"
             except Exception as e:
                 return f"Web search error: {e}"
+        elif name == "question":
+            text = args.get("text", "")
+            opts = args.get("options", [])
+            opts_str = " / ".join([f"{i+1}. {o}" for i, o in enumerate(opts)])
+            return f"[QUESTION] {text}\n{opts_str}"
+        elif name == "skill":
+            skill_name = args.get("name", "")
+            skills_dir = WORK_DIR / ".agent_skills"
+            if not skills_dir.exists():
+                return f"[SKILL] No .agent_skills directory found"
+            skill_file = skills_dir / f"{skill_name}.md"
+            if not skill_file.exists():
+                available = [f.stem for f in skills_dir.glob("*.md")]
+                return f"[SKILL] '{skill_name}' not found. Available: {', '.join(available) or 'none'}"
+            content = skill_file.read_text("utf-8", errors="ignore")
+            return f"[SKILL: {skill_name}]\n{content[:2000]}"
+        elif name == "patch":
+            path = args.get("path", "")
+            err = ensure_safe_path(path)
+            if err: return err
+            pp = resolve(path)
+            if not pp.exists(): return f"Error: {path} not found"
+            diff_text = args.get("diff", "")
+            if not diff_text:
+                return "Error: diff field is required"
+            content = pp.read_text("utf-8")
+            result = _apply_diff(content, diff_text)
+            if result.startswith("Error"):
+                return result
+            backup(str(pp))
+            pp.write_text(result, "utf-8")
+            v = verify_file(str(pp))
+            msg = f"Patch applied to {path} ({len(pp.read_text('utf-8'))}b)"
+            if v: msg += f"\nVerify: {v[:500]}"
+            return msg
         else:
             return f"Unknown tool: {name}"
     except Exception as e:

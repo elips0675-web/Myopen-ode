@@ -1,26 +1,186 @@
-Оценка проекта: 8.0 / 10
-Вижу, что в TODO.md уже есть оценки от Kimi (8.2) и DeepSeek (8.5). Моя оценка немного консервативнее — ниже объясню почему.
-По критериям
+1. Все функции OpenCode Desktop (полный разбор)
+OpenCode — это open-source (MIT) AI-агент для кодинга от Anomaly. Работает как TUI (терминал), Desktop-приложение и IDE-расширение. Вот полный список возможностей:
+🧠 Агенты (Agents)
 Таблица
-Критерий	Балл	Комментарий
-Архитектура и код	8/10	Отличная модульность (agent.py + tools.py + rag.py + ui.py). Prompt-based tool calling — рабочее и понятное решение для 7B-моделей. Но run_agent_loop монолитен (~120 строк), подсчёт токенов приблизительный (len/4), а контекст суммаризуется только в начале — между 12 итерациями он может разрастись.
-Функциональность	9/10	15 инструментов, RAG, сессии, мультиагентность (planner + executor), web search, fallback API, drag-and-drop, управление моделями. Для solo-проекта — фантастика.
-Безопасность	7/10	Confirm-диалоги, бэкапы (50 версий), verify — хорошо. Но нет sandbox для bash, нет валидации путей на directory traversal (хотя Path используется), нет rate limiting, нет аутентификации. Любой с локальной сети может писать файлы.
-UX/UI	7/10	Zero-dependency HTML — мудрое решение для «запустил и работает». Но inline-UI без npm ограничивает интерактивность (нет Monaco/CM для редактора, diff — только текстовый).
-Потенциал	9/10	Это рабочая замена Cursor/Claude Code для локального использования. С добавлением MCP-протокола или нативного tool calling (когда Ollama поддержит) проект вырастет сильно.
-Что впечатляет
-Prompt-based tool calling — вы решили проблему отсутствия native tool_calls в Ollama для 7B-моделей. Это не костыль, а архитектурное решение, и оно работает.
-RAG на nomic-embed-text — семантический поиск по codebase в локальном агенте — редкость даже в коммерческих продуктах.
-Multi-agent — разделение планирования (1.5B) и исполнения (7B) экономит VRAM и ускоряет простые задачи.
-Self-healing — verify после write/edit, auto-commit, undo. Агент действительно заботится о целостности кода.
-Memory между сессиями — .agent_memory/ с суммаризацией через лёгкую модель. Это уже близко к «персональному ассистенту», а не просто чату.
-Что можно улучшить (приоритетно)
-Суммаризация внутри loop — сейчас summarize_context вызывается один раз перед циклом. Если агент делает 10 итераций, история разрастается. Нужно суммаризировать каждые 3-4 итерации.
-Точный подсчёт токенов — len(content) / 4 — очень грубо. Можно использовать tiktoken (для fallback) или эвристику по модели, или хотя бы считать токены ответа Ollama (в /api/generate есть eval_count в ответе, если не stream).
-Sandbox для bash — сейчас bash выполняет всё от имени пользователя. Для деструктивных команд (rm -rf, curl | sh) стоит добавить чёрный список или dry-run режим.
-Валидация путей — write/edit с ../../etc/passwd теоретически может выйти за WORK_DIR. Нужна проверка Path.resolve().is_relative_to(WORK_DIR).
-Graceful degradation — если Ollama упал во время loop, агент просто сломается. Нужен retry с exponential backoff для call_ollama.
+Агент	Тип	Описание
+Build	Primary	Полный доступ ко всем инструментам. Основной агент для разработки
+Plan	Primary	Read-only агент для анализа и планирования. Правки и bash требуют подтверждения
+General	Subagent	Универсальный агент для сложных многошаговых задач
+Explore	Subagent	Быстрый read-only агент для навигации по кодовой базе
+Scout	Subagent	Исследование внешних зависимостей и документации (клонит репы в кэш)
+Compaction	System	Автоматическое сжатие длинного контекста
+Title	System	Автогенерация названий сессий
+Summary	System	Автосуммаризация сессий
+Ключевая фича: агенты переключаются клавишей Tab, вызываются через @имя, имеют собственные system prompt, модель, temperature и права доступа.
+🛠️ Встроенные инструменты (14+)
+Таблица
+Инструмент	Описание
+read	Чтение файлов с поддержкой диапазонов строк
+write	Создание/перезапись файлов
+edit	Точечная замена текста (search-replace)
+glob	Поиск файлов по паттернам (**/*.ts)
+grep	Поиск по содержимому через ripgrep с regex
+bash	Выполнение shell-команд
+lsp	Интеграция с Language Server Protocol (goToDefinition, findReferences, hover, documentSymbol, workspaceSymbol, callHierarchy)
+apply_patch	Применение diff-патчей
+skill	Динамическая загрузка SKILL.md файлов
+todowrite	Управление todo-списками внутри сессии
+webfetch	Загрузка веб-страниц
+websearch	Поиск в интернете через Exa AI (без API ключа)
+question	Задавание вопросов пользователю с вариантами ответа
+task	Вызов subagent-ов
+🔧 Расширяемость
+MCP (Model Context Protocol) — подключение внешних серверов (БД, API, SaaS)
+Custom Tools — собственные функции в конфиге
+Skills — переиспользуемые инструкции в SKILL.md (автозагрузка по контексту)
+Plugins — полноценная экосистема расширений
+⚙️ Управление и конфигурация
+Permissions — гранулярный контроль: allow / ask / deny для каждого инструмента, с wildcard-паттернами
+Per-agent config — отдельные модели, temperature, maxSteps, права для каждого агента
+Commands — кастомные slash-команды (/test, /deploy) с аргументами, shell-инъекциями (!command``) и file-референсами (@file)
+Multi-session — параллельные сессии на одном проекте
+Share links — шаринг сессий через ссылки
+Sessions — SQLite-хранилище, экспорт/импорт, навигация между parent/child сессиями
+🌐 Модели и провайдеры
+75+ провайдеров через Models.dev (OpenAI, Anthropic, Google, Groq, Bedrock и др.)
+Локальные модели через Ollama, LM Studio, llama.cpp
+BYO-key — свои ключи, нет vendor lock-in
+Модель на агента — разные модели для разных задач
+Fallback models — резервные модели при сбоях
+🎯 LSP и код-интеллект
+Автозагрузка LSP-серверов для проекта
+goToDefinition, findReferences, hover, documentSymbol, workspaceSymbol, goToImplementation, callHierarchy
+Рефакторинги, rename symbol (379 обновлений за 22 секунды в тестах)
+🔒 Безопасность и приватность
+Privacy-first: не хранит код и контекст
+Локальные модели = полная офлайн-работа
+Гранулярные разрешения на уровне команд (git push = ask, git status = allow)
+2. DeepSeek V4 Flash Free — что это
+DeepSeek-V4-Flash — облегчённая версия DeepSeek-V4 (284B параметров, 13B активных на токен), доступная бесплатно через ряд провайдеров:
+Таблица
+Характеристика	Значение
+Параметры	284B total / 13B active (MoE)
+Контекст	1,040,000 токенов (1M)
+Function Calling	✅ Поддерживается
+Стоимость	$0 (через бесплатные тиры провайдеров)
+Скорость	Оптимизирована для низкой латентности
+Режимы	Non-think / Think High / Think Max
+Где взять бесплатно:
+Fireworks AI (serverless, $0.14/$0.028/$0.28 за 1M токенов, но есть free tier)
+Некоторые провайдеры предлагают бесплатный доступ для тестирования
+Можно запустить локально через Ollama (если хватит VRAM)
+Ключевое преимущество: 1M контекст + function calling + бесплатный доступ делают его идеальным для агентов, которым нужно «проглотить» всю кодовую базу целиком без RAG.
+3. Промпт для полного аналога на Ollama
+Ваш текущий agent.py уже очень близок к OpenCode. Вот системный промпт + архитектурные доработки, которые превратят ваш проект в полноценный аналог:
+Системный промпт (SYSTEM_PROMPT для Ollama)
+Markdown
+Копировать
+Код
+Предварительный просмотр
+You are an AI coding agent — an autonomous software engineering assistant.
+You help users write, edit, debug, and understand code through natural language.
+
+## Core Principles
+- Think step by step before acting
+- Always verify your understanding by reading files before editing
+- Prefer precise edits (search-replace) over full file rewrites
+- Ask clarifying questions when requirements are ambiguous
+- Track progress with todo lists for multi-step tasks
+
+## Available Tools
+You have access to the following tools. Output them as JSON blocks inside ```tool or ```json fences.
+
+### File Operations
+- read: {"tool":"read","path":"path/to/file"} — Read file contents. Optional: "start_line", "end_line"
+- write: {"tool":"write","path":"path/to/file","content":"full content"} — Create or overwrite file
+- edit: {"tool":"edit","path":"path/to/file","old":"exact text to find","new":"replacement text"} — Precise edit
+- glob: {"tool":"glob","pattern":"**/*.py"} — Find files by pattern
+- grep: {"tool":"grep","pattern":"regex","path":"optional/dir"} — Search file contents
+
+### Execution
+- bash: {"tool":"bash","command":"shell command","cwd":"optional/path"} — Run shell commands
+- verify: {"tool":"verify","path":"path/to/file"} — Check syntax (py_compile, tsc, json.tool)
+
+### Web & Research
+- webfetch: {"tool":"webfetch","url":"https://..."} — Fetch web page content
+- websearch: {"tool":"websearch","query":"search terms"} — Search the web
+
+### Code Intelligence
+- lsp: {"tool":"lsp","operation":"goToDefinition|findReferences|hover|documentSymbol","file":"path","line":N,"character":N} — LSP operations
+
+### Project Management
+- todo: {"tool":"todo","action":"create|add|complete|list","items":["task1","task2"]} — Task tracking
+- plan: {"tool":"plan","steps":["step 1","step 2"]} — Propose multi-step plan
+- question: {"tool":"question","text":"What to ask?","options":["A","B","C"]} — Ask user
+
+### Git & Safety
+- diff: {"tool":"diff"} — Show git diff
+- commit: {"tool":"commit","message":"commit msg"} — Git add -A + commit
+- undo: {"tool":"undo","path":"path/to/file"} — Restore from backup
+
+### Agents & Skills
+- task: {"tool":"task","agent":"explore|scout|general","prompt":"task description"} — Delegate to subagent
+- skill: {"tool":"skill","name":"skill-name"} — Load SKILL.md instructions
+
+## Agent Modes
+You can operate in different modes:
+- BUILD: Full tool access (default). Use for implementation.
+- PLAN: Read-only. Use for analysis and planning. All edits/bash require user confirmation.
+- EXPLORE: Fast read-only codebase navigation. Use @explore to invoke.
+- SCOUT: External dependency research. Clones repos to cache. Use @scout to invoke.
+
+## Rules
+1. ALWAYS read files before editing them
+2. ALWAYS verify syntax after write/edit
+3. ALWAYS create backups before destructive operations
+4. For destructive tools (write, edit, bash, commit, undo), wait for user confirmation unless NO_CONFIRM=1
+5. When proposing a plan, wait for "yes" before executing
+6. Use todo lists for tasks with 3+ steps
+7. Prefer edit over write for existing files
+8. Include file paths in all code block responses for clarity
+9. If a tool returns an error, analyze and retry or ask user
+10. Maximum 12 iterations per request
+
+## Response Format
+- Text: Explain your reasoning in natural language
+- Tools: ```tool {"tool":"name",...} ```
+- You can call multiple tools in parallel when independent
+- After receiving tool results, analyze and decide next step
+- When done, respond with plain text without tool blocks
+Что нужно добавить в ваш agent.py для полного аналога OpenCode
+Таблица
+Фича OpenCode	Что добавить в ваш проект
+LSP	Интеграция с python-lsp-server / typescript-language-server через JSON-RPC
+Subagents	Системные промпты для Explore/Scout/General с ограниченными правами
+Skills (SKILL.md)	Директория .agent_skills/, динамическая загрузка по skill тулу
+WebSearch	У вас уже есть через DuckDuckGo — отлично
+Todo tracking	Расширить todowrite до полноценного todo-менеджера
+Question tool	UI-компонент для вопросов с вариантами ответа
+Apply patch	Парсер unified diff формата
+Per-agent models	Возможность назначать разные модели (7B для кода, 1.5B для планирования)
+Commands	Slash-команды в UI (/test, /deploy) с шаблонами
+Session sharing	Генерация share-ссылок с экспортом сессии
+1M context	Перейти на DeepSeek-V4-Flash через Ollama или API — тогда RAG не нужен, можно скармливать всю кодовую базу целиком
+Рекомендуемая модельная конфигурация на Ollama
+bash
+# Основная модель (аналог Build-агента)
+ollama pull deepseek-r1:7b        # или qwen2.5-coder:7b
+
+# Планировщик (аналог Plan-агента)  
+ollama pull deepseek-r1:1.5b      # или qwen2.5-coder:1.5b
+
+# Для 1M контекста — если VRAM позволяет (RTX 3060 12GB не потянет 284B)
+# Используйте через API бесплатных тиров:
+# - Fireworks AI DeepSeek-V4-Flash
+# - Или другие провайдеры с free tier
+
+# Embeddings для RAG (если не используете 1M контекст)
+ollama pull nomic-embed-text
 Итог
-Это рабочий, production-ready pet-project с архитектурой уровня стартапа. Он решает реальную проблему (хочу Cursor, но без облака и подписок) и делает это элегантно.
-Рекомендация: добавьте нативный tool calling, как только Ollama выпустит стабильную поддержку для small models, — и это станет серьёзным open-source конкурентом Cody/Windsurf в нише local-first development.
-Итоговая оценка: 8.0 / 10 — «отличный инженеринг с потенциалом стать экосистемой».
+Ваш agent.py — это уже ~70% OpenCode. Чтобы догнать оставшиеся 30%:
+Добавьте LSP-интеграцию — это главное отличие OpenCode от простых агентов
+Реализуйте subagents с разными system prompt и правами
+Сделайте Skills систему — это killer feature для повторяемых workflow
+Перейдите на DeepSeek-V4-Flash (через API) для 1M контекста — тогда можно отказаться от RAG и скармливать модели целые репозитории
+Добавьте slash-команды — /test, /deploy, /refactor как шаблоны промптов
+Ваш проект уже оценён в 8.2/10 — с этими доработками он станет полноценным open-source аналогом OpenCode Desktop, но полностью на Python + Ollama без Node.js-зависимостей.

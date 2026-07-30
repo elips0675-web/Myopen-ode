@@ -106,8 +106,14 @@ body[data-theme="dark"]{--bg:#0f1117;--fg:#e2e8f0;--sidebar:#161b22;--sidebar-bo
   <div class="logo"><svg viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>OpenCode <span>v2</span></div>
   <div class="section">Sessions <span class="count" id="sess-count">0</span></div>
   <div id="new-sess-btn" onclick="newSession()"><svg viewBox="0 0 24 24"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>New Session</div>
+  <div style="display:flex;gap:4px;margin:4px 12px">
+    <button onclick="exportSession()" style="flex:1;padding:4px 8px;background:var(--code-bg);border:1px solid var(--sidebar-border);border-radius:4px;cursor:pointer;font-size:10px;color:var(--st-c);font-family:inherit">Export</button>
+    <button onclick="importSession()" style="flex:1;padding:4px 8px;background:var(--code-bg);border:1px solid var(--sidebar-border);border-radius:4px;cursor:pointer;font-size:10px;color:var(--st-c);font-family:inherit">Import</button>
+  </div>
   <input id="sess-search" placeholder="Search sessions..." oninput="filterSessions(this.value)">
   <div id="sess-list"></div>
+  <div class="section">Skills</div>
+  <div id="skills-list" style="padding:4px 12px;font-size:11px;color:var(--st-c);max-height:100px;overflow-y:auto"></div>
   <div class="section">Files</div>
   <div id="tree-wrap"><div id="tree"></div></div>
 </div>
@@ -154,6 +160,16 @@ function fm(t){
   h=h.replace(/\[CONFIRM\]/g,'<b>[CONFIRM]</b>');
   h=h.replace(/\[PLAN\]/g,'<b>[PLAN]</b>');
   h=h.replace(/\[tool:(\w+)\]/g,'<b>[tool:$1]</b>');
+  h=h.replace(/\[QUESTION\]\s*(.*?)(?:\n(\d+\.\s*.*(?:\n\d+\.\s*.*)*))?/g,function(_,q,o){
+    var html='<div class="confirm-box"><div class="c-title">Question</div><div class="c-args">'+esc(q)+'</div>';
+    if(o){
+      o.split('\n').forEach(function(opt,i){
+        var val=opt.replace(/^\d+\.\s*/,'').trim();
+        if(val) html+='<button class="c-yes" onclick="answerQuestion(\''+esc(val)+'\')" style="margin:3px">'+esc(val)+'</button>';
+      });
+    }
+    return html+'</div>';
+  });
   return h.replace(/\n/g,'<br>');
 }
 function ah(){var e=$('ta');e.style.height='auto';e.style.height=Math.min(e.scrollHeight,120)+'px'}
@@ -270,6 +286,33 @@ function openFile(path){
 // Init
 function toggleTheme(){var d=document.body.getAttribute("data-theme")==="dark";document.body.setAttribute("data-theme",d?"":"dark");$("theme-btn").textContent=d?"&#127769;":"&#9728;&#65039;";localStorage.setItem("theme",d?"":"dark")}
 if(localStorage.getItem("theme")==="dark"){document.body.setAttribute("data-theme","dark");$("theme-btn").textContent="&#9728;&#65039;"}
+function exportSession(){
+  if(!curSid){alert('No active session');return}
+  fetch(A+'/api/sessions/'+curSid+'/export').then(function(r){return r.json()}).then(function(d){
+    var blob=new Blob([JSON.stringify(d,null,2)],{type:'application/json'});
+    var a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=curSid+'.json';a.click()
+  })
+}
+function importSession(){
+  var inp=document.createElement('input');inp.type='file';inp.accept='.json';
+  inp.onchange=function(e){
+    var file=e.target.files[0];if(!file)return;
+    var reader=new FileReader();
+    reader.onload=function(ev){
+      fetch(A+'/api/sessions/import',{method:'POST',headers:{'Content-Type':'application/json'},body:ev.target.result})
+      .then(function(r){return r.json()}).then(function(s){alert('Imported: '+s.title);loadSessions()})
+    };reader.readAsText(file)
+  };inp.click()
+}
+function loadSkills(){
+  fetch(A+'/api/skills').then(function(r){return r.json()}).then(function(sk){
+    var el=$('skills-list');
+    if(!sk.length){el.innerHTML='<span style="color:var(--st-c);font-size:10px">No skills. Create .agent_skills/*.md</span>';return}
+    el.innerHTML=sk.map(function(s){return '<span style="cursor:pointer;margin-right:6px;padding:1px 5px;background:var(--code-bg);border-radius:3px" onclick="loadSkill(\''+s.name+'\')">'+esc(s.name)+'</span>'}).join('')
+  }).catch(function(){})
+}
+function loadSkill(name){$('ta').value='@skill '+name;ah()}
+
 function init(){
   fetch(A+'/api/models').then(function(r){return r.json()}).then(function(mm){
     $('chm').innerHTML=mm.map(function(m){return '<option>'+m+'</option>'}).join('');
@@ -277,7 +320,7 @@ function init(){
     if(ds){$('chm').value=ds;$('model-badge').textContent='DeepSeek'}
   }).catch(function(){});
   fetch(A+'/api/project').then(function(r){return r.json()}).then(function(p){$('prj').textContent=p.name}).catch(function(){});
-  loadFiles();loadSessions();cl();$('ta').focus();
+  loadFiles();loadSessions();loadSkills();cl();$('ta').focus();
 }
 function cl(){fetch(A+'/api/models').then(function(){$('old').className='g';$('ols').textContent='Ollama OK'}).catch(function(){$('old').className='r';$('ols').textContent='Ollama -';setTimeout(cl,3000)})}
 
@@ -307,6 +350,7 @@ function fmtMsg(t){
 }
 function confirmYes(){$('ta').value='yes';send();var boxes=document.querySelectorAll('.confirm-box');boxes[boxes.length-1].style.display='none'}
 function confirmNo(){var boxes=document.querySelectorAll('.confirm-box');boxes[boxes.length-1].style.display='none';am('u',fm('no'));ms.push({role:'user',content:'no'})}
+function answerQuestion(val){am('u',fm(val));ms.push({role:'user',content:val});send()}
 
 // Drag & drop
 var dz=$('dropzone'),ddCount=0;

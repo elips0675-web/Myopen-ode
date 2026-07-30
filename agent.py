@@ -126,7 +126,7 @@ def run_agent_loop(msgs, session_id):
     full = ""
     tool_pat = re.compile('```(?:tool|json)\n(.*?)\n```', re.DOTALL)
     bare_tool_pat = re.compile(r'\{\s*"tool"\s*:\s*"[^"]+"\s*.*?\}', re.DOTALL)
-    VALID_TOOLS = ("read","write","edit","bash","glob","grep","list","web","diff","commit","undo","verify","plan","search","websearch")
+    VALID_TOOLS = ("read","write","edit","bash","glob","grep","list","web","diff","commit","undo","verify","plan","search","websearch","question","skill","patch")
     max_iter = int(os.environ.get("AGENT_MAX_ITER", "12"))
     max_time = float(os.environ.get("AGENT_TIMEOUT", "60.0"))
     start_time = time.time()
@@ -299,6 +299,19 @@ def delete_model(name: str):
 @app.get("/api/project")
 def get_project(): return {"name": WORK_DIR.name, "path": str(WORK_DIR)}
 
+@app.get("/api/skills")
+def list_skills():
+    skills_dir = WORK_DIR / ".agent_skills"
+    if not skills_dir.exists():
+        skills_dir.mkdir(exist_ok=True)
+    skills = []
+    for f in sorted(skills_dir.glob("*.md")):
+        try:
+            content = f.read_text("utf-8", errors="ignore")[:500]
+            skills.append({"name": f.stem, "path": str(f.relative_to(WORK_DIR)), "preview": content[:200]})
+        except: pass
+    return skills
+
 @app.get("/api/files")
 def get_files(path: str = "."):
     return {"tree": build_tree(path), "current": path}
@@ -346,6 +359,25 @@ def delete_session(sid: str):
     f = SESSIONS_DIR / f"{sid}.json"
     if f.exists(): f.unlink()
     return {"ok": True}
+
+@app.get("/api/sessions/{sid}/export")
+def export_session(sid: str):
+    f = SESSIONS_DIR / f"{sid}.json"
+    if not f.exists(): return {"error": "Not found"}
+    return JSONResponse(content=json.loads(f.read_text()))
+
+@app.post("/api/sessions/import")
+def import_session(req: ChatReq):
+    data = json.loads(req.model_dump_json())
+    sid = datetime.now().strftime("%Y%m%d_%H%M%S")
+    title = data.get("title", f"Imported {sid}")
+    messages = data.get("messages", data.get("content", []))
+    if isinstance(messages, str):
+        try: messages = json.loads(messages)
+        except: messages = []
+    sf = SESSIONS_DIR / f"{sid}.json"
+    sf.write_text(json.dumps({"title": title, "messages": messages, "updated": datetime.now().isoformat()}, ensure_ascii=False), "utf-8")
+    return {"id": sid, "title": title}
 
 @app.post("/api/chat")
 async def chat(req: ChatReq):
