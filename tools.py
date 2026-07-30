@@ -1,6 +1,6 @@
 """Tool definitions and core agent logic — extracted from agent.py."""
 
-import json, os, subprocess, glob, re, shutil, hashlib, textwrap, urllib.parse, time, logging
+import json, os, subprocess, glob, re, shutil, hashlib, textwrap, urllib.parse, time, logging, importlib.util
 from pathlib import Path
 from datetime import datetime
 import requests
@@ -257,6 +257,38 @@ Multi-agent: planning uses a smaller model; execution uses the main model.
 Task: delegate to subagent. Agents: explore (read-only research), scout (web/external research), general (complex multi-step).
 Todo: manage task list within session — add, complete, list items.
 LSP: code intelligence — definition, references, hover, symbols per file."""
+
+# ─── plugins system ───────────────────────────────────────
+PLUGINS = {}
+PLUGIN_DIR = WORK_DIR / ".agent_plugins"
+
+def load_plugins():
+    global PLUGINS
+    PLUGINS = {}
+    if not PLUGIN_DIR.exists(): return
+    for f in sorted(PLUGIN_DIR.glob("*.py")):
+        try:
+            mod_name = f.stem
+            spec = importlib.util.spec_from_file_location(mod_name, f)
+            if spec and spec.loader:
+                mod = importlib.util.module_from_spec(spec)
+                spec.loader.exec_module(mod)
+                if hasattr(mod, "register"):
+                    tools, defs = mod.register()
+                    for name in tools:
+                        PLUGINS[name] = {"module": mod, "tools": tools, "defs": defs}
+                        if name in tools:
+                            TOOL_SCHEMAS[name] = defs.get("schema", {"required": []})
+                    log.info("Plugin loaded: %s (%d tools)", mod_name, len(tools))
+        except Exception as e:
+            log.warning("Plugin load failed %s: %s", f.name, e)
+
+def call_plugin(name, args):
+    plugin = PLUGINS.get(name)
+    if not plugin: return None
+    func = plugin["tools"].get(name)
+    if func: return func(args)
+    return None
 
 # ─── in-memory todo store ─────────────────────────────────
 TODO_LIST = []
@@ -641,6 +673,8 @@ def execute_tool(name, args):
                 return client.document_symbols(path)
             return f"Unknown LSP operation: {op}"
         else:
+            result = call_plugin(name, args)
+            if result is not None: return result
             return f"Unknown tool: {name}"
     except Exception as e:
         return f"Error: {e}"

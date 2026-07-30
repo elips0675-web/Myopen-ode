@@ -42,6 +42,8 @@
 - ✅ **MCP сервер** — Model Context Protocol для интеграции с VS Code, Cursor, Claude Desktop
 - ✅ **Tab completion** — автодополнение путей по Tab в чате
 - ✅ **Progress bar** — SSE прогресс при pull модели
+- ✅ **Desktop App** — нативное окно через pywebview (или браузер)
+- ✅ **Плагины** — `.agent_plugins/*.py`, динамическая загрузка новых инструментов
 - ✅ **Slash-команды** — /test, /deploy, /review, /fix, /doc в чате
 - ✅ **Todo tracking** — todo-лист внутри сессии (add/complete/list)
 - ✅ **DeepSeek-V4-Flash** — поддержка 1M контекста через FLASH_PROVIDER/FLASH_API_KEY
@@ -173,6 +175,8 @@ Local AI coding agent powered by Ollama. Free, private, offline alternative to C
 - ✅ **MCP server** — Model Context Protocol for VS Code, Cursor, Claude Desktop integration
 - ✅ **Tab completion** — path completion via Tab key in chat
 - ✅ **Progress bar** — SSE progress stream for model pull
+- ✅ **Desktop App** — native window via pywebview (or browser fallback)
+- ✅ **Plugins** — `.agent_plugins/*.py`, dynamic tool loading
 - ✅ **Slash commands** — /test, /deploy, /review, /fix, /doc in chat
 - ✅ **Todo tracking** — in-session todo list (add/complete/list)
 - ✅ **DeepSeek-V4-Flash** — 1M context support via FLASH_PROVIDER/FLASH_API_KEY

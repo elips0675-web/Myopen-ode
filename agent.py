@@ -42,6 +42,8 @@ init_config(OLLAMA_URL=OLLAMA_URL, MODEL=MODEL, PLANNER_MODEL=PLANNER_MODEL,
 
 init_backup()
 init_rag(OLLAMA_URL=OLLAMA_URL, WORK_DIR=WORK_DIR, EMBED_MODEL=EMBED_MODEL)
+from tools import load_plugins
+load_plugins()
 
 # ─── projects management ──────────────────────────────────
 AGENT_HOME = Path(__file__).parent
@@ -76,6 +78,8 @@ def switch_project(path):
     # Update SYSTEM_PROMPT with new workspace
     from tools import SYSTEM_PROMPT as _
     # Reload tools module config
+    from tools import load_plugins
+    load_plugins()
     log.info("Switched project: %s → %s", old_wd.name, WORK_DIR.name)
     return True
 
@@ -398,6 +402,11 @@ async def run_task(agent_type: str, prompt: str = ""):
     msgs = [{"role": "system", "content": sub_prompt}, {"role": "user", "content": prompt}]
     result, _ = call_ollama(msgs, PLANNER_MODEL)
     return {"result": result[:3000]}
+
+@app.get("/api/plugins")
+def list_plugins():
+    from tools import PLUGINS
+    return [{"name": n, "tools": list(p["tools"].keys())} for n, p in PLUGINS.items()]
 
 @app.get("/api/skills")
 def list_skills():
