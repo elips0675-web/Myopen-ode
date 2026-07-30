@@ -1,0 +1,363 @@
+"""Tool definitions and core agent logic — extracted from agent.py."""
+
+import json, os, subprocess, glob, re, shutil, hashlib, textwrap, urllib.parse, time, logging
+from pathlib import Path
+from datetime import datetime
+import requests
+from duckduckgo_search import DDGS
+
+log = logging.getLogger('tools')
+
+# ─── config (set by agent.py) ───────────────────────────
+OLLAMA_URL = "http://localhost:11434"
+MODEL = "deepseek-r1:7b"
+PLANNER_MODEL = "deepseek-r1:1.5b"
+WORK_DIR = Path(".")
+EMBED_MODEL = "nomic-embed-text"
+NO_CONFIRM = False
+MAX_TOKENS = 0
+OPENAI_KEY = ""
+ANTHROPIC_KEY = ""
+FALLBACK_MODEL = ""
+
+def init_config(**kw):
+    global OLLAMA_URL, MODEL, PLANNER_MODEL, WORK_DIR, EMBED_MODEL, NO_CONFIRM, MAX_TOKENS, OPENAI_KEY, ANTHROPIC_KEY, FALLBACK_MODEL
+    for k, v in kw.items():
+        if v is not None:
+            globals()[k] = v
+
+# ─── path resolver ────────────────────────────────────────
+def resolve(path):
+    p = Path(path)
+    if p.is_absolute(): return p
+    return WORK_DIR / path
+
+# ─── file versioning ──────────────────────────────────────
+BACKUP_DIR = None
+MAX_BACKUPS = 50
+
+def init_backup():
+    global BACKUP_DIR
+    BACKUP_DIR = WORK_DIR / ".agent_backups"
+    BACKUP_DIR.mkdir(exist_ok=True)
+
+def backup(path):
+    if BACKUP_DIR is None: return
+    p = Path(path) if os.path.isabs(path) else WORK_DIR / path
+    if p.exists():
+        key = str(p).replace("\\", "_").replace("/", "_").replace(":", "")
+        b = BACKUP_DIR / key / datetime.now().strftime("%H%M%S_%f")
+        b.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(p, b)
+        versions = sorted(b.parent.iterdir())
+        for v in versions[:-MAX_BACKUPS]:
+            v.unlink()
+
+def undo(path):
+    if BACKUP_DIR is None: return f"No backup dir"
+    key = str(Path(path) if os.path.isabs(path) else WORK_DIR / path)
+    key = key.replace("\\", "_").replace("/", "_").replace(":", "")
+    bd = BACKUP_DIR / key
+    if not bd.exists(): return f"No backup for {path}"
+    versions = sorted(bd.iterdir())
+    if not versions: return f"No backup for {path}"
+    dst = Path(path) if os.path.isabs(path) else WORK_DIR / path
+    shutil.copy2(versions[-1], dst)
+    versions[-1].unlink()
+    return f"Undone: {path} restored"
+
+# ─── verify ───────────────────────────────────────────────
+VERIFY_COMMANDS = {
+    ".js,.jsx,.ts,.tsx": "npx tsc --noEmit 2>&1 || true",
+    ".py": "python -m py_compile {file} 2>&1 || true",
+    ".json": "python -m json.tool {file} > nul 2>&1 && echo OK || echo Invalid JSON",
+}
+
+def verify_file(path):
+    ext = "".join(Path(path).suffixes)
+    for pattern, cmd in VERIFY_COMMANDS.items():
+        if any(ext.endswith(e) for e in pattern.split(",")):
+            p = Path(path) if os.path.isabs(path) else WORK_DIR / path
+            fcmd = cmd.replace("{file}", f'"{p}"')
+            r = subprocess.run(fcmd, shell=True, capture_output=True, text=True, timeout=15)
+            return r.stdout.strip()[:1000] or r.stderr.strip()[:1000]
+    return ""
+
+# ─── git helpers ──────────────────────────────────────────
+def git(*args):
+    try:
+        r = subprocess.run(["git"] + list(args), cwd=str(WORK_DIR), capture_output=True, text=True, timeout=10)
+        return r.stdout.strip() or r.stderr.strip()
+    except: return "(git not available)"
+
+# ─── tool schemas ─────────────────────────────────────────
+TOOL_SCHEMAS = {
+    "read":   {"required": ["path"]},
+    "write":  {"required": ["path", "content"]},
+    "edit":   {"required": ["path", "old", "new"]},
+    "bash":   {"required": ["cmd"]},
+    "glob":   {"required": ["pattern"]},
+    "grep":   {"required": ["pattern"]},
+    "list":   {},
+    "web":    {"required": ["url"]},
+    "diff":   {},
+    "commit": {},
+    "undo":   {"required": ["path"]},
+    "verify": {"required": ["path"]},
+    "plan":   {"required": ["steps"]},
+    "search": {"required": ["query"]},
+    "websearch": {"required": ["query"]},
+}
+
+def validate_tool(tc):
+    name = tc.get("tool", "")
+    schema = TOOL_SCHEMAS.get(name)
+    if not schema: return f"Unknown tool '{name}'"
+    missing = [k for k in schema.get("required", []) if k not in tc]
+    if missing: return f"Missing required fields: {', '.join(missing)} in {name}"
+    if "path" in tc and not isinstance(tc["path"], str): return "path must be string"
+    if "content" in tc and not isinstance(tc["content"], str): return "content must be string"
+    if tc.get("tool") == "plan" and "steps" in tc:
+        if isinstance(tc["steps"], str):
+            tc["steps"] = [s.strip() for s in re.split(r'[.,;\n]+', tc["steps"]) if s.strip()]
+        elif not isinstance(tc["steps"], list):
+            return "plan.steps must be an array of strings"
+    return ""
+
+# ─── system prompt ────────────────────────────────────────
+SYSTEM_PROMPT = "CRITICAL: You are a coding AGENT with tools on Windows.\n\nWORKSPACE: " + str(WORK_DIR) + """ — project root.
+
+RULES:
+1. Complex tasks: call plan FIRST with steps, user confirms, then execute.
+2. Simple tasks: call tool directly. Ask before write/edit/bash/commit/undo.
+3. Your response MUST start with a ```tool block. NEVER describe tools.
+4. NEVER write code blocks. ONLY ```tool blocks.
+5. Every tool call MUST include ALL required fields. Missing fields will be rejected.
+6. When user confirms with "yes" or "да" — you MUST repeat the exact same ```tool block. No explanations.
+
+TOOLS (required fields in bold):
+```tool
+{"tool": "plan", "steps": ["step1", "step2"]}
+```
+```tool
+{"tool": "read", "path": "file.py"}
+```
+```tool
+{"tool": "list", "path": "dir"}
+```
+```tool
+{"tool": "bash", "cmd": "echo hi"}
+```
+```tool
+{"tool": "web", "url": "https://..."}
+```
+```tool
+{"tool": "write", "path": "file", "content": "text"}
+```
+```tool
+{"tool": "edit", "path": "file", "old": "...", "new": "..."}
+```
+```tool
+{"tool": "glob", "pattern": "**/*.py"}
+```
+```tool
+{"tool": "grep", "pattern": "TODO", "include": "*.py"}
+```
+```tool
+{"tool": "diff"}
+```
+```tool
+{"tool": "commit", "message": "desc"}
+```
+```tool
+{"tool": "undo", "path": "file"}
+```
+```tool
+{"tool": "verify", "path": "file"}
+```
+```tool
+{"tool": "search", "query": "function that handles auth"}
+```
+```tool
+{"tool": "websearch", "query": "python async await example", "max_results": 5}
+```
+
+Paths: forward slashes. C:/Users/... or relative to workspace.
+Search: semantic code search via RAG.
+WebSearch: internet search via DuckDuckGo.
+Multi-agent: planning uses a smaller model; execution uses the main model."""
+
+# ─── call Ollama with fallback ────────────────────────────
+def call_ollama(messages, model=None):
+    m = model or MODEL
+    try:
+        r = requests.post(f"{OLLAMA_URL}/api/chat", json={
+            "model": m, "messages": [msg for msg in messages if msg.get("content")],
+            "stream": False, "keep_alive": -1,
+            "options": {"temperature": 0.2, "num_predict": 4096, "num_ctx": 32768}
+        }, timeout=120)
+        r.raise_for_status()
+        data = r.json()
+        msg = data.get("message", {}).get("content", "")
+        msg = re.sub(r'<think>.*?</think>', '', msg, flags=re.DOTALL)
+        return msg if msg else "No response from model"
+    except Exception as e:
+        log.warning("Ollama failed: %s. Trying fallback...", e)
+        return call_fallback(messages, m)
+
+def call_fallback(messages, model_name):
+    fallback = FALLBACK_MODEL or ""
+    if not fallback:
+        return "[Error: Ollama unavailable, no fallback configured]"
+    try:
+        if OPENAI_KEY and ("gpt" in fallback or "o1" in fallback or "o3" in fallback or "/" not in fallback):
+            h = {"Authorization": f"Bearer {OPENAI_KEY}", "Content-Type": "application/json"}
+            body = {"model": fallback, "messages": [m for m in messages if m.get("content")], "temperature": 0.2, "max_tokens": 4096}
+            r = requests.post("https://api.openai.com/v1/chat/completions", json=body, headers=h, timeout=120)
+            r.raise_for_status()
+            return r.json()["choices"][0]["message"]["content"]
+        if ANTHROPIC_KEY and "claude" in fallback:
+            h = {"x-api-key": ANTHROPIC_KEY, "anthropic-version": "2023-06-01", "Content-Type": "application/json"}
+            body = {"model": fallback, "max_tokens": 4096, "messages": [{"role": m["role"], "content": m["content"]} for m in messages if m.get("content") and m["role"] != "system"]}
+            r = requests.post("https://api.anthropic.com/v1/messages", json=body, headers=h, timeout=120)
+            r.raise_for_status()
+            return r.json()["content"][0]["text"]
+        return f"[Error: No matching API for fallback model '{fallback}']"
+    except Exception as e2:
+        return f"[Error: Fallback API: {e2}]"
+
+# ─── extract pending tool for auto-execute ────────────────
+def extract_pending_tool(msgs):
+    tp = re.compile(r'```(?:tool|json)\n(.*?)\n```', re.DOTALL)
+    bare = re.compile(r'\{\s*"tool"\s*:\s*"[^"]+"\s*.*?\}', re.DOTALL)
+    bad = ("write", "edit", "bash", "commit", "undo")
+    for m in reversed(msgs):
+        if m.get("role") != "assistant": continue
+        c = m.get("content", "")
+        for match in tp.finditer(c):
+            raw = match.group(1).strip()
+            try: j = json.loads(raw)
+            except:
+                try: j = json.loads(raw.replace("'", '"'))
+                except: continue
+            n = j.get("tool", "")
+            if n in bad:
+                tc = dict(j); tc.pop("tool", None); return n, tc
+        for match in bare.finditer(c):
+            try:
+                j = json.loads(match.group())
+                n = j.get("tool", "")
+                if n in bad:
+                    tc = dict(j); tc.pop("tool", None); return n, tc
+            except: pass
+    return None, None
+
+# ─── execute tool ─────────────────────────────────────────
+def execute_tool(name, args):
+    try:
+        if name == "read":
+            p = args["path"]
+            if p.startswith(("http://", "https://")):
+                try:
+                    r = requests.get(p, timeout=15, headers={"User-Agent": "Mozilla/5.0"})
+                    return r.text[:5000]
+                except Exception as e: return f"Error fetching URL: {e}"
+            pp = resolve(p)
+            if not pp.exists(): return f"Error: {p} not found"
+            if pp.is_dir(): return f"'{p}' is a directory. Use list tool to see contents."
+            return pp.read_text("utf-8")
+        elif name == "web":
+            url = args.get("url", "")
+            try:
+                r = requests.get(url, timeout=15, headers={"User-Agent": "Mozilla/5.0"})
+                return r.text[:5000]
+            except Exception as e: return f"Error: {e}"
+        elif name == "write":
+            p = resolve(args["path"])
+            rel = str(p.relative_to(WORK_DIR)) if WORK_DIR in p.parents else str(p)
+            backup(rel)
+            p.parent.mkdir(parents=True, exist_ok=True)
+            p.write_text(args["content"], "utf-8")
+            v = verify_file(str(p))
+            msg = f"Written {len(args['content'])}b to {p}"
+            if v: msg += f"\nVerify: {v[:500]}"
+            return msg
+        elif name == "edit":
+            p = resolve(args["path"])
+            if not p.exists(): return f"Error: {p} not found"
+            old = args.get("old", ""); new = args.get("new", "")
+            content = p.read_text("utf-8")
+            if old not in content: return f"Error: text not found in {args['path']}"
+            rel = str(p.relative_to(WORK_DIR)) if WORK_DIR in p.parents else str(p)
+            backup(rel)
+            p.write_text(content.replace(old, new), "utf-8")
+            v = verify_file(str(p))
+            return f"Replaced in {p}" + (f"\nVerify: {v[:500]}" if v else "")
+        elif name == "bash":
+            cwd = resolve(args.get("cwd", ".")) if args.get("cwd") else WORK_DIR
+            r = subprocess.run(args["cmd"], shell=True, cwd=str(cwd) if cwd else str(WORK_DIR), capture_output=True, text=True, timeout=60)
+            return ((r.stdout or "")[-3000:] + ("\nSTDERR:\n" + (r.stderr or "")[-1000:] if r.stderr else ""))
+        elif name == "glob":
+            pattern = args["pattern"]
+            base = Path(args.get("cwd", ".")) if args.get("cwd") else WORK_DIR
+            if not base.is_absolute():
+                if "\\" in pattern or pattern.startswith("/") or ":" in pattern:
+                    p = Path(pattern)
+                    if p.is_absolute():
+                        base = p.root; pattern = str(p.relative_to(p.root))
+            fs = list(glob.glob(str(base / pattern), recursive=True))[:60]
+            return "\n".join(fs) if fs else "No matches"
+        elif name == "grep":
+            pat, inc = args["pattern"], args.get("include", "*")
+            cwd = args.get("cwd", str(WORK_DIR))
+            r = subprocess.run(f'rg -n "{pat}" --glob "{inc}"', shell=True, cwd=cwd, capture_output=True, text=True, timeout=30)
+            return "\n".join(r.stdout.split("\n")[:60]) or "No matches"
+        elif name == "list":
+            p = resolve(args.get("path", "."))
+            items = [f"{'[DIR]' if x.is_dir() else '     '} {x.name}" for x in sorted(p.iterdir())]
+            return "\n".join(items) if items else "(empty)"
+        elif name == "diff":
+            stat = git("diff", "--stat")
+            names = git("diff", "--name-only")
+            diff_out = git("diff", "--unified=2")
+            lines = diff_out.split("\n")
+            parsed = []
+            current_file = ""
+            for line in lines:
+                if line.startswith("diff --git"):
+                    parts = line.split(" b/")
+                    current_file = parts[-1] if len(parts) > 1 else line
+                    parsed.append(f"\n--- {current_file}")
+                elif line.startswith("@@"):
+                    parsed.append(f"  {line}")
+                elif line.startswith("+") and not line.startswith("+++"):
+                    parsed.append(f"+{line[1:]}")
+                elif line.startswith("-") and not line.startswith("---"):
+                    parsed.append(f"-{line[1:]}")
+            body = "\n".join(parsed) if parsed else diff_out[:3000]
+            return stat + "\n\n" + body[:3000]
+        elif name == "commit":
+            git("add", "-A"); return git("commit", "-m", args.get("message", "update"))
+        elif name == "undo":
+            return undo(args.get("path", ""))
+        elif name == "verify":
+            path = args.get("path", "")
+            return verify_file(path) if path else "No path specified"
+        elif name == "search":
+            from .rag import rag_search
+            return rag_search(args.get("query", ""), args.get("top_k", 5))
+        elif name == "websearch":
+            query = args.get("query", "")
+            max_results = int(args.get("max_results", 5))
+            try:
+                results = []
+                with DDGS() as ddgs:
+                    for i, r in enumerate(ddgs.text(query, max_results=max_results)):
+                        results.append(f"[{i+1}] {r.get('title','')}\n    URL: {r.get('href','')}\n    {r.get('body','')[:300]}")
+                return "\n\n".join(results) if results else "No results found"
+            except Exception as e:
+                return f"Web search error: {e}"
+        else:
+            return f"Unknown tool: {name}"
+    except Exception as e:
+        return f"Error: {e}"

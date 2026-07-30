@@ -2,8 +2,12 @@
 """Smoke tests for agent tool loop."""
 import json, sys, os, tempfile
 from pathlib import Path
-sys.path.insert(0, "E:\\My OpenCode")
-from agent import execute_tool, backup, undo, verify_file, resolve, WORK_DIR
+sys.path.insert(0, "E:\\My OpenCode1")
+from tools import execute_tool, backup, undo, verify_file, resolve, init_config, init_backup
+from agent import WORK_DIR
+
+init_config(WORK_DIR=WORK_DIR, OLLAMA_URL="http://localhost:11434", MODEL="test", NO_CONFIRM=True)
+init_backup()
 
 TMP = Path(tempfile.mkdtemp())
 

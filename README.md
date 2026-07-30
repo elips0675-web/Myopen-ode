@@ -1,86 +1,77 @@
-# My OpenCode — Локальный AI-агент программист
+# AI Coder v2 — OpenCode Desktop Alternative
 
-**RTX 3060 12GB + Ollama + qwen2.5-coder:7b**
+Локальный AI-агент-программист на Ollama. Замена Cursor/Windsurf/Claude Code — бесплатно, приватно, офлайн.
 
-Работает полностью offline. Не нужны API ключи, интернет, npm.
+**Оценки:** Kimi 8.2/10 · DeepSeek 8.5/10
 
----
+## Возможности
+
+- **15 инструментов**: read, write, edit, bash, glob, grep, list, web, websearch, diff, commit, undo, verify, plan, search (RAG)
+- **UI**: файловое дерево + сессии, тёмная тема, diff, drag-and-drop, confirm-диалоги
+- **RAG**: семантический поиск по codebase (Ollama embeddings) — .py, .js, .ts, .go, .rs, .java, .yml, .toml, .env, .cfg, .ini
+- **Multi-agent**: PLANNER_MODEL (лёгкая 1.5b) планирует, основная модель исполняет
+- **WebSearch** через DuckDuckGo (без API ключа)
+- **Fallback**: OpenAI / Claude API, если Ollama недоступен
+- **Agent memory**: `.agent_memory/` — кросс-сессионная память
+- **Verify**: автопроверка синтаксиса после write/edit
+- **Бэкапы**: до 50 версий, undo одной командой
+- **Управление моделями**: +Pull / -Del прямо из UI
+- **Async**: все блокирующие вызовы через `asyncio.to_thread`
+- **CI/CD**: `.github/workflows/test.yml`
 
 ## Быстрый старт
 
 ```bash
-# 1. Убедись что Ollama запущена
-ollama list
-
-# 2. Загрузи модель
-ollama pull qwen2.5-coder:7b
-
-# 3. Запусти агента
-cd E:\My OpenCode
+ollama pull deepseek-r1:7b
+ollama pull nomic-embed-text
+pip install fastapi uvicorn requests
 python agent.py
-
-# 4. Открой в браузере
-http://localhost:8765/
+# → http://localhost:8765/
 ```
 
-## Инструменты (14)
+## Переменные окружения
 
-| Инструмент | Описание |
-|---|---|
-| `read` | Читать файлы (путь или URL) |
-| `write` | Создавать файлы (в любой папке) |
-| `edit` | Заменять текст в файлах |
-| `bash` | Выполнять команды |
-| `glob` | Искать файлы по шаблону |
-| `grep` | Искать текст в файлах |
-| `list` | Содержимое папок |
-| `web` | Загружать веб-страницы |
-| `diff` | Git diff |
-| `commit` | Git add + commit |
-| `undo` | Откатить изменения |
-| `verify` | Проверить синтаксис |
-| `plan` | Составить план, пользователь подтверждает |
-| `search` | Семантический поиск по codebase (RAG) |
+| Переменная | По умолчанию | Описание |
+|---|---|---|
+| `AI_MODEL` | `deepseek-r1:7b` | Основная модель |
+| `PLANNER_MODEL` | `deepseek-r1:1.5b` | Модель для планирования |
+| `EMBED_MODEL` | `nomic-embed-text` | Модель для RAG |
+| `WORK_DIR` | `E:\\My OpenCode` | Рабочая директория |
+| `NO_CONFIRM` | `0` | `1` = без подтверждений |
+| `PORT` | `8765` | Порт сервера |
+| `OLLAMA_URL` | `http://localhost:11434` | URL Ollama |
+| `MAX_TOKENS` | `0` | Лимит токенов (0 = без лимита) |
+| `FALLBACK_MODEL` | `""` | Резервная модель (gpt-4, claude-3) |
+| `OPENAI_API_KEY` | `""` | Ключ для OpenAI fallback |
+| `ANTHROPIC_API_KEY` | `""` | Ключ для Claude fallback |
 
-## Безопасность
+## API endpoints
 
-- Бэкапы перед write/edit (до 50 версий в `.agent_backups/`)
-- Подтверждение перед write/edit/bash/commit/undo
-- `plan` инструмент — модель предлагает шаги, пользователь подтверждает
-- Проверка синтаксиса после изменений (py_compile, tsc, json.tool)
-- 60s таймаут на agent loop, 3 retries при битом JSON
-- JSON Schema валидация всех tool вызовов
+| Endpoint | Метод | Описание |
+|---|---|---|
+| `/api/chat` | POST | SSE streaming чат |
+| `/api/models` | GET | Список моделей |
+| `/api/files` | GET | Дерево файлов |
+| `/api/file?path=` | GET | Содержимое файла |
+| `/api/sessions` | GET/POST | Список / создание сессий |
+| `/api/sessions/{id}` | GET/DELETE | Загрузка / удаление сессии |
+| `/api/project` | GET | Информация о проекте |
+| `/api/upload` | POST | Drag-and-drop загрузка файлов |
 
 ## Архитектура
 
-Один файл `agent.py` (~600 строк), зависимости: `fastapi`, `uvicorn`, `requests`.
-
-- **FastAPI** сервер на порту 8765, SSE streaming
-- **Agent loop**: до 12 итераций, 60s timeout, 3 JSON retries
-- **Prompt-based tool calling** — qwen2.5-coder:7b не поддерживает native tool_calls
-- **HTML UI** — встроенный (zero npm), Cancel, diff view
-- **Context**: автоsummarization через qwen2.5-coder:1.5b при >4K символов
-- **32K контекстное окно**
-- **RAG**: семантический поиск через Ollama `/api/embed` + cosine similarity
-
-## Файлы
-
-| Файл | Назначение |
-|---|---|
-| `agent.py` | Агент (сервер + UI + agent loop + RAG) |
-| `test_agent.py` | Smoke-тесты (11 тестов) |
-| `context.txt` | Описание проекта для ревью |
-| `TODO.md` | Что сделано и что осталось |
-| `opencode.json` | Конфиг opencode CLI |
-
-## Тесты
-
-```bash
-python test_agent.py   # 11/11 passed
+```
+agent.py   — FastAPI сервер, endpoints, agent loop
+tools.py   — инструменты, call_ollama, fallback, валидация
+rag.py     — индексация и семантический поиск
+ui.py      — HTML UI (встроенный, без зависимостей)
 ```
 
-## Репозиторий
+## Рекомендуемые модели
 
-https://github.com/elips0675-web/Myopen-ode
-
-Агент сам пишет свой код, коммитит и пушит — dogfooding.
+| Модель | VRAM | Для чего |
+|---|---|---|
+| `deepseek-r1:7b` | ~5.5GB | Кодинг + reasoning |
+| `deepseek-r1:1.5b` | ~1.5GB | Планирование (PLANNER_MODEL) |
+| `qwen2.5-coder:7b` | ~5.5GB | Альтернатива |
+| `nomic-embed-text` | ~0.5GB | RAG эмбеддинги |

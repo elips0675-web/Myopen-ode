@@ -2,34 +2,38 @@ PROJECT: AI Coding Agent (My OpenCode)
 ========================================
 Repo: https://github.com/elips0675-web/Myopen-ode
 Author: elips0675-web
-Date: 2026-07-29
+Date: 2026-07-30
 
 PURPOSE
 -------
 Local AI coding assistant that replaces cloud-based tools.
-Runs entirely offline on RTX 3060, powered by Ollama + qwen2.5-coder:7b.
+Runs entirely offline on RTX 3060, powered by Ollama + DeepSeek/qwen models.
 User types a task in browser, model calls tools to read, edit, write, run code.
 
 KEY ACHIEVEMENT
 ---------------
-qwen2.5-coder:7b does NOT support native tool_calls in Ollama.
-Engineered a prompt-based agent loop: model outputs ```tool blocks,
-backend parses them, executes, feeds result back. Verified working.
+- Prompt-based tool calling: qwen2.5-coder:7b/DeepSeek does NOT support native tool_calls in Ollama.
+  Engineered a working agent loop: model outputs ```tool blocks, backend parses, executes, feeds back.
+- Sessions: full session management with save/load to .agent_sessions/*.json
+- RAG: semantic code search via Ollama embeddings with cosine similarity
+- Self-hosted, zero-cost, fully offline alternative to Cursor/Claude Code
 
 ARCHITECTURE
 ------------
-agent.py (~500 lines) — single file, zero pip dependencies beyond fastapi+uvicorn.
+agent.py (~900 lines) — single file, zero npm deps, only fastapi+uvicorn+requests.
 
 1. FastAPI server on port 8765
 2. HTML UI served at GET / (inline, no npm, no build tools)
-3. POST /api/chat — SSE streaming endpoint
-4. Agent loop: up to 12 iterations, 60s timeout, 3 JSON retries
-5. File versioning: backups in .agent_backups before every write/edit
-6. Verify step: py_compile for .py, tsc --noEmit for .ts, json.tool for .json
+3. POST /api/chat — SSE streaming endpoint with session support
+4. Agent loop: up to 12 iterations, 60s timeout, 3 JSON retries, auto-execute fallback
+5. File versioning: backups in .agent_backups before every write/edit (up to 50 versions)
+6. Verify step: py_compile for .py, tsc --noEmit for .ts/.js, json.tool for .json
 7. Git integration: diff + auto-commit
-8. Context management: auto-summarization via qwen2.5-coder:1.5b when >4K chars
+8. Context management: auto-summarization via 1.5b model when >4K chars
+9. RAG: semantic code search via Ollama embeddings (nomic-embed-text)
+10. Sessions: full CRUD for chat sessions (create, list, load, delete)
 
-TOOLS (13 total)
+TOOLS (14 total)
 ----------------
 read    — file content (absolute/relative paths + http/https URLs)
 write   — create file anywhere (with backup + verify)
@@ -44,27 +48,32 @@ commit  — git add -A + git commit
 undo    — restore previous backup
 verify  — syntax check a file
 plan    — propose multi-step plan, user confirms
+search  — RAG semantic code search
 
 SAFETY
 ------
-- Confirmation before write/edit/bash/commit/undo
+- Confirmation before write/edit/bash/commit/undo (with UI buttons)
 - Plan tool: model proposes steps, user confirms before execution
 - Backups in .agent_backups/ (up to 50 versions)
 - Timeout: 60s total, 3 retries on JSON parse errors
 - 32K context window (maximized from 8K)
+- NO_CONFIRM=1 skips all confirmations
+- JSON Schema validation for all 14 tools
 
 HOW AGENT LOOP WORKS
 --------------------
 1. System prompt tells model it has tools and must output ```tool blocks
 2. Model responds: text + ```tool {"tool":"read","path":"file.py"}
-3. Backend parses JSON, executes tool, appends result as user message
+3. Backend parses JSON, validates schema, executes tool, appends result as user message
 4. Model gets result, decides next step (read more, edit, verify, commit)
 5. Loop ends when model responds without a tool block
+6. Fallback: if user says "yes"/"да" and no tool block found, auto-executes pending tool
 
 MODELS
 ------
-Primary: qwen2.5-coder:7b (RTX 3060, ~5.5GB VRAM, ~47 tok/s)
-Also available: 1.5b, 3b, deepseek-r1:7b, qwen3:8b
+Primary: deepseek-r1:7b (RTX 3060, ~5.5GB VRAM, ~45 tok/s)
+RAG: nomic-embed-text
+Auto-summarization: deepseek-r1:1.5b or qwen2.5-coder:1.5b
 
 RUNNING
 -------
@@ -76,6 +85,18 @@ STATUS
 Working. Self-hosted. Self-documented. Self-pushed to GitHub.
 The agent wrote its own code improvements and committed them.
 
+EVALUATIONS
+-----------
+Kimi: 8.2/10 — Architecture 8, Functionality 9, Security 8, UX/UI 7, Potential 9
+DeepSeek: 8.5/10 — "рабочий, продуманный и надёжный"
+
+Top recommendations from evaluations:
+1. ✅ Sessions — already implemented (was #1 pain point)
+2. Token limit — planned (replace iteration count)
+3. Model management — pull/delete via UI
+4. Structural diff — show only changed lines
+5. Async rewrite — migrate to async/await
+
 COMPARISON
 ----------
 | Aspect        | My OpenCode   | Cursor/Windsurf | Claude Code |
@@ -85,3 +106,5 @@ COMPARISON
 | Model         | 7B local     | GPT-4/Claude    | Claude 3.5  |
 | Tool calling  | Prompt-based | Native          | Native      |
 | Speed         | Fast (local) | Network-dep     | Network-dep |
+| Sessions      | YES (JSON)   | YES             | YES         |
+| RAG           | YES (local)  | NO              | NO          |

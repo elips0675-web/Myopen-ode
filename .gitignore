@@ -2,5 +2,7 @@ __pycache__/
 *.pyc
 *.pyo
 .agent_backups/
+.agent_sessions/
+.agent_memory/
 *.log
 *.err
