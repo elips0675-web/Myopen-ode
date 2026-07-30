@@ -43,6 +43,42 @@ init_config(OLLAMA_URL=OLLAMA_URL, MODEL=MODEL, PLANNER_MODEL=PLANNER_MODEL,
 init_backup()
 init_rag(OLLAMA_URL=OLLAMA_URL, WORK_DIR=WORK_DIR, EMBED_MODEL=EMBED_MODEL)
 
+# ─── projects management ──────────────────────────────────
+AGENT_HOME = Path(__file__).parent
+PROJECTS_FILE = AGENT_HOME / "projects.json"
+
+def load_projects():
+    if not PROJECTS_FILE.exists():
+        default = [{"name": WORK_DIR.name, "path": str(WORK_DIR), "active": True}]
+        save_projects(default)
+        return default
+    try: return json.loads(PROJECTS_FILE.read_text())
+    except: return [{"name": WORK_DIR.name, "path": str(WORK_DIR), "active": True}]
+
+def save_projects(projects):
+    PROJECTS_FILE.write_text(json.dumps(projects, indent=2, ensure_ascii=False), "utf-8")
+
+def switch_project(path):
+    global WORK_DIR, SESSIONS_DIR, MEMORY_DIR
+    new_wd = Path(path).resolve()
+    if not new_wd.exists():
+        new_wd.mkdir(parents=True, exist_ok=True)
+    old_wd = WORK_DIR
+    WORK_DIR = new_wd
+    # Re-init configs with new WORK_DIR
+    init_config(WORK_DIR=WORK_DIR)
+    init_backup()
+    init_rag(OLLAMA_URL=OLLAMA_URL, WORK_DIR=WORK_DIR, EMBED_MODEL=EMBED_MODEL)
+    SESSIONS_DIR = WORK_DIR / ".agent_sessions"
+    SESSIONS_DIR.mkdir(exist_ok=True)
+    MEMORY_DIR = WORK_DIR / ".agent_memory"
+    MEMORY_DIR.mkdir(exist_ok=True)
+    # Update SYSTEM_PROMPT with new workspace
+    from tools import SYSTEM_PROMPT as _
+    # Reload tools module config
+    log.info("Switched project: %s → %s", old_wd.name, WORK_DIR.name)
+    return True
+
 # ─── sessions ────────────────────────────────────────────
 SESSIONS_DIR = WORK_DIR / ".agent_sessions"
 SESSIONS_DIR.mkdir(exist_ok=True)
@@ -264,6 +300,8 @@ def run_agent_loop(msgs, session_id):
 class ChatReq(BaseModel): messages: list; model: str = ""; session_id: str = ""
 class SessionReq(BaseModel): title: str = ""
 class FileUploadReq(BaseModel): path: str = ""; content: str = ""
+class ProjectReq(BaseModel): name: str = ""; path: str = ""
+class ProjectSwitchReq(BaseModel): path: str = ""
 
 # ─── FastAPI app ─────────────────────────────────────────
 app = FastAPI()
@@ -301,6 +339,42 @@ def delete_model(name: str):
 
 @app.get("/api/project")
 def get_project(): return {"name": WORK_DIR.name, "path": str(WORK_DIR)}
+
+@app.get("/api/projects")
+def list_projects():
+    return load_projects()
+
+@app.post("/api/projects")
+def add_project(req: ProjectReq):
+    projects = load_projects()
+    for p in projects: p["active"] = False
+    path = req.path or str(WORK_DIR)
+    projects.append({"name": req.name or Path(path).name, "path": path, "active": True})
+    save_projects(projects)
+    switch_project(path)
+    return {"ok": True, "projects": projects}
+
+@app.post("/api/projects/switch")
+def switch_project_api(req: ProjectSwitchReq):
+    path = req.path
+    if not path: return {"error": "path required"}
+    projects = load_projects()
+    for p in projects:
+        p["active"] = (p["path"] == path)
+    save_projects(projects)
+    switch_project(path)
+    return {"ok": True, "project": {"name": WORK_DIR.name, "path": str(WORK_DIR)}}
+
+@app.delete("/api/projects/{idx}")
+def delete_project_api(idx: int):
+    projects = load_projects()
+    if idx < 0 or idx >= len(projects): return {"error": "Invalid index"}
+    removed = projects.pop(idx)
+    if removed.get("active") and projects:
+        projects[0]["active"] = True
+        switch_project(projects[0]["path"])
+    save_projects(projects)
+    return {"ok": True}
 
 @app.get("/api/task/{agent_type}")
 async def run_task(agent_type: str, prompt: str = ""):

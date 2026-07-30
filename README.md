@@ -37,6 +37,7 @@
 - ✅ **Patch tool** — применение unified diff к файлам
 - ✅ **Session sharing** — экспорт/импорт сессий через JSON
 - ✅ **Subagents** — @explore (read-only), @scout (web), @general (full access) с разными правами
+- ✅ **Multi-project** — переключение между проектами из UI, отдельные сессии/файлы/RAG на проект
 - ✅ **Slash-команды** — /test, /deploy, /review, /fix, /doc в чате
 - ✅ **Todo tracking** — todo-лист внутри сессии (add/complete/list)
 - ✅ **DeepSeek-V4-Flash** — поддержка 1M контекста через FLASH_PROVIDER/FLASH_API_KEY
@@ -99,6 +100,9 @@ ui.py      — HTML UI (встроенный, без зависимостей)
 | `/api/sessions/import` | POST | Импорт сессии из JSON |
 | `/api/task/{agent}` | GET | Запустить subagent (`explore`, `scout`, `general`) |
 | `/api/skills` | GET | Список навыков |
+| `/api/projects` | GET/POST | Список / добавить проект |
+| `/api/projects/switch` | POST | Переключить активный проект |
+| `/api/projects/{idx}` | DELETE | Удалить проект |
 | `/api/upload` | POST | Drag-and-drop загрузка файлов |
 
 ## Рекомендуемые модели
@@ -151,6 +155,7 @@ Local AI coding agent powered by Ollama. Free, private, offline alternative to C
 - ✅ **Patch tool** — apply unified diffs to files
 - ✅ **Session sharing** — export/import sessions as JSON
 - ✅ **Subagents** — @explore (read-only), @scout (web), @general (full access) with different permissions
+- ✅ **Multi-project** — switch between projects from UI, separate sessions/files/RAG per project
 - ✅ **Slash commands** — /test, /deploy, /review, /fix, /doc in chat
 - ✅ **Todo tracking** — in-session todo list (add/complete/list)
 - ✅ **DeepSeek-V4-Flash** — 1M context support via FLASH_PROVIDER/FLASH_API_KEY

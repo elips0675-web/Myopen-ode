@@ -104,6 +104,10 @@ body[data-theme="dark"]{--bg:#0f1117;--fg:#e2e8f0;--sidebar:#161b22;--sidebar-bo
 </style></head><body>
 <div id="sidebar">
   <div class="logo"><svg viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>OpenCode <span>v2</span></div>
+  <div style="display:flex;align-items:center;gap:4px;padding:6px 12px;border-bottom:1px solid var(--sidebar-border)">
+    <select id="project-select" onchange="switchProject(this.value)" style="flex:1;font-size:11px;padding:3px 6px;background:var(--code-bg);border:1px solid var(--sidebar-border);border-radius:4px;color:var(--fg);outline:none;font-family:inherit"></select>
+    <button onclick="addProject()" style="background:none;border:1px dashed var(--sidebar-border);border-radius:4px;color:var(--st-c);cursor:pointer;font-size:14px;padding:1px 6px;line-height:1">+</button>
+  </div>
   <div class="section">Sessions <span class="count" id="sess-count">0</span></div>
   <div id="new-sess-btn" onclick="newSession()"><svg viewBox="0 0 24 24"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>New Session</div>
   <div style="display:flex;gap:4px;margin:4px 12px">
@@ -322,6 +326,29 @@ function loadSkills(){
 function loadSkill(name){$('ta').value='@skill '+name;ah()}
 function useAgent(type){var ta=$('ta');ta.value='@'+type+' ';ta.focus();ah()}
 
+// Project management
+function loadProjects(){
+  fetch(A+'/api/projects').then(function(r){return r.json()}).then(function(ps){
+    var sel=$('project-select');
+    if(!ps.length){sel.innerHTML='<option>No projects</option>';return}
+    sel.innerHTML=ps.map(function(p){return '<option value="'+esc(p.path)+'"'+(p.active?' selected':'')+'>'+esc(p.name)+'</option>'}).join('');
+    if(ps.some(function(p){return p.active}))loadFiles();loadSessions();
+  }).catch(function(){});
+}
+function switchProject(path){
+  fetch(A+'/api/projects/switch',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({path:path})})
+  .then(function(r){return r.json()}).then(function(d){
+    curSid='';ms=[];$('msgs').innerHTML='<div class="msg s">Switched to: '+esc(d.project.name)+'</div>';
+    loadProjects();loadFiles();loadSessions();$('ta').focus();
+  }).catch(function(e){alert('Error: '+e.message)});
+}
+function addProject(){
+  var name=prompt('Project name:','New Project');if(!name)return;
+  var path=prompt('Project path (absolute):',A.replace('http://localhost:8765','').replace('http://localhost:','')||'C:\\projects\\'+name);if(!path)return;
+  fetch(A+'/api/projects',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:name,path:path})})
+  .then(function(r){return r.json()}).then(function(d){loadProjects()}).catch(function(e){alert('Error')});
+}
+
 function init(){
   fetch(A+'/api/models').then(function(r){return r.json()}).then(function(mm){
     $('chm').innerHTML=mm.map(function(m){return '<option>'+m+'</option>'}).join('');
@@ -329,7 +356,7 @@ function init(){
     if(ds){$('chm').value=ds;$('model-badge').textContent='DeepSeek'}
   }).catch(function(){});
   fetch(A+'/api/project').then(function(r){return r.json()}).then(function(p){$('prj').textContent=p.name}).catch(function(){});
-  loadFiles();loadSessions();loadSkills();cl();$('ta').focus();
+  loadProjects();loadFiles();loadSessions();loadSkills();cl();$('ta').focus();
 }
 function cl(){fetch(A+'/api/models').then(function(){$('old').className='g';$('ols').textContent='Ollama OK'}).catch(function(){$('old').className='r';$('ols').textContent='Ollama -';setTimeout(cl,3000)})}
 
