@@ -164,14 +164,6 @@ def build_tree(path, root=None):
     return result
 
 # ─── agent loop ──────────────────────────────────────────
-def _get_available_models():
-    try:
-        return [m["name"] for m in requests.get(f"{OLLAMA_URL}/api/tags", timeout=5).json().get("models", [])]
-    except:
-        return []
-
-_available_models = _get_available_models()
-
 def run_agent_loop(msgs, session_id):
     msgs = summarize_context(msgs)
     full = ""
@@ -193,9 +185,6 @@ def run_agent_loop(msgs, session_id):
             msgs = summarize_context(msgs)
 
         current_model = PLANNER_MODEL if it == 0 else MODEL
-        if it == 0 and PLANNER_MODEL not in _available_models:
-            log.info("PLANNER_MODEL %s not installed, using %s", PLANNER_MODEL, MODEL)
-            current_model = MODEL
         result = call_ollama(msgs, current_model)
         if isinstance(result, tuple):
             content, tokens_used = result
@@ -251,10 +240,6 @@ def run_agent_loop(msgs, session_id):
             name = tc.get("tool", "")
             raw_tc = dict(tc)
             tc.pop("tool", None)
-            # Aliases: models often call python/shell/terminal instead of bash
-            if name in ("python", "shell", "terminal", "cmd", "run"):
-                tc["cmd"] = tc.get("cmd", tc.get("command", ""))
-                name = "bash"
             if not name:
                 all_results.append(f"[tool: missing 'tool' key in block {idx+1}]")
                 continue

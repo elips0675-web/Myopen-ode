@@ -325,7 +325,6 @@ def _cache_key(messages, model):
     return hashlib.md5((model + body).encode()).hexdigest()[:24]
 
 def call_ollama(messages, model=None):
-    global LLM_CACHE
     m = model or MODEL
     if LLM_CACHE_TTL > 0:
         key = _cache_key(messages, m)
@@ -523,10 +522,7 @@ def execute_tool(name, args):
             if not p.exists(): return f"Error: {p} not found"
             old = args.get("old", ""); new = args.get("new", "")
             content = p.read_text("utf-8")
-            if old not in content:
-                lines = content.split("\n")
-                snippet = "\n".join(lines[:20]) if len(lines) <= 20 else "\n".join(lines[:10]) + "\n...\n" + "\n".join(lines[-5:])
-                return f"Error: text not found in {args['path']}.\nCurrent file content (first lines):\n```\n{snippet[:800]}\n```\nUse the EXACT text from the file."
+            if old not in content: return f"Error: text not found in {args['path']}"
             rel = str(p.relative_to(WORK_DIR)) if WORK_DIR in p.parents else str(p)
             backup(rel)
             p.write_text(content.replace(old, new), "utf-8")

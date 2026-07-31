@@ -131,6 +131,18 @@ npm i -g typescript-language-server  # JS/TS
 go install golang.org/x/tools/gopls@latest  # Go
 ```
 
+## Промпты для ИИ-архитектора
+
+Готовые системные промпты, превращающие любую LLM в эксперта по проектированию локальных ИИ-агентов:
+
+| Файл | Содержимое |
+|---|---|
+| `prompts/architect_ru.txt` | Полный промпт (русский) + сокращённый вариант |
+| `prompts/architect_en.txt` | Полный промпт (English) с архитектурным стеком и правилами |
+| `.agent_skills/architect.md` | Skill для самого агента — `@skill architect` перед сложными задачами по улучшению агента |
+
+Использование: вставить в Custom Instructions (Claude) / System Message (API) / как ТЗ фрилансеру / `.cursorrules`.
+
 ## Рекомендуемые модели
 
 | Модель | VRAM | Для чего |

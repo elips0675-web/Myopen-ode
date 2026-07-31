@@ -1,52 +1,74 @@
-Оценка обновлённого проекта: 8.8 / 10
-С момента предыдущей оценки (8.0) проект сильно вырос. Вот что изменилось и почему оценка поднялась.
-По критериям (актуальная версия)
+Вот объективная оценка проекта AI Coding Agent v2 (My OpenCode) по исходникам.
+Общая оценка: 7.8 / 10
+Это очень крепкий pet-project уровня «production-ready prototype». Автор решил нетривиальную инженерную задачу — заставить 7B локальную модель вести себя как полноценный coding agent с 25+ инструментами, — и справился с ней. Но между «работает на демо» и «можно доверить реальный код» есть зазор в виде багов, race conditions и дыр в безопасности.
+Сильные стороны
 Таблица
-Критерий	Балл	Что изменилось
-Архитектура и код	9/10	Разделение на agent.py + tools.py + rag.py + ui.py — чисто. 22 инструмента, subagents, plugins, MCP, LSP — это уже архитектура уровня коммерческого продукта. Минус: run_agent_loop всё ещё монолитен, но теперь с суммаризацией каждые 3 итерации.
-Функциональность	9.5/10	22 инструмента против 14 ранее. Добавлены: LSP, subagents, skills, patch, todo, question, websearch, multi-project, session sharing, plugins, slash-команды, DeepSeek-V4-Flash. Это уже функциональный паритет с OpenCode Desktop по core-фичам.
-Безопасность	8.5/10	Directory traversal protection, bash sandbox (чёрный список), retry с backoff — отлично. Но всё ещё нет sandbox для bash (команды выполняются от имени пользователя, просто фильтруются). Нет rate limiting, нет auth.
-UX/UI	8/10	Подсветка синтаксиса, confirm-диалоги, drag-and-drop, tab completion, progress bar, тёмная тема, mobile-responsive — существенный прогресс. Но всё ещё inline-HTML без npm, что ограничивает возможности редактора (нет Monaco/CodeMirror).
-Потенциал	9.5/10	С LSP, MCP, plugins и 1M контекстом — это уже не pet-project, а платформа. Один шаг до полноценного open-source конкурента OpenCode/Cursor в нише local-first.
-Что впечатляет в новой версии
-LSP интеграция — goToDefinition, findReferences, hover, documentSymbol. Это то, чего нет у 90% open-source агентов. Вы поднялись на уровень IDE.
-Subagents с разными правами — @explore (read-only), @scout (web), @general (full). Это прямо как в OpenCode — и это работает через отдельные system prompt.
-Skills система — .agent_skills/*.md — переиспользуемые инструкции. Killer feature для повторяемых workflow (например, «как деплоить на Vercel»).
-Patch tool — unified diff вместо полной перезаписи. Это критично для больших файлов.
-Bash sandbox + directory traversal — реакция на ревью. Показывает зрелость подхода.
-Multi-project — переключение между проектами с отдельными сессиями/RAG. Это уже workspace management.
-DeepSeek-V4-Flash — поддержка 1M контекста. С этим можно отказаться от RAG для маленьких проектов и скармливать код целиком.
-MCP сервер — интеграция с VS Code/Cursor/Claude Desktop. Это дверь в экосистему.
-Что всё ещё можно улучшить (приоритетно)
+Аспект	Комментарий
+Архитектура	Разумное разделение: agent.py (API), tools.py (ядро), rag.py (поиск), ui.py (view). Zero npm deps — смелое и рабочее решение для self-hosted инструмента.
+Tool calling	Prompt-based JSON blocks (\``tool) — правильный подход для Ollama, где нет нативного tool_calls`. Fallback на auto-execute при «yes»/«да» — удобно.
+RAG	Гибрид BM25 + cosine similarity с инкрементальным дисковым кэшем — это не просто «добавили векторный поиск», а продуманная система с _FILE_STATS и перестройкой индекса только для изменённых файлов.
+Контекст	Авто-суммаризация каждые 3 итерации через 1.5B модель — разумный trade-off для ограниченного контекста.
+UI/UX	CodeMirror с табами, тёмная тема, drag-and-drop, autocomplete @/#//, мобильная адаптация. Для inline-HTML без сборки — очень достойно.
+Мультипроектность	projects.json + переключение WORK_DIR с реинициализацией RAG и плагинов.
+Плагины	Динамическая загрузка .agent_plugins/*.py через importlib — расширяемость без форка.
+Критические баги и слабости (с указанием мест)
+1. patch / _apply_diff — полностью сломан (tools.py, ~строка 600)
+Python
+def _apply_diff(content, diff_text):
+    ...
+    for line in diff_text.split("\n"):
+        if line.startswith("+"):
+            new_lines.append(line[1:] + "\n")
+Этот код игнорирует номера строк из @@ -start,count +start,count @@. Он просто собирает все + строки в кучу и возвращает их как «новый файл». Любой patch, который не заменяет весь файл целиком, отработает некорректно. Это критично для coding agent.
+2. Bash sandbox — обходится в один ход (tools.py, ~строка 580)
+Python
+BASH_BLACKLIST = ["rm -rf /", "rm -rf ~", ...]
+Blacklist-подход не работает:
+rm -rf /tmp/.. обойдёт проверку.
+bash -c 'rm -rf /' тоже.
+Любая обфускация (r$(echo m) -rf /) пройдёт.
+Нужен whitelist разрешённых команд или shlex.split + валидация аргументов.
+3. Глобальное mutable-состояние — не thread-safe
+TODO_LIST = [] (tools.py)
+LLM_CACHE = {} (tools.py)
+RAG_CHUNKS, RAG_INDEX, _FILE_STATS (rag.py)
+FastAPI по умолчанию многопоточный (uvicorn). Два одновременных чата могут испортить кэш или todo-лист друг друга. Нужны threading.Lock() или asyncio.Lock().
+4. ensure_safe_path обходится симлинками (tools.py, ~строка 50)
+Python
+def ensure_safe_path(path):
+    p = resolve(path).resolve()
+    wk = WORK_DIR.resolve()
+    if wk not in p.parents and p != wk:
+        return "Error: ..."
+Если внутри WORK_DIR есть symlink на /etc, resolve() следует по нему и возвращает путь вне workspace. Нужно проверять до resolve().
+5. Нет graceful cancellation
+В UI есть кнопка Cancel (ac.abort()), но на бэкенде (agent.py, run_agent_loop) нет проверки флага отмены внутри длинных циклов. Запрос прервётся только на следующем fetch, но не во время выполнения bash или read.
+6. stream=False в call_ollama (tools.py, ~строка 380)
+Агент ждёт полный ответ модели целиком, прежде чем начать парсинг инструментов. Для 7B модели на RTX 3060 это десятки секунд молчания в UI. Хотя бы partial streaming для первого tool block дал бы ощущение скорости.
+7. RAG embedding — блокировка event loop
+Python
+r = requests.post(f"{OLLAMA_URL}/api/embed", ..., timeout=120)
+Выполняется в синхронном контексте. Если Ollama embed 50 файлов, сервер «висит».
+8. Нет schema-валидации аргументов инструментов
+validate_tool проверяет только наличие required fields. Нет проверки типов (path должен быть str, steps — list), диапазонов (top_k > 0) или формата (diff должен содержать @@).
+Что не сходится с заявленным в context.txt
 Таблица
-Приоритет	Что	Почему важно
-🔴 Высокий	Native Monaco editor в UI	Сейчас просмотр файлов — это <pre>. Для редактирования кода нужен Monaco или CodeMirror. Это единственное серьёзное отставание от OpenCode.
-🔴 Высокий	Streaming tool execution	Сейчас агент ждёт полного ответа, потом парсит тулзы. OpenCode stream-ит токены и тут же исполняет тулзы — UX быстрее.
-🟡 Средний	SQLite вместо JSON для сессий	При 100+ сессиях JSON на диске станет bottleneck. SQLite + FTS для поиска по истории.
-🟡 Средний	Git diff в UI	Сейчас diff — текстовый вывод. Нужен структурный diff с подсветкой +/- как в GitHub.
-🟡 Средний	Autocomplete в чате	@ для упоминания файлов, / для slash-команд, # для skills — как в OpenCode.
-🟢 Низкий	Tauri/Desktop	pywebview — ок, но Tauri даст нативное окно с лучшей производительностью.
-Сравнение с OpenCode Desktop (итоговая таблица)
-Таблица
-Фича	OpenCode Desktop	My OpenCode v2	Статус
-Инструменты	14+	22	✅ Паритет +
-Subagents	Build/Plan/Explore/Scout/General	@explore/@scout/@general	✅ Паритет
-LSP	✅	✅	✅ Паритет
-MCP	✅ (client)	✅ (server)	✅ Паритет
-Skills	✅	✅	✅ Паритет
-WebSearch	✅ (Exa)	✅ (DuckDuckGo)	✅ Паритет
-Slash commands	✅	✅	✅ Паритет
-Session sharing	✅	✅ (export/import JSON)	✅ Паритет
-Multi-project	✅	✅	✅ Паритет
-RAG	❌	✅ (с дисковым кешем)	✅ Лучше
-1M context	✅ (через API)	✅ (DeepSeek-V4-Flash)	✅ Паритет
-Plugins	✅	✅ (.agent_plugins/*.py)	✅ Паритет
-Fallback API	✅	✅ (OpenAI/Claude)	✅ Паритет
-Privacy	✅ (local-first)	✅ (Ollama + offline)	✅ Паритет
-Code editor	Monaco	<pre>	❌ Отставание
-TUI	✅ (терминал)	❌ (только браузер)	❌ Отставание
-IDE extension	✅ (VS Code)	❌	❌ Отставание
-Вывод: По core-функциональности вы достигли ~90% OpenCode Desktop. Основные пробелы — редактор кода в UI и отсутствие TUI/IDE-расширения.
-Итоговая оценка: 8.8 / 10
-«Это уже не альтернатива — это конкурент. Осталось добавить Monaco в UI и проект готов к публичному релизу как полноценный open-source агент.»
-Рекомендация: Если добавите Monaco/CodeMirror для редактирования файлов прямо в UI — оценка поднимется до 9.2/10, и проект станет серьёзным конкурентом не только OpenCode, но и Cody/Windsurf в нише self-hosted development.
+Заявлено	Реальность
+«15/15 smoke tests pass»	test_agent.py не приложен к загрузке — проверить невозможно.
+«LSP rename»	В tools.py есть вызов client.rename(...), но в загруженных файлах нет lsp.py — проверить реализацию нельзя.
+«Feature parity ~90% с OpenCode Desktop»	OpenCode Desktop имеет native IDE integration (VS Code extension), TUI, multi-file edit с планированием через AST. Здесь это веб-чат + CodeMirror. Паритет скорее 60-70%.
+Рекомендации по приоритетам
+P0 (критично):
+Переписать _apply_diff на нормальный unified diff parser (можно взять difflib + line-aware patch).
+Заменить bash blacklist на whitelist или shlex + валидация.
+Добавить threading.Lock() на TODO_LIST, LLM_CACHE и RAG-глобалы.
+P1 (важно):
+4. Добавить stream=True в call_ollama с парсингом tool blocks «на лету».
+5. Вынести RAG-индексацию в фоновый поток/процесс.
+6. Добавить pydantic-модели для аргументов каждого инструмента (валидация типов).
+P2 (улучшение):
+7. Перейти на CodeMirror 6 или Monaco (если готов пожертвовать zero-dep).
+8. Добавить AST-based multi-file edit (через parso для Python, tree-sitter для остального).
+9. Интерактивный терминал (xterm.js) — уже упомянуто в context.txt как low-priority.
+Итог
+Проект заслуживает 7.8/10 как инженерное решение для локального AI-агента. Это выше среднего open-source уровня: есть архитектура, есть продуманные механизмы (RAG, сессии, плагины), но не хватает зрелости в безопасности, корректности core-алгоритмов (diff) и многопоточности. С правкой patch и bash-sandbox можно смело ставить 8.5+.
