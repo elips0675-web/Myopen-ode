@@ -25,7 +25,7 @@
 - [x] WebSearch (DuckDuckGo)
 - [x] Async rewrite
 - [x] CI/CD
-- [x] 24 smoke-тестов (включая интеграционные с мок-моделью и SQLite-сессии)
+- [x] 27 smoke-тестов (включая интеграционные с мок-моделью, SQLite-сессии, patch line-aware, bash-фильтр, thread-safety)
 - [x] Mobile-responsive sidebar
 - [x] Desktop App (pywebview)
 - [x] Плагины (.agent_plugins/)
@@ -45,9 +45,10 @@
 
 ## Безопасность
 - [x] Directory traversal protection
-- [x] Bash sandbox (чёрный список)
+- [x] Bash sandbox (чёрный список + нормализация пробелов/кавычек + вложенные интерпретаторы bash -c / cmd /c / powershell -c)
 - [x] Retry с exponential backoff
 - [x] Path validation
+- [x] Thread-safety: лок на LLM-кеш, todo-список, RAG-индекс (RLock)
 
 ## Производительность
 - [x] eval_count токенов
@@ -65,7 +66,7 @@
 ## Не сделано (низкий приоритет)
 - [ ] Native tool calling (когда Ollama поддержит)
 - [ ] Desktop App (Tauri — pywebview уже работает)
-- [ ] Docker-изоляция bash
+- [ ] Docker-изоляция bash (whitelist-подход — следующий шаг по оценке Kimi)
 - [ ] GPU embeddings (Ollama уже на GPU — фактически не требуется)
 - [ ] deepseek-coder-v2:16b — пулл в фоне (для стабильного кодинга на 12GB)
 - [ ] Полнотекстовый поиск по сессиям в UI

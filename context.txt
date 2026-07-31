@@ -68,7 +68,7 @@ plan      — multi-step plan, user confirms
 search    — RAG hybrid search (BM25 + semantic)
 question  — ask user with answer buttons
 skill     — load .agent_skills/*.md instruction
-patch     — apply unified diff to file
+patch     — apply unified diff (line-aware hunks, mismatch -> error, no corruption)
 task      — subagents: @explore (read-only), @scout (web), @general (full)
 todo      — todo list inside session (add/complete/list)
 lsp       — definition/references/hover/symbols/rename/completion
@@ -94,7 +94,8 @@ UI FEATURES
 SAFETY
 ------
 - Directory traversal protection (read/write/edit/patch outside WORK_DIR blocked)
-- Bash sandbox: blacklist of dangerous commands
+- Bash sandbox: blacklist of dangerous commands (normalized whitespace/quotes,
+  recursive check of nested interpreters: bash -c / cmd /c / powershell -c)
 - Confirmation before write/edit/bash/commit/undo (with UI buttons)
 - Retry with exponential backoff (3 attempts)
 - Path validation for glob/grep/list
@@ -129,7 +130,7 @@ RUNNING
 -------
 python agent.py        ->  http://localhost:8765/
 python desktop.py      ->  native pywebview window
-python test_agent.py   ->  24/24 smoke tests pass
+python test_agent.py   ->  27/27 smoke tests pass
 python mcp_server.py   ->  MCP stdio server for IDEs
 
 STATUS
@@ -147,7 +148,10 @@ streaming tool execution, hybrid RAG, incremental cache, LLM TTL cache, Swagger.
 Fixed real bugs caught by tests: (1) RAG never reindexed changed files at runtime
 (RAG_DIRTY stayed False); (2) validate_tool rejected empty-schema tools (list/diff/commit/deps)
 as unknown — `if not schema` on {} — agent could never call them.
+(3) patch tool: _apply_diff ignored @@ line numbers and concatenated + lines; rewritten
+with line-aware hunks (bottom-up apply, context matching), returns error on mismatch instead of corruption.
 Sessions now in SQLite (sessions.db) with one-time migration from legacy JSON files.
+Thread-safety: locks around LLM cache, todo list, RAG index (RLock) — safe under concurrent uvicorn requests.
 
 Remaining low-priority: native tool calling (needs Ollama), Docker bash isolation,
 Tauri desktop, deepseek-coder-v2:16b pull (in progress).

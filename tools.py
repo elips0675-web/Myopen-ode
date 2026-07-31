@@ -1,6 +1,6 @@
 """Tool definitions and core agent logic — extracted from agent.py."""
 
-import json, os, subprocess, glob, re, shutil, hashlib, textwrap, urllib.parse, time, logging, importlib.util
+import json, os, subprocess, glob, re, shutil, hashlib, textwrap, urllib.parse, time, logging, importlib.util, threading
 from pathlib import Path
 from datetime import datetime
 import requests
@@ -26,6 +26,11 @@ FLASH_PROVIDERS = {
     "together": "https://api.together.xyz/v1",
     "groq": "https://api.groq.com/openai/v1",
 }
+
+# Thread safety (uvicorn is multi-threaded)
+LLM_CACHE_LOCK = threading.Lock()
+TODO_LOCK = threading.Lock()
+GLOBAL_LOCK = threading.RLock()
 
 def init_config(**kw):
     global OLLAMA_URL, MODEL, PLANNER_MODEL, WORK_DIR, EMBED_MODEL, NO_CONFIRM, MAX_TOKENS, OPENAI_KEY, ANTHROPIC_KEY, FALLBACK_MODEL
@@ -331,10 +336,11 @@ def call_ollama(messages, model=None):
     m = model or MODEL
     if LLM_CACHE_TTL > 0:
         key = _cache_key(messages, m)
-        hit = LLM_CACHE.get(key)
-        if hit and time.time() - hit[0] < LLM_CACHE_TTL:
-            log.info("LLM cache hit (TTL=%ds)", LLM_CACHE_TTL)
-            return hit[1], hit[2]
+        with LLM_CACHE_LOCK:
+            hit = LLM_CACHE.get(key)
+            if hit and time.time() - hit[0] < LLM_CACHE_TTL:
+                log.info("LLM cache hit (TTL=%ds)", LLM_CACHE_TTL)
+                return hit[1], hit[2]
     max_retries = 3
     for attempt in range(max_retries):
         try:
@@ -350,10 +356,11 @@ def call_ollama(messages, model=None):
             msg = re.sub(r'<think>.*?</think>', '', msg, flags=re.DOTALL)
             if not msg: msg = "No response from model"
             if LLM_CACHE_TTL > 0:
-                LLM_CACHE[key] = (time.time(), msg, tokens_used)
-                if len(LLM_CACHE) > 100:
-                    now = time.time()
-                    LLM_CACHE = {k: v for k, v in LLM_CACHE.items() if now - v[0] < LLM_CACHE_TTL}
+                with LLM_CACHE_LOCK:
+                    LLM_CACHE[key] = (time.time(), msg, tokens_used)
+                    if len(LLM_CACHE) > 100:
+                        now = time.time()
+                        LLM_CACHE = {k: v for k, v in LLM_CACHE.items() if now - v[0] < LLM_CACHE_TTL}
             return msg, tokens_used
         except Exception as e:
             log.warning("Ollama attempt %d/%d failed: %s", attempt+1, max_retries, e)
@@ -428,53 +435,91 @@ def extract_pending_tool(msgs):
 
 # ─── bash sandbox ─────────────────────────────────────────
 BASH_BLACKLIST = [
-    "rm -rf /", "rm -rf ~", "rm -rf .", "rm -rf *", "rm -rf --no-preserve-root",
-    "mkfs.", "format ", "dd if=", "dd of=", ":(){ :|:& };:", "fork bomb",
-    "> /dev/sda", "| sh", "| bash", "curl ", "wget ", "chmod 777",
-    "sudo ", "su ", "passwd",
+    "rm -rf /", "rm -rf --no-preserve-root", "rm -rf ~", "rm -rf /tmp/",
+    "rm -rf c:\\", "rm -rf .", "rm -rf *", "rm -rf",
+    "mkfs", "format ", "dd if=", "dd of=", ":(){ :|:& };:", "fork bomb",
+    "> /dev/sda", "> /dev/sdb", "| sh", "| bash", "curl ", "wget ", "chmod 777",
+    "sudo ", "su ", "passwd", "del /f /s", "rmdir /s", "rd /s", "del /q /s",
+    "shutdown", "taskkill /f", "net user",
 ]
 def check_bash(cmd):
-    cmd_lower = cmd.lower()
-    for dangerous in BASH_BLACKLIST:
-        if dangerous in cmd_lower:
-            return f"Blocked: command matching blacklist pattern '{dangerous}' is not allowed"
+    """Block dangerous shell commands. Normalizes whitespace/quotes and
+    recursively checks nested interpreters (bash -c, cmd /c, powershell -c)."""
+    norm = " ".join(cmd.lower().split())
+    stripped = norm.replace('"', "").replace("'", "").replace("`", "").replace("\\", "")
+    checks = [norm, stripped]
+    for m in re.finditer(r"(?:bash|sh|cmd|powershell|pwsh)\s+(?:-c|-command)\s+[\"']?([^\"']+)", norm):
+        checks.append(" ".join(m.group(1).split()))
+    for c in checks:
+        for dangerous in BASH_BLACKLIST:
+            if dangerous in c:
+                return f"Blocked: command matching blacklist pattern '{dangerous}' is not allowed"
     return None
 
 # ─── unified diff parser ──────────────────────────────────
-def _apply_diff(content, diff_text):
-    """Apply a unified diff to content and return the result."""
-    import difflib
-    lines = content.splitlines(keepends=True)
-    old_lines = []
-    new_lines = []
-    in_hunk = False
+def _parse_hunks(diff_text):
+    """Parse unified diff into hunks: [{old_start, lines: [op lines]}]."""
+    hunks = []
+    cur = None
     for line in diff_text.split("\n"):
-        if line.startswith("--- "): continue
-        if line.startswith("+++ "): continue
-        if line.startswith("@@"):
-            if in_hunk and new_lines:
-                content = "".join(new_lines)
-                lines = content.splitlines(keepends=True)
-                new_lines = []
-            in_hunk = True
-            parts = line.split(" ")
-            if len(parts) >= 2:
-                try:
-                    old_start = int(parts[1].split(",")[0].lstrip("-"))
-                except: old_start = 1
-            continue
-        if in_hunk:
-            if line.startswith("+") and not line.startswith("+++"):
-                new_lines.append(line[1:] + "\n")
-            elif line.startswith("-") and not line.startswith("---"):
-                pass  # skip removed lines
+        if line.startswith("@@") and not line.startswith("@@@"):
+            m = re.match(r"@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@", line)
+            if not m:
+                cur = None
+                continue
+            cur = {"old_start": int(m.group(1)), "lines": []}
+            hunks.append(cur)
+        elif cur is not None:
+            cur["lines"].append(line)
+    return hunks
+
+def _apply_diff(content, diff_text):
+    """Apply a unified diff to content using hunk line numbers.
+    Hunks are applied bottom-up so positions never shift. Returns None on mismatch."""
+    lines = content.splitlines(keepends=True)
+    hunks = _parse_hunks(diff_text)
+    if not hunks:
+        return None
+    for h in reversed(hunks):
+        old_start = h["old_start"]  # 1-based
+        if old_start < 1 or old_start > len(lines) + 1:
+            return None
+        ops = []
+        for line in h["lines"]:
+            if line.startswith("+"):
+                ops.append(("+", line[1:] + "\n"))
+            elif line.startswith("-"):
+                ops.append(("-", line[1:] + "\n"))
             elif line.startswith(" "):
-                new_lines.append(line[1:] + "\n")
+                ops.append((" ", line[1:] + "\n"))
+            elif line.startswith("\\"):
+                continue  # "\ No newline at end of file"
+            elif line.strip() == "":
+                continue  # trailing separator from split("\n")
             else:
-                new_lines.append(line + "\n")
-    if in_hunk and new_lines:
-        content = "".join(new_lines)
-    return content
+                return None
+        new_content = lines[:old_start - 1]
+        i = old_start - 1
+        ok = True
+        for op, text in ops:
+            if op == " ":
+                if i >= len(lines) or lines[i] != text:
+                    ok = False
+                    break
+                new_content.append(lines[i])
+                i += 1
+            elif op == "-":
+                if i >= len(lines):
+                    ok = False
+                    break
+                i += 1
+            elif op == "+":
+                new_content.append(text)
+        if not ok:
+            return None
+        new_content.extend(lines[i:])
+        lines = new_content
+    return "".join(lines)
 
 def _validate_patch(diff_text):
     """Validate unified diff format."""
@@ -664,8 +709,8 @@ def _execute_tool_inner(name, args):
                 return "Error: diff field is required"
             content = pp.read_text("utf-8")
             result = _apply_diff(content, diff_text)
-            if result.startswith("Error"):
-                return result
+            if result is None:
+                return "Error: patch does not match file content (hunk context mismatch)"
             backup(str(pp))
             pp.write_text(result, "utf-8")
             v = verify_file(str(pp))
@@ -687,20 +732,25 @@ def _execute_tool_inner(name, args):
             items = args.get("items", [])
             idx = args.get("index", None)
             if action == "add":
-                for item in (items if isinstance(items, list) else [items]):
-                    TODO_LIST.append({"text": item, "done": False})
-                return f"[TODO] Added {len(items) if isinstance(items, list) else 1} item(s). Total: {len(TODO_LIST)}"
+                with TODO_LOCK:
+                    for item in (items if isinstance(items, list) else [items]):
+                        TODO_LIST.append({"text": item, "done": False})
+                    n = len(TODO_LIST)
+                return f"[TODO] Added {len(items) if isinstance(items, list) else 1} item(s). Total: {n}"
             elif action == "complete":
                 if idx is None: return "[TODO] Need index"
-                if idx < 1 or idx > len(TODO_LIST): return f"[TODO] Invalid index {idx}"
-                TODO_LIST[idx-1]["done"] = True
-                return f"[TODO] Completed: {TODO_LIST[idx-1]['text']}"
+                with TODO_LOCK:
+                    if idx < 1 or idx > len(TODO_LIST): return f"[TODO] Invalid index {idx}"
+                    TODO_LIST[idx-1]["done"] = True
+                    text = TODO_LIST[idx-1]['text']
+                return f"[TODO] Completed: {text}"
             elif action == "list":
-                if not TODO_LIST: return "[TODO] List is empty"
-                lines = []
-                for i, t in enumerate(TODO_LIST):
-                    mark = "✅" if t["done"] else "⬜"
-                    lines.append(f"  {i+1}. {mark} {t['text']}")
+                with TODO_LOCK:
+                    if not TODO_LIST: return "[TODO] List is empty"
+                    lines = []
+                    for i, t in enumerate(TODO_LIST):
+                        mark = "✅" if t["done"] else "⬜"
+                        lines.append(f"  {i+1}. {mark} {t['text']}")
                 return "[TODO]\n" + "\n".join(lines)
             return f"[TODO] Unknown action: {action}"
         elif name == "lsp":

@@ -1,6 +1,6 @@
 """RAG - semantic code search via Ollama embeddings with incremental disk cache + hybrid BM25."""
 
-import json, os, glob, logging, hashlib, math, re
+import json, os, glob, logging, hashlib, math, re, threading
 from pathlib import Path
 import requests
 
@@ -17,6 +17,7 @@ _FILE_STATS = {}   # rel path -> (mtime, size) from last index
 BM25_DF = {}       # term -> doc frequency
 BM25_N = 0         # doc count
 BM25_AVGLEN = 1.0
+RAG_LOCK = threading.RLock()  # thread safety (uvicorn multi-threaded)
 
 EXT_PATTERNS = [
     ("**/*.py", 200), ("**/*.js", 100), ("**/*.ts", 100), ("**/*.go", 50),
@@ -115,37 +116,38 @@ def bm25_score(query, doc_idx):
 
 def rag_index():
     global RAG_INDEX, RAG_CHUNKS, RAG_DIRTY
-    files = _scan_files()
-    changed, removed = [], []
-    for rel, mtime, size in files:
-        old = _FILE_STATS.get(rel)
-        if old != (mtime, size): changed.append((rel, mtime, size))
-    removed = [rel for rel in _FILE_STATS if rel not in {f[0] for f in files}]
-
-    if not RAG_CHUNKS:
-        # cold start: load everything from file caches
-        RAG_CHUNKS = []
+    with RAG_LOCK:
+        files = _scan_files()
+        changed, removed = [], []
         for rel, mtime, size in files:
-            chunks = _load_file_cache(rel, mtime, size)
-            if chunks:
-                RAG_CHUNKS += chunks
-                _FILE_STATS[rel] = (mtime, size)
+            old = _FILE_STATS.get(rel)
+            if old != (mtime, size): changed.append((rel, mtime, size))
+        removed = [rel for rel in _FILE_STATS if rel not in {f[0] for f in files}]
 
-    if removed or changed:
-        # rebuild: drop old entries for changed/removed files, re-embed changed
-        keep = [c for c in RAG_CHUNKS if c["file"] not in changed and c["file"] not in removed]
-        RAG_CHUNKS = keep
-        for rel in removed:
-            _FILE_STATS.pop(rel, None)
-        for rel, mtime, size in changed:
-            _index_file(rel, mtime, size)
+        if not RAG_CHUNKS:
+            # cold start: load everything from file caches
+            RAG_CHUNKS = []
+            for rel, mtime, size in files:
+                chunks = _load_file_cache(rel, mtime, size)
+                if chunks:
+                    RAG_CHUNKS += chunks
+                    _FILE_STATS[rel] = (mtime, size)
 
-    if not RAG_CHUNKS: return
-    if not changed and not removed and RAG_INDEX and not RAG_DIRTY:
-        return  # nothing changed since last index
-    _build_bm25()
-    RAG_INDEX = [c["emb"] for c in RAG_CHUNKS]
-    RAG_DIRTY = False
+        if removed or changed:
+            # rebuild: drop old entries for changed/removed files, re-embed changed
+            keep = [c for c in RAG_CHUNKS if c["file"] not in changed and c["file"] not in removed]
+            RAG_CHUNKS = keep
+            for rel in removed:
+                _FILE_STATS.pop(rel, None)
+            for rel, mtime, size in changed:
+                _index_file(rel, mtime, size)
+
+        if not RAG_CHUNKS: return
+        if not changed and not removed and RAG_INDEX and not RAG_DIRTY:
+            return  # nothing changed since last index
+        _build_bm25()
+        RAG_INDEX = [c["emb"] for c in RAG_CHUNKS]
+        RAG_DIRTY = False
 
 def _index_file(rel, mtime, size):
     global RAG_CHUNKS
@@ -199,26 +201,27 @@ def _cos_sim(a, b):
     return dot / (na * nb + 1e-10)
 
 def rag_search(query, top_k=5, hybrid=True):
-    rag_index()
-    if RAG_INDEX is None or not RAG_CHUNKS: return "RAG not available"
-    try:
-        r = requests.post(f"{OLLAMA_URL}/api/embed", json={
-            "model": EMBED_MODEL, "input": [query]
-        }, timeout=30)
-        q_emb = r.json().get("embeddings", [[]])[0]
-        if not q_emb: return "No embedding for query"
-        sem = [(_cos_sim(q_emb, emb), i) for i, emb in enumerate(RAG_INDEX)]
-        if hybrid:
-            bm = [bm25_score(query, i) for i in range(len(RAG_CHUNKS))]
-            bmax = max(bm) if bm and max(bm) > 0 else 1.0
-            scores = [((sem[i][0] + 0.4 * (bm[i] / bmax)), i) for i in range(len(sem))]
-        else:
-            scores = sem
-        scores.sort(key=lambda x: -x[0])
-        results = []
-        for score, idx in scores[:top_k]:
-            c = RAG_CHUNKS[idx]
-            results.append(f"[{score:.2f}] {c['file']}:{c['line']}\n{c['text'][:300]}")
-        return "\n---\n".join(results)
-    except Exception as e:
-        return f"RAG search error: {e}"
+    with RAG_LOCK:
+        rag_index()
+        if RAG_INDEX is None or not RAG_CHUNKS: return "RAG not available"
+        try:
+            r = requests.post(f"{OLLAMA_URL}/api/embed", json={
+                "model": EMBED_MODEL, "input": [query]
+            }, timeout=30)
+            q_emb = r.json().get("embeddings", [[]])[0]
+            if not q_emb: return "No embedding for query"
+            sem = [(_cos_sim(q_emb, emb), i) for i, emb in enumerate(RAG_INDEX)]
+            if hybrid:
+                bm = [bm25_score(query, i) for i in range(len(RAG_CHUNKS))]
+                bmax = max(bm) if bm and max(bm) > 0 else 1.0
+                scores = [((sem[i][0] + 0.4 * (bm[i] / bmax)), i) for i in range(len(sem))]
+            else:
+                scores = sem
+            scores.sort(key=lambda x: -x[0])
+            results = []
+            for score, idx in scores[:top_k]:
+                c = RAG_CHUNKS[idx]
+                results.append(f"[{score:.2f}] {c['file']}:{c['line']}\n{c['text'][:300]}")
+            return "\n---\n".join(results)
+        except Exception as e:
+            return f"RAG search error: {e}"

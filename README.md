@@ -45,7 +45,7 @@
 - ✅ **История сообщений** — стрелки ↑/↓ в пустом поле
 - ✅ **Question tool** — агент задаёт вопросы с вариантами ответа, пользователь выбирает кнопкой
 - ✅ **Skills система** — `.agent_skills/*.md` — переиспользуемые инструкции для агента
-- ✅ **Patch tool** — применение unified diff к файлам
+- ✅ **Patch tool** — применение unified diff (line-aware хунки по номерам `@@`, при несовпадении — ошибка, файл не портится)
 - ✅ **Session sharing** — экспорт/импорт сессий через JSON
 - ✅ **Subagents** — @explore (read-only), @scout (web), @general (full access) с разными правами
 - ✅ **Multi-project** — переключение между проектами из UI, отдельные сессии/файлы/RAG на проект
@@ -64,6 +64,15 @@
 - ✅ **Streaming tool execution** — SSE-события `tool`/`status` в реальном времени при работе агента (вызовы тулов видны в чате до финального ответа)
 - ✅ **Action audit** — `.agent_audit.log` — журнал всех вызовов инструментов
 - ✅ **DeepSeek-V4-Flash** — поддержка 1M контекста через FLASH_PROVIDER/FLASH_API_KEY
+- ✅ **Thread-safety** — лок на LLM-кеш, todo-список и RAG-индекс (RLock): корректная работа при конкурентных запросах uvicorn
+
+## Тесты
+
+```bash
+python test_agent.py   # 27/27 smoke-тестов
+```
+
+Интеграционные тесты с мок-моделью (agent loop + tool calls + live events), SQLite-сессии (CRUD + миграция из JSON), patch line-aware (мульти-хунки, mismatch → None), bash-фильтр (вложенные `bash -c` / `cmd /c`), thread-safety todo, RAG инкрементальный кеш, аудит, терминал, deps.
 
 ```bash
 ollama pull deepseek-r1:7b
@@ -191,7 +200,7 @@ Local AI coding agent powered by Ollama. Free, private, offline alternative to C
 
 ### Security
 - ✅ **Directory traversal protection** — read/write/edit outside WORK_DIR blocked
-- ✅ **Bash sandbox** — blacklist of dangerous commands (rm -rf /, mkfs, dd, curl | sh, etc.)
+- ✅ **Bash sandbox** — blacklist of dangerous commands (rm -rf, mkfs, dd, curl | sh, etc.) with whitespace/quote normalization and recursive check of nested interpreters (`bash -c`, `cmd /c`, `powershell -c`)
 - ✅ **Exponential backoff retry** on Ollama failure (3 attempts)
 
 ### Performance
@@ -208,7 +217,7 @@ Local AI coding agent powered by Ollama. Free, private, offline alternative to C
 - ✅ **Message history** — ↑/↓ arrows in empty input
 - ✅ **Question tool** — agent asks questions with answer buttons
 - ✅ **Skills system** — `.agent_skills/*.md` — reusable instructions for the agent
-- ✅ **Patch tool** — apply unified diffs to files
+- ✅ **Patch tool** — apply unified diffs (line-aware hunks from `@@` numbers, mismatch → clear error, no file corruption)
 - ✅ **Session sharing** — export/import sessions as JSON
 - ✅ **Subagents** — @explore (read-only), @scout (web), @general (full access) with different permissions
 - ✅ **Multi-project** — switch between projects from UI, separate sessions/files/RAG per project
@@ -223,6 +232,14 @@ Local AI coding agent powered by Ollama. Free, private, offline alternative to C
 - ✅ **testgen** — auto-generates unit tests from code (Python, JS/TS)
 - ✅ **db_query** — SQL queries against local SQLite DB
 - ✅ **DeepSeek-V4-Flash** — 1M context support via FLASH_PROVIDER/FLASH_API_KEY
+
+### Tests
+
+```bash
+python test_agent.py   # 27/27 smoke tests
+```
+
+Integration tests with mock model (agent loop + tool calls + live SSE events), SQLite sessions (CRUD + JSON migration), line-aware patch (multi-hunk, mismatch → None), bash filter (nested `bash -c` / `cmd /c`), todo thread-safety, incremental RAG cache, audit, terminal, deps.
 
 ```bash
 ollama pull deepseek-r1:7b
