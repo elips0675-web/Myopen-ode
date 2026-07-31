@@ -1,6 +1,6 @@
 """LSP client — JSON-RPC communication with language servers."""
 
-import json, os, subprocess, threading, logging, time
+import json, os, subprocess, threading, logging, time, re
 from pathlib import Path
 
 log = logging.getLogger('lsp')
@@ -15,6 +15,56 @@ LSP_SERVERS = {
     ".rs":  ["rust-analyzer"],
     ".java": ["java", "-jar", "eclipse.jdt.ls"],
 }
+
+KEYWORDS = {
+    ".py": ["def", "class", "return", "import", "from", "if", "elif", "else", "for", "while",
+            "with", "try", "except", "finally", "lambda", "yield", "global", "nonlocal",
+            "pass", "break", "continue", "raise", "assert", "del", "in", "is", "not", "and", "or"],
+    ".js": ["function", "const", "let", "var", "return", "if", "else", "for", "while", "do",
+            "switch", "case", "break", "continue", "new", "delete", "typeof", "instanceof",
+            "class", "extends", "super", "this", "async", "await", "import", "export", "from",
+            "try", "catch", "finally", "throw", "yield", "null", "undefined", "true", "false"],
+    ".ts": ["function", "const", "let", "var", "return", "if", "else", "for", "while", "do",
+            "switch", "case", "break", "continue", "new", "typeof", "class", "extends", "super",
+            "this", "async", "await", "import", "export", "from", "interface", "type", "enum",
+            "implements", "public", "private", "protected", "readonly", "static", "try", "catch",
+            "finally", "throw", "yield", "null", "undefined", "true", "false"],
+    ".go": ["func", "type", "struct", "interface", "package", "import", "var", "const", "return",
+            "if", "else", "for", "range", "switch", "case", "default", "go", "defer", "chan",
+            "map", "select", "break", "continue", "fallthrough", "make", "new", "len", "cap"],
+    ".rs": ["fn", "let", "mut", "const", "struct", "enum", "impl", "trait", "pub", "use", "mod",
+            "crate", "self", "super", "match", "if", "else", "for", "while", "loop", "return",
+            "move", "ref", "async", "await", "dyn", "where", "type", "unsafe", "true", "false"],
+    ".java": ["public", "private", "protected", "class", "interface", "enum", "extends",
+              "implements", "static", "final", "void", "int", "long", "double", "boolean",
+              "String", "new", "return", "if", "else", "for", "while", "switch", "case",
+              "break", "continue", "try", "catch", "finally", "throw", "throws", "import",
+              "package", "this", "super", "null", "true", "false"],
+}
+
+def token_completions(path, text, line, character, limit=30):
+    """LSP-free fallback: suggest identifiers + keywords by prefix."""
+    lines = (text or "").split("\n")
+    if line >= len(lines): line = len(lines) - 1
+    current = lines[line][:character] if line >= 0 else ""
+    m = re.findall(r"[\w_]+$", current)
+    prefix = m[0] if m else ""
+    if not prefix:
+        return []
+    ext = Path(path).suffix if path else ""
+    freq = {}
+    for w in re.findall(r"[A-Za-z_][A-Za-z0-9_]*", text or ""):
+        freq[w] = freq.get(w, 0) + 1
+    for kw in KEYWORDS.get(ext, []):
+        freq.setdefault(kw, 0)
+    items = []
+    for w, f in freq.items():
+        if w.startswith(prefix) and w != prefix:
+            detail = "keyword" if w in KEYWORDS.get(ext, []) else (f"×{f}" if f > 1 else "")
+            items.append({"label": w, "kind": 14 if w in KEYWORDS.get(ext, []) else 6,
+                          "detail": detail, "insertText": w})
+    items.sort(key=lambda x: (x["kind"] == 6, -len(x["detail"]), x["label"]))
+    return items[:limit]
 
 class LSPClient:
     def __init__(self, workspace):

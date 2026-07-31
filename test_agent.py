@@ -159,12 +159,67 @@ def test_rag_cache_incremental():
     shutil.rmtree(rdir, ignore_errors=True)
     print("  [OK] RAG incremental cache")
 
+def test_agent_loop_tool_call():
+    """Integration: loop parses tool block, executes it, then returns final text."""
+    import agent as agent_mod
+    calls = {"n": 0}
+    def mock_ollama(msgs, model):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            return 'I will list files.\n```tool\n{"tool": "list", "path": "."}\n```', 10
+        return "Done after listing.", 5
+    original = agent_mod.call_ollama
+    agent_mod.call_ollama = mock_ollama
+    try:
+        events = []
+        out = agent_mod.run_agent_loop(
+            [{"role": "user", "content": "list files please"}], None,
+            events=lambda e: events.append(e))
+    finally:
+        agent_mod.call_ollama = original
+    assert "Done after listing." in out, f"final text missing: {out[:300]}"
+    assert "list" in out, f"tool result missing: {out[:300]}"
+    assert any(e.get("type") == "tool" and e.get("name") == "list" for e in events), \
+        f"live tool event missing: {events}"
+    print("  [OK] agent loop: tool execution + live events")
+
+def test_agent_loop_plain_text():
+    """Integration: loop returns plain text without tools."""
+    import agent as agent_mod
+    def mock_ollama(msgs, model):
+        return "Just a plain answer.", 5
+    original = agent_mod.call_ollama
+    agent_mod.call_ollama = mock_ollama
+    try:
+        out = agent_mod.run_agent_loop(
+            [{"role": "user", "content": "hello"}], None)
+    finally:
+        agent_mod.call_ollama = original
+    assert out.strip() == "Just a plain answer.", f"plain loop failed: {out[:200]}"
+    print("  [OK] agent loop: plain text")
+
+def test_agent_loop_shell_alias():
+    """Integration: 'shell' alias maps to bash and executes."""
+    import agent as agent_mod
+    def mock_ollama(msgs, model):
+        return '```tool\n{"tool": "shell", "cmd": "echo alias_ok"}\n```', 10
+    original = agent_mod.call_ollama
+    agent_mod.call_ollama = mock_ollama
+    try:
+        out = agent_mod.run_agent_loop(
+            [{"role": "user", "content": "echo"}], None)
+    finally:
+        agent_mod.call_ollama = original
+    assert "alias_ok" in out, f"alias result missing: {out[:300]}"
+    print("  [OK] agent loop: shell alias -> bash")
+
 if __name__ == "__main__":
     print(f"\nSmoke tests for agent.py\n{'='*40}")
     tests = [test_read, test_read_absolute, test_read_url, test_list, test_glob,
              test_write_and_undo, test_edit, test_bash, test_verify_py, test_verify_json,
              test_backup_undo, test_db_query, test_testgen, test_validation, test_save_api,
-             test_terminal_api, test_deps_tool, test_audit, test_rag_cache_incremental]
+             test_terminal_api, test_deps_tool, test_audit, test_rag_cache_incremental,
+             test_agent_loop_tool_call, test_agent_loop_plain_text, test_agent_loop_shell_alias]
     passed = 0
     for t in tests:
         try:

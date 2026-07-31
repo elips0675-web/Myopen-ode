@@ -566,18 +566,24 @@ def terminal_kill():
 
 @app.post("/api/lsp/completion")
 def lsp_completion(req: dict):
-    """Editor autocomplete: returns completion items as JSON list."""
+    """Editor autocomplete: LSP first, token-based fallback if no language server."""
     path = req.get("path", "")
     text = req.get("text")
     line = int(req.get("line", 0))
     character = int(req.get("character", 0))
     try:
-        from lsp import LSPClient
+        from lsp import LSPClient, token_completions
         client = LSPClient(WORK_DIR)
         items = client.completion(path, line, character, text)
-        return {"items": items or []}
+        if items:
+            return {"items": items, "source": "lsp"}
+        return {"items": token_completions(path, text, line, character) or [], "source": "tokens"}
     except Exception as e:
-        return {"items": [], "error": str(e)}
+        try:
+            from lsp import token_completions
+            return {"items": token_completions(path, text, line, character) or [], "source": "tokens"}
+        except Exception:
+            return {"items": [], "error": str(e)}
 
 @app.post("/api/chat")
 async def chat(req: ChatReq):

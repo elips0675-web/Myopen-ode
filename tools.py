@@ -142,7 +142,7 @@ TOOL_SCHEMAS = {
 def validate_tool(tc):
     name = tc.get("tool", "")
     schema = TOOL_SCHEMAS.get(name)
-    if not schema: return f"Unknown tool '{name}'"
+    if schema is None: return f"Unknown tool '{name}'"
     missing = [k for k in schema.get("required", []) if k not in tc]
     if missing: return f"Missing required fields: {', '.join(missing)} in {name}"
     if "path" in tc and not isinstance(tc["path"], str): return "path must be string"
@@ -729,6 +729,9 @@ def _execute_tool_inner(name, args):
                 return client.rename(path, line, char, new_name)
             elif op == "completion":
                 items = client.completion(path, line, char, args.get("text"))
+                if not items:
+                    from lsp import token_completions
+                    items = token_completions(path, args.get("text", ""), line, char)
                 if not items: return "No completions"
                 return "\n".join(f"{it['label']}  ({it['detail'] or 'kind ' + str(it['kind'])})" for it in items[:30])
             return f"Unknown LSP operation: {op}"

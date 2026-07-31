@@ -48,7 +48,7 @@
 - ✅ **Session sharing** — экспорт/импорт сессий через JSON
 - ✅ **Subagents** — @explore (read-only), @scout (web), @general (full access) с разными правами
 - ✅ **Multi-project** — переключение между проектами из UI, отдельные сессии/файлы/RAG на проект
-- ✅ **LSP интеграция** — goToDefinition, findReferences, hover, documentSymbols, **rename**, **completion** через pylsp/typescript-language-server
+- ✅ **LSP интеграция** — goToDefinition, findReferences, hover, documentSymbols, **rename**, **completion** через pylsp/typescript-language-server; **fallback по токенам файла** когда LSP-сервер не установлен (идентификаторы + keywords языка, source:"tokens")
 - ✅ **MCP сервер** — Model Context Protocol для интеграции с VS Code, Cursor, Claude Desktop
 - ✅ **Tab completion** — автодополнение путей по Tab в чате
 - ✅ **Progress bar** — SSE прогресс при pull модели

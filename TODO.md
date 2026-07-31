@@ -25,12 +25,13 @@
 - [x] WebSearch (DuckDuckGo)
 - [x] Async rewrite
 - [x] CI/CD
-- [x] 19 smoke-тестов
+- [x] 22 smoke-тестов (включая интеграционные с мок-моделью)
 - [x] Mobile-responsive sidebar
 - [x] Desktop App (pywebview)
 - [x] Плагины (.agent_plugins/)
 - [x] Action audit (.agent_audit.log)
 - [x] MCP-клиенты (mcp_servers.json + инструмент mcp)
+- [x] Автодополнение без LSP (fallback по токенам файла + keywords)
 
 ## Редактор (добавлено по оценке Kimi 8.8)
 - [x] CodeMirror: вкладки, подсветка, folding, Ctrl+S сохранение, Ctrl+Space автодополнение (LSP)
@@ -66,4 +67,4 @@
 - [ ] Desktop App (Tauri — pywebview уже работает)
 - [ ] Docker-изоляция bash
 - [ ] GPU embeddings (Ollama уже на GPU — фактически не требуется)
-- [ ] LSP completion без LSP-сервера (быстрый локальный fallback по токенам)
+- [ ] deepseek-coder-v2:16b — пулл в фоне (для стабильного кодинга на 12GB)

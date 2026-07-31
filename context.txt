@@ -40,6 +40,7 @@ desktop.py (pywebview native window). Zero npm deps, only fastapi+uvicorn+reques
 10. Sessions: full CRUD (create, list, load, delete, export/import JSON)
 11. Multi-project: projects.json, per-project sessions/RAG/memory
 12. LSP: definition, references, hover, symbols, rename, completion (pylsp/ts-ls/gopls)
+    + token-based fallback (token_completions in lsp.py) when no language server installed
 13. MCP server: all 27 tools via Model Context Protocol (VS Code/Cursor/Claude Desktop)
 14. Plugins: .agent_plugins/*.py — dynamic tool registration
 15. Terminal: POST /api/terminal — SSE streaming shell, kill endpoint
@@ -127,7 +128,7 @@ RUNNING
 -------
 python agent.py        ->  http://localhost:8765/
 python desktop.py      ->  native pywebview window
-python test_agent.py   ->  19/19 smoke tests pass
+python test_agent.py   ->  22/22 smoke tests pass
 python mcp_server.py   ->  MCP stdio server for IDEs
 
 STATUS
@@ -142,10 +143,12 @@ DeepSeek: 8.5/10 — "заметно вырос, почти все замеча�
 All recommendations implemented: CodeMirror editor, chat autocomplete, LSP rename+completion,
 testgen, db_query, deps, interactive terminal, action audit, external MCP clients,
 streaming tool execution, hybrid RAG, incremental cache, LLM TTL cache, Swagger.
-Fixed real bug: RAG never reindexed changed files at runtime (RAG_DIRTY stayed False) — caught by new test.
+Fixed real bugs caught by tests: (1) RAG never reindexed changed files at runtime
+(RAG_DIRTY stayed False); (2) validate_tool rejected empty-schema tools (list/diff/commit/deps)
+as unknown — `if not schema` on {} — agent could never call them.
 
 Remaining low-priority: native tool calling (needs Ollama), Docker bash isolation,
-Tauri desktop, LSP-less editor autocomplete fallback.
+Tauri desktop, deepseek-coder-v2:16b pull (in progress).
 
 COMPARISON
 ----------
