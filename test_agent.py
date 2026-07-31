@@ -213,13 +213,79 @@ def test_agent_loop_shell_alias():
     assert "alias_ok" in out, f"alias result missing: {out[:300]}"
     print("  [OK] agent loop: shell alias -> bash")
 
+def test_sessions_sqlite():
+    """CRUD on sessions via SQLite storage (with JSON fallback)."""
+    from fastapi.testclient import TestClient
+    import agent as agent_mod, shutil
+    tmp_sessions = WORK_DIR / ".test_sess"
+    shutil.rmtree(tmp_sessions, ignore_errors=True)
+    tmp_sessions.mkdir(exist_ok=True)
+    old_dir, old_db = agent_mod.SESSIONS_DIR, agent_mod.DB_PATH
+    agent_mod.SESSIONS_DIR = tmp_sessions
+    agent_mod.DB_PATH = tmp_sessions / "sessions.db"
+    try:
+        client = TestClient(agent_mod.app)
+        r = client.post("/api/sessions", json={"title": "SQLite test"})
+        assert r.status_code == 200, f"create: {r.status_code} {r.text}"
+        sid = r.json()["id"]
+        assert client.post("/api/sessions", json={}).status_code == 200
+        # save messages
+        assert agent_mod.save_session(sid, "SQLite test",
+            [{"role": "user", "content": "hello"}, {"role": "assistant", "content": "hi"}]), "save failed"
+        s = agent_mod.load_session(sid)
+        assert s and s["title"] == "SQLite test" and len(s["messages"]) == 2, f"load: {s}"
+        r = client.get(f"/api/sessions/{sid}")
+        assert r.json()["messages"][1]["content"] == "hi", f"get: {r.json()}"
+        assert (tmp_sessions / "sessions.db").exists(), "db file missing"
+        # list + export
+        r = client.get("/api/sessions")
+        assert any(x["id"] == sid for x in r.json()), f"list missing session: {r.json()}"
+        r = client.get(f"/api/sessions/{sid}/export")
+        assert r.json()["messages"], "export empty"
+        # delete
+        assert client.delete(f"/api/sessions/{sid}").json().get("ok")
+        assert agent_mod.load_session(sid) is None, "session not deleted"
+        # import
+        r = client.post("/api/sessions/import", json={"title": "imp", "messages": [{"role": "user", "content": "x"}]})
+        assert r.json().get("id"), "import failed"
+    finally:
+        agent_mod.SESSIONS_DIR, agent_mod.DB_PATH = old_dir, old_db
+        shutil.rmtree(tmp_sessions, ignore_errors=True)
+    print("  [OK] sessions SQLite CRUD")
+
+def test_session_json_migration():
+    """Legacy JSON session files are imported into SQLite."""
+    import agent as agent_mod, shutil, json as json_mod
+    tmp_sessions = WORK_DIR / ".test_migr"
+    shutil.rmtree(tmp_sessions, ignore_errors=True)
+    tmp_sessions.mkdir(exist_ok=True)
+    old_dir, old_db = agent_mod.SESSIONS_DIR, agent_mod.DB_PATH
+    agent_mod.SESSIONS_DIR = tmp_sessions
+    agent_mod.DB_PATH = tmp_sessions / "sessions.db"
+    try:
+        legacy = tmp_sessions / "legacy_1.json"
+        legacy.write_text(json_mod.dumps(
+            {"title": "Legacy", "messages": [{"role": "user", "content": "old"}],
+             "updated": "2026-01-01T00:00:00"}, ensure_ascii=False), "utf-8")
+        n = agent_mod.migrate_json_sessions()
+        assert n == 1, f"migrate count: {n}"
+        s = agent_mod.load_session("legacy_1")
+        assert s and s["title"] == "Legacy" and s["messages"][0]["content"] == "old", f"migrated: {s}"
+        n2 = agent_mod.migrate_json_sessions()
+        assert n2 == 0, f"migrate should skip existing: {n2}"
+    finally:
+        agent_mod.SESSIONS_DIR, agent_mod.DB_PATH = old_dir, old_db
+        shutil.rmtree(tmp_sessions, ignore_errors=True)
+    print("  [OK] sessions JSON -> SQLite migration")
+
 if __name__ == "__main__":
     print(f"\nSmoke tests for agent.py\n{'='*40}")
     tests = [test_read, test_read_absolute, test_read_url, test_list, test_glob,
              test_write_and_undo, test_edit, test_bash, test_verify_py, test_verify_json,
              test_backup_undo, test_db_query, test_testgen, test_validation, test_save_api,
              test_terminal_api, test_deps_tool, test_audit, test_rag_cache_incremental,
-             test_agent_loop_tool_call, test_agent_loop_plain_text, test_agent_loop_shell_alias]
+             test_agent_loop_tool_call, test_agent_loop_plain_text, test_agent_loop_shell_alias,
+             test_sessions_sqlite, test_session_json_migration]
     passed = 0
     for t in tests:
         try:

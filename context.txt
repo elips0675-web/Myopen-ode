@@ -17,7 +17,8 @@ KEY ACHIEVEMENT
 - Streaming tool execution: SSE events (tool/status) streamed live to UI while agent works
 - 27 tools: read, write, edit, bash, glob, grep, list, web, websearch, diff, commit, undo,
   verify, plan, search, question, skill, patch, task, todo, lsp, testgen, db_query, deps, mcp + plugins
-- Sessions: full session management with save/load to .agent_sessions/*.json
+- Sessions: SQLite storage (.agent_sessions/sessions.db), auto-migration from legacy JSON,
+  JSON fallback if DB unavailable; CRUD + export/import
 - RAG: hybrid search (BM25 + semantic) with incremental per-file disk cache
 - Self-hosted, zero-cost, fully offline alternative to Cursor/Claude Code
 - Feature parity ~90% with OpenCode Desktop (per Kimi evaluation 8.8/10)
@@ -128,7 +129,7 @@ RUNNING
 -------
 python agent.py        ->  http://localhost:8765/
 python desktop.py      ->  native pywebview window
-python test_agent.py   ->  22/22 smoke tests pass
+python test_agent.py   ->  24/24 smoke tests pass
 python mcp_server.py   ->  MCP stdio server for IDEs
 
 STATUS
@@ -146,6 +147,7 @@ streaming tool execution, hybrid RAG, incremental cache, LLM TTL cache, Swagger.
 Fixed real bugs caught by tests: (1) RAG never reindexed changed files at runtime
 (RAG_DIRTY stayed False); (2) validate_tool rejected empty-schema tools (list/diff/commit/deps)
 as unknown — `if not schema` on {} — agent could never call them.
+Sessions now in SQLite (sessions.db) with one-time migration from legacy JSON files.
 
 Remaining low-priority: native tool calling (needs Ollama), Docker bash isolation,
 Tauri desktop, deepseek-coder-v2:16b pull (in progress).

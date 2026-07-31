@@ -10,6 +10,7 @@
 - **Streaming tool execution**: live-прогресс в чате — вызовы инструментов видны в реальном времени по мере работы агента
 - **CodeMirror редактор**: вкладки, подсветка, сворачивание кода, Ctrl+S сохранение, **Ctrl+Space автодополнение (LSP)**
 - **UI**: файловое дерево + сессии, тёмная тема, diff, drag-and-drop, confirm-диалоги, **автодополнение в чате** (@файлы, #скиллы, /команды), **история сообщений стрелками**, **встроенный терминал** (SSE-стриминг, история, Ctrl+C)
+- **Sessions**: SQLite (`.agent_sessions/sessions.db`) — CRUD, экспорт/импорт, авто-миграция из JSON
 - **RAG**: гибридный поиск (**BM25 + семантика**) с **инкрементальным дисковым кешем** по файлам — пересчитываются только изменённые
 - **LLM кеш** с TTL — повторные запросы не тратят токены (LLM_CACHE_TTL)
 - **Multi-agent**: PLANNER_MODEL (лёгкая 1.5b) планирует, основная модель исполняет
@@ -173,6 +174,7 @@ Local AI coding agent powered by Ollama. Free, private, offline alternative to C
 - **Streaming tool execution**: live tool progress visible in chat while the agent works
 - **CodeMirror editor**: tabs, syntax highlight, folding, Ctrl+S save, **Ctrl+Space LSP autocomplete**
 - **UI**: file tree + sessions, dark theme, diff, drag-and-drop, confirm dialogs, **chat autocomplete** (@files, #skills, /commands), **message history (arrows)**, **built-in terminal** (SSE streaming, history, Ctrl+C)
+- **Sessions**: SQLite (`.agent_sessions/sessions.db`) — CRUD, export/import, auto-migration from JSON
 - **RAG**: hybrid search (**BM25 + semantics**) with **incremental disk cache** per file — only changed files are reindexed
 - **LLM cache** with TTL — repeated queries save tokens (LLM_CACHE_TTL)
 - **Multi-agent**: PLANNER_MODEL (light 1.5b) plans, main model executes

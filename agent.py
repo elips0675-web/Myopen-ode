@@ -87,6 +87,103 @@ def switch_project(path):
 SESSIONS_DIR = WORK_DIR / ".agent_sessions"
 SESSIONS_DIR.mkdir(exist_ok=True)
 
+# SQLite storage (primary) with JSON fallback
+DB_PATH = SESSIONS_DIR / "sessions.db"
+
+def _db():
+    import sqlite3
+    conn = sqlite3.connect(str(DB_PATH), timeout=10)
+    conn.execute("CREATE TABLE IF NOT EXISTS sessions (id TEXT PRIMARY KEY, title TEXT, messages TEXT, created TEXT, updated TEXT)")
+    return conn
+
+def _db_ok():
+    try:
+        with _db() as conn:
+            conn.execute("SELECT 1 FROM sessions LIMIT 1")
+        return True
+    except Exception:
+        return False
+
+def save_session(sid, title, messages, updated=None):
+    updated = updated or datetime.now().isoformat()
+    try:
+        with _db() as conn:
+            conn.execute(
+                "INSERT INTO sessions (id, title, messages, created, updated) VALUES (?,?,?,?,?) "
+                "ON CONFLICT(id) DO UPDATE SET title=excluded.title, messages=excluded.messages, updated=excluded.updated",
+                (sid, title, json.dumps(messages, ensure_ascii=False), updated, updated))
+        return True
+    except Exception:
+        try:
+            (SESSIONS_DIR / f"{sid}.json").write_text(
+                json.dumps({"title": title, "messages": messages, "updated": updated}, ensure_ascii=False), "utf-8")
+            return True
+        except Exception:
+            return False
+
+def load_session(sid):
+    try:
+        with _db() as conn:
+            row = conn.execute("SELECT title, messages, updated FROM sessions WHERE id=?", (sid,)).fetchone()
+        if row:
+            return {"id": sid, "title": row[0], "messages": json.loads(row[1]), "updated": row[2]}
+    except Exception:
+        pass
+    f = SESSIONS_DIR / f"{sid}.json"
+    if f.exists():
+        return {"id": sid, **json.loads(f.read_text())}
+    return None
+
+def delete_session_db(sid):
+    try:
+        with _db() as conn:
+            conn.execute("DELETE FROM sessions WHERE id=?", (sid,))
+    except Exception:
+        pass
+    f = SESSIONS_DIR / f"{sid}.json"
+    if f.exists(): f.unlink()
+
+def list_sessions_db():
+    sessions = []
+    try:
+        with _db() as conn:
+            rows = conn.execute("SELECT id, title, updated FROM sessions ORDER BY updated DESC").fetchall()
+        sessions = [{"id": r[0], "title": r[1], "updated": r[2], "messages": []} for r in rows]
+    except Exception:
+        pass
+    json_ids = {s["id"] for s in sessions}
+    for f in sorted(SESSIONS_DIR.glob("*.json"), key=lambda x: x.stat().st_mtime, reverse=True):
+        if f.stem in json_ids: continue
+        try:
+            data = json.loads(f.read_text())
+            sessions.append({"id": f.stem, "title": data.get("title", f.stem),
+                "updated": data.get("updated", ""), "messages": data.get("messages", [])})
+        except Exception as e:
+            log.warning("Bad session file %s: %s", f.name, e)
+    sessions.sort(key=lambda s: s.get("updated", ""), reverse=True)
+    return sessions
+
+def migrate_json_sessions():
+    """One-time import of legacy *.json sessions into SQLite."""
+    if not _db_ok(): return 0
+    count = 0
+    try:
+        with _db() as conn:
+            existing = {r[0] for r in conn.execute("SELECT id FROM sessions").fetchall()}
+    except Exception:
+        return 0
+    for f in sorted(SESSIONS_DIR.glob("*.json")):
+        if f.stem in existing: continue
+        try:
+            data = json.loads(f.read_text())
+            messages = data.get("messages", [])
+            updated = data.get("updated", datetime.now().isoformat())
+            if save_session(f.stem, data.get("title", f.stem), messages, updated):
+                count += 1
+        except Exception:
+            continue
+    return count
+
 MEMORY_DIR = WORK_DIR / ".agent_memory"
 MEMORY_DIR.mkdir(exist_ok=True)
 AGENT_MEMORY_LIMIT = int(os.environ.get("AGENT_MEMORY_LIMIT", "10"))
@@ -314,12 +411,9 @@ def run_agent_loop(msgs, session_id, events=None):
             break
 
     if session_id:
-        sf = SESSIONS_DIR / f"{session_id}.json"
         try:
-            data = json.loads(sf.read_text()) if sf.exists() else {"title": session_id, "messages": []}
-            data["messages"] = msgs[1:]
-            data["updated"] = datetime.now().isoformat()
-            sf.write_text(json.dumps(data, ensure_ascii=False), "utf-8")
+            old = load_session(session_id) or {}
+            save_session(session_id, old.get("title", session_id), msgs[1:])
         except Exception as e:
             log.warning("Save session %s: %s", session_id, e)
 
@@ -476,40 +570,31 @@ async def upload_file(req: FileUploadReq):
 
 @app.get("/api/sessions")
 def list_sessions():
-    sessions = []
-    for f in sorted(SESSIONS_DIR.glob("*.json"), key=lambda x: x.stat().st_mtime, reverse=True):
-        try:
-            data = json.loads(f.read_text())
-            sessions.append({"id": f.stem, "title": data.get("title", f.stem),
-                "updated": data.get("updated", ""), "messages": data.get("messages", [])})
-        except Exception as e:
-            log.warning("Bad session file %s: %s", f.name, e)
-    return sessions
+    return list_sessions_db()
 
 @app.post("/api/sessions")
 def create_session(req: SessionReq):
     sid = datetime.now().strftime("%Y%m%d_%H%M%S")
-    data = {"title": req.title or f"Session {sid}", "messages": [], "updated": datetime.now().isoformat()}
-    (SESSIONS_DIR / f"{sid}.json").write_text(json.dumps(data, ensure_ascii=False), "utf-8")
-    return {"id": sid, "title": data["title"]}
+    title = req.title or f"Session {sid}"
+    save_session(sid, title, [], datetime.now().isoformat())
+    return {"id": sid, "title": title}
 
 @app.get("/api/sessions/{sid}")
 def get_session(sid: str):
-    f = SESSIONS_DIR / f"{sid}.json"
-    if not f.exists(): return {"error": "Not found"}
-    return json.loads(f.read_text())
+    s = load_session(sid)
+    if s is None: return {"error": "Not found"}
+    return s
 
 @app.delete("/api/sessions/{sid}")
 def delete_session(sid: str):
-    f = SESSIONS_DIR / f"{sid}.json"
-    if f.exists(): f.unlink()
+    delete_session_db(sid)
     return {"ok": True}
 
 @app.get("/api/sessions/{sid}/export")
 def export_session(sid: str):
-    f = SESSIONS_DIR / f"{sid}.json"
-    if not f.exists(): return {"error": "Not found"}
-    return JSONResponse(content=json.loads(f.read_text()))
+    s = load_session(sid)
+    if s is None: return {"error": "Not found"}
+    return JSONResponse(content=s)
 
 @app.post("/api/sessions/import")
 def import_session(req: ChatReq):
@@ -520,8 +605,7 @@ def import_session(req: ChatReq):
     if isinstance(messages, str):
         try: messages = json.loads(messages)
         except: messages = []
-    sf = SESSIONS_DIR / f"{sid}.json"
-    sf.write_text(json.dumps({"title": title, "messages": messages, "updated": datetime.now().isoformat()}, ensure_ascii=False), "utf-8")
+    save_session(sid, title, messages, datetime.now().isoformat())
     return {"id": sid, "title": title}
 
 TERMINAL_PROCS = {}
@@ -589,9 +673,9 @@ def lsp_completion(req: dict):
 async def chat(req: ChatReq):
     session_msgs = []
     if req.session_id:
-        sf = SESSIONS_DIR / f"{req.session_id}.json"
-        if sf.exists():
-            try: session_msgs = json.loads(sf.read_text()).get("messages", [])
+        s = load_session(req.session_id)
+        if s:
+            try: session_msgs = s.get("messages", [])
             except: pass
     mem_text = memory_prompt()
     sys_content = SYSTEM_PROMPT + mem_text
@@ -644,6 +728,9 @@ def wait_ollama():
 # ─── main ────────────────────────────────────────────────
 def main():
     wait_ollama()
+    migrated = migrate_json_sessions()
+    if migrated:
+        log.info("Migrated %d legacy JSON sessions to SQLite", migrated)
     port = int(os.environ.get("PORT", "8765"))
     url = f"http://localhost:{port}"
     print(f"\n  🤖 AI Coder v2 — OpenCode Desktop")

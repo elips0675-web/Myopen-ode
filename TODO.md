@@ -6,7 +6,7 @@
 - [x] 27 инструментов: read, write, edit, bash, glob, grep, list, web, websearch, diff, commit, undo, verify, plan, search, question, skill, patch, task, todo, lsp, testgen, db_query, deps, mcp + плагины
 - [x] Prompt-based tool calling
 - [x] Streaming tool execution — live-прогресс тулов в UI (SSE события tool/status по мере исполнения)
-- [x] Сессии (.agent_sessions/), экспорт/импорт
+- [x] Сессии (.agent_sessions/sessions.db — SQLite, авто-миграция из JSON, JSON-fallback)
 - [x] Multi-project (projects.json, переключение из UI)
 - [x] UI: файловое дерево, сессии, тёмная тема, drag-and-drop, confirm-диалоги, tab completion
 - [x] Бэкапы (50 версий), undo
@@ -25,7 +25,7 @@
 - [x] WebSearch (DuckDuckGo)
 - [x] Async rewrite
 - [x] CI/CD
-- [x] 22 smoke-тестов (включая интеграционные с мок-моделью)
+- [x] 24 smoke-тестов (включая интеграционные с мок-моделью и SQLite-сессии)
 - [x] Mobile-responsive sidebar
 - [x] Desktop App (pywebview)
 - [x] Плагины (.agent_plugins/)
@@ -68,3 +68,4 @@
 - [ ] Docker-изоляция bash
 - [ ] GPU embeddings (Ollama уже на GPU — фактически не требуется)
 - [ ] deepseek-coder-v2:16b — пулл в фоне (для стабильного кодинга на 12GB)
+- [ ] Полнотекстовый поиск по сессиям в UI
