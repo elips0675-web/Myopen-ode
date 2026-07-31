@@ -15,8 +15,9 @@ KEY ACHIEVEMENT
 - Prompt-based tool calling: local models do NOT support native tool_calls in Ollama.
   Engineered a working agent loop: model outputs ```tool blocks, backend parses, executes, feeds back.
 - Streaming tool execution: SSE events (tool/status) streamed live to UI while agent works
-- 27 tools: read, write, edit, bash, glob, grep, list, web, websearch, diff, commit, undo,
-  verify, plan, search, question, skill, patch, task, todo, lsp, testgen, db_query, deps, mcp + plugins
+- 28 tools: read, write, edit, bash, glob, grep, list, web, websearch, diff, commit, undo,
+  verify, plan, search, question, skill, patch, task, todo, lsp, testgen, db_query, deps, mcp
+  + 3 plugin tools (count_lines, format_code, git_stats)
 - Sessions: SQLite storage (.agent_sessions/sessions.db), auto-migration from legacy JSON,
   JSON fallback if DB unavailable; CRUD + export/import
 - RAG: hybrid search (BM25 + semantic) with incremental per-file disk cache
@@ -25,7 +26,7 @@ KEY ACHIEVEMENT
 
 ARCHITECTURE
 ------------
-Modular: agent.py (FastAPI) + tools.py (26 tools) + rag.py (hybrid RAG) +
+Modular: agent.py (FastAPI) + tools.py (25 tools + 3 plugins) + rag.py (hybrid RAG) +
 lsp.py (LSP client) + ui.py (inline HTML UI) + mcp_server.py (MCP for IDEs) +
 desktop.py (pywebview native window). Zero npm deps, only fastapi+uvicorn+requests.
 
@@ -42,14 +43,14 @@ desktop.py (pywebview native window). Zero npm deps, only fastapi+uvicorn+reques
 11. Multi-project: projects.json, per-project sessions/RAG/memory
 12. LSP: definition, references, hover, symbols, rename, completion (pylsp/ts-ls/gopls)
     + token-based fallback (token_completions in lsp.py) when no language server installed
-13. MCP server: all 27 tools via Model Context Protocol (VS Code/Cursor/Claude Desktop)
+13. MCP server: all 28 tools via Model Context Protocol (VS Code/Cursor/Claude Desktop)
 14. Plugins: .agent_plugins/*.py — dynamic tool registration
 15. Terminal: POST /api/terminal — SSE streaming shell, kill endpoint
 16. Action audit: .agent_audit.log — every tool call logged with timestamp
 17. MCP clients: mcp_servers.json + tool "mcp" — external stdio MCP servers (npx etc.)
 18. Live tool progress: run_agent_loop(events=cb) → /api/chat SSE tool/status events
 
-TOOLS (27)
+TOOLS (28)
 ----------
 read      — file content (absolute/relative paths + http/https URLs)
 write     — create file (with backup + verify)
@@ -141,8 +142,8 @@ The agent wrote its own code improvements and committed them.
 
 EVALUATIONS
 -----------
-Kimi: 8.8/10 — "Это уже не альтернатива, это конкурент"
-DeepSeek: 8.5/10 — "заметно вырос, почти все замечания реализованы"
+Kimi: 7.8/10 — production-ready prototype, но зазор между «работает на демо» и доверием к реальному коду
+DeepSeek: 9/10 — зрелый, функциональный, достойная локальная альтернатива облачным решениям
 All recommendations implemented: CodeMirror editor, chat autocomplete, LSP rename+completion,
 testgen, db_query, deps, interactive terminal, action audit, external MCP clients,
 streaming tool execution, hybrid RAG, incremental cache, LLM TTL cache, Swagger.

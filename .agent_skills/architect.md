@@ -12,7 +12,7 @@ Use this skill when the user asks to improve, refactor, or extend the AI Coder a
 ## Architecture stack (this project)
 - Backend: FastAPI + uvicorn + SSE streaming, OpenAPI at /docs
 - LLM: Ollama /api/chat with retry (3 attempts, exponential backoff) + fallback API (DeepSeek-V4-Flash via FLASH_PROVIDER / OpenAI / Claude), LLM cache with TTL (LLM_CACHE_TTL)
-- Tools (25): read, write, edit, patch, bash, glob, grep, list, diff, commit, undo, verify, web, websearch, search (RAG), plan, question, skill, task, todo, lsp, testgen, db_query + plugins (.agent_plugins/*.py)
+- Tools (28): read, write, edit, patch, bash, glob, grep, list, diff, commit, undo, verify, web, websearch, search (RAG), plan, question, skill, task, todo, lsp, testgen, db_query, deps, mcp + 3 plugins (.agent_plugins/*.py)
 - RAG: hybrid BM25 (score 0.6*cosine + 0.4*bm25_norm), incremental disk cache (.rag_cache/file_*.json)
 - UI: inline HTML + CodeMirror 5 (tabs, Ctrl+S via PUT /api/file), chat autocomplete (@ # /), dark theme, mobile-responsive
 - Sessions: JSON CRUD (.agent_sessions/), memory summarization via PLANNER_MODEL
@@ -57,4 +57,4 @@ Parser must: extract ALL blocks (re.DOTALL), validate against schemas, execute s
 1. Brief architecture note (2-3 sentences).
 2. Complete file content or unified diff (--- / +++ / @@).
 3. Always include error handling and input validation.
-4. Then run: python -m py_compile <files>, python test_agent.py (15 tests), commit + push.
+4. Then run: python -m py_compile <files>, python test_agent.py (27 tests), commit + push.

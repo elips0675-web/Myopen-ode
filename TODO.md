@@ -3,7 +3,7 @@
 ## Что сделано (Core)
 
 - [x] FastAPI сервер, SSE streaming, agent loop (12 итераций)
-- [x] 27 инструментов: read, write, edit, bash, glob, grep, list, web, websearch, diff, commit, undo, verify, plan, search, question, skill, patch, task, todo, lsp, testgen, db_query, deps, mcp + плагины
+- [x] 28 инструментов: read, write, edit, bash, glob, grep, list, web, websearch, diff, commit, undo, verify, plan, search, question, skill, patch, task, todo, lsp, testgen, db_query, deps, mcp + 3 плагина
 - [x] Prompt-based tool calling
 - [x] Streaming tool execution — live-прогресс тулов в UI (SSE события tool/status по мере исполнения)
 - [x] Сессии (.agent_sessions/sessions.db — SQLite, авто-миграция из JSON, JSON-fallback)
@@ -34,7 +34,7 @@
 - [x] Автодополнение без LSP (fallback по токенам файла + keywords)
 - [x] requirements.txt (зависимости проекта)
 
-## Редактор (добавлено по оценке Kimi 8.8)
+## Редактор (добавлено по оценке Kimi)
 - [x] CodeMirror: вкладки, подсветка, folding, Ctrl+S сохранение, Ctrl+Space автодополнение (LSP)
 - [x] Автодополнение в чате (@файлы, #скиллы, /команды)
 - [x] История сообщений (↑/↓)

@@ -37,6 +37,10 @@ MCP_TOOL_MAP = {
     "task": "Delegate to subagent (explore/scout/general)",
     "todo": "Manage in-session todo list",
     "lsp": "Code intelligence via LSP",
+    "testgen": "Generate unit tests from code (Python, JS/TS)",
+    "db_query": "Run SQL query against local SQLite DB",
+    "deps": "Analyze project dependencies",
+    "mcp": "Call external MCP server tools",
 }
 
 def build_tools_list():
