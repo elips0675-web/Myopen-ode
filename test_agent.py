@@ -184,9 +184,11 @@ def test_agent_loop_tool_call():
     print("  [OK] agent loop: tool execution + live events")
 
 def test_agent_loop_plain_text():
-    """Integration: loop returns plain text without tools."""
+    """Integration: loop returns plain text without tools (planner pass + main model)."""
     import agent as agent_mod
+    calls = {"n": 0}
     def mock_ollama(msgs, model):
+        calls["n"] += 1
         return "Just a plain answer.", 5
     original = agent_mod.call_ollama
     agent_mod.call_ollama = mock_ollama
@@ -195,8 +197,59 @@ def test_agent_loop_plain_text():
             [{"role": "user", "content": "hello"}], None)
     finally:
         agent_mod.call_ollama = original
-    assert out.strip() == "Just a plain answer.", f"plain loop failed: {out[:200]}"
+    assert "Just a plain answer." in out, f"plain loop failed: {out[:200]}"
+    assert calls["n"] == 2, f"expected planner+main calls, got {calls['n']}"
     print("  [OK] agent loop: plain text")
+
+def test_agent_loop_yaml_style_tool():
+    """Integration: yaml-style `tool <name>` blocks (non-JSON) are parsed and executed."""
+    import agent as agent_mod
+    calls = {"n": 0}
+    def mock_ollama(msgs, model):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            return ('I will write the file.\n```python\n'
+                    'tool write\npath "demo_yaml.py"\n'
+                    'content "def add(a,b): return a+b"\n```'), 10
+        return "File created.", 5
+    original = agent_mod.call_ollama
+    old_confirm = agent_mod.NO_CONFIRM
+    agent_mod.call_ollama = mock_ollama
+    agent_mod.NO_CONFIRM = True
+    try:
+        out = agent_mod.run_agent_loop(
+            [{"role": "user", "content": "create file"}], None)
+    finally:
+        agent_mod.call_ollama = original
+        agent_mod.NO_CONFIRM = old_confirm
+    assert "File created." in out, f"final text missing: {out[:300]}"
+    p = WORK_DIR / "demo_yaml.py"
+    assert p.exists(), "yaml-style write tool did not create file"
+    assert "def add" in p.read_text("utf-8"), "file content mismatch"
+    p.unlink(missing_ok=True)
+    print("  [OK] agent loop: yaml-style tool blocks")
+
+def test_agent_loop_planner_fallback():
+    """Integration: planner (1.5b) without tool blocks doesn't kill the loop — main model retries."""
+    import agent as agent_mod
+    calls = []
+    def mock_ollama(msgs, model):
+        calls.append(model)
+        if len(calls) == 1:
+            return "I'll just explain...", 5
+        if len(calls) == 2:
+            return '```tool\n{"tool": "list", "path": "."}\n```', 10
+        return "Done after listing.", 5
+    original = agent_mod.call_ollama
+    agent_mod.call_ollama = mock_ollama
+    try:
+        out = agent_mod.run_agent_loop(
+            [{"role": "user", "content": "list"}], None)
+    finally:
+        agent_mod.call_ollama = original
+    assert len(calls) == 3, f"expected planner+main+final calls, got {len(calls)}"
+    assert "list" in out, f"tool result missing: {out[:300]}"
+    print("  [OK] agent loop: planner fallback to main model")
 
 def test_agent_loop_shell_alias():
     """Integration: 'shell' alias maps to bash and executes."""
@@ -338,6 +391,7 @@ if __name__ == "__main__":
              test_backup_undo, test_db_query, test_testgen, test_validation, test_save_api,
              test_terminal_api, test_deps_tool, test_audit, test_rag_cache_incremental,
              test_agent_loop_tool_call, test_agent_loop_plain_text, test_agent_loop_shell_alias,
+             test_agent_loop_yaml_style_tool, test_agent_loop_planner_fallback,
              test_sessions_sqlite, test_session_json_migration,
              test_patch_line_aware, test_bash_filter, test_todo_thread_safety]
     passed = 0

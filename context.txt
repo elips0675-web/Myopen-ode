@@ -160,6 +160,11 @@ Remaining (see TODO.md, priorities from evaluations): Kimi P1 — stream=True to
 RAG indexing in background thread, pydantic arg validation, bash whitelist/shlex, symlink-safe paths;
 DeepSeek P1 — FAISS/optimize RAG, size-based chunking. Own ideas: native tool calling (needs Ollama),
 Docker bash isolation, Tauri desktop, deepseek-coder-v2:16b pull.
+CRITICAL OPEN BUG (2026-07-31, live check): confirm flow broken — user "yes" after [CONFIRM] does NOT
+re-execute the tool (extract_pending_tool can't find the block in msgs), so agent can't write files
+interactively. Fixed same day: model selection now honored (req.model), planner-iteration retries with
+main model (1.5b ignores tool format), yaml-style tool blocks parsed. Tests: 29/29.
+Recommended coding model: qwen2.5-coder:7b (deepseek-r1:7b sometimes emits free-form tool blocks).
 
 COMPARISON
 ----------

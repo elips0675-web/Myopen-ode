@@ -269,8 +269,9 @@ def _get_available_models():
 
 _available_models = _get_available_models()
 
-def run_agent_loop(msgs, session_id, events=None):
-    """Run agent loop. events: optional callback(ev: dict) for live tool progress."""
+def run_agent_loop(msgs, session_id, events=None, model=None):
+    """Run agent loop. events: optional callback(ev: dict) for live tool progress.
+    model: user-selected model overrides MODEL (empty = default)."""
     def _emit(ev):
         if events:
             try: events(ev)
@@ -279,6 +280,7 @@ def run_agent_loop(msgs, session_id, events=None):
     full = ""
     tool_pat = re.compile('```(?:tool|json)\n(.*?)\n```', re.DOTALL)
     bare_tool_pat = re.compile(r'\{\s*"tool"\s*:\s*"[^"]+"\s*.*?\}', re.DOTALL)
+    yaml_tool_pat = re.compile(r'```[^\n]*\ntool\s+(\w+)\n(.*?)\n```', re.DOTALL)
     VALID_TOOLS = ("read","write","edit","bash","glob","grep","list","web","diff","commit","undo","verify","plan","search","websearch","question","skill","patch","task","todo","lsp")
     max_iter = int(os.environ.get("AGENT_MAX_ITER", "12"))
     max_time = float(os.environ.get("AGENT_TIMEOUT", "60.0"))
@@ -296,7 +298,7 @@ def run_agent_loop(msgs, session_id, events=None):
         if it > 0 and it % 3 == 0:
             msgs = summarize_context(msgs)
 
-        current_model = PLANNER_MODEL if it == 0 else MODEL
+        current_model = model or (PLANNER_MODEL if it == 0 else MODEL)
         if it == 0 and PLANNER_MODEL not in _available_models:
             log.info("PLANNER_MODEL %s not installed, using %s", PLANNER_MODEL, MODEL)
             current_model = MODEL
@@ -327,6 +329,29 @@ def run_agent_loop(msgs, session_id, events=None):
                         break
                 except: pass
 
+        if not tool_blocks:
+            # yaml-style fallback: models sometimes emit `tool <name>` blocks
+            # (```python\ntool write\npath "demo.py"\ncontent "..."\n```)
+            for m in yaml_tool_pat.finditer(content):
+                name, body = m.group(1), m.group(2)
+                if name not in VALID_TOOLS: continue
+                args = {}
+                for line in body.splitlines():
+                    line = line.strip()
+                    if not line or line.startswith("#") or " " not in line: continue
+                    k, _, v = line.partition(" ")
+                    k = k.strip().rstrip(":")
+                    v = v.strip()
+                    if len(v) >= 2 and v[0] == v[-1] and v[0] in ('"', "'"):
+                        v = v[1:-1]
+                    elif v.startswith("[") or v.startswith("{"):
+                        try: v = json.loads(v)
+                        except: pass
+                    args[k] = v
+                if args:
+                    tool_blocks.append((m, m.group(0), {"tool": name, **args}))
+                    log.info("YAML-style tool block parsed: %s %s", name, list(args))
+
         last_msg = msgs[-1]["content"].strip().lower() if msgs else ""
         if not tool_blocks and last_msg[:5] in ("yes","y","go a","да","ok","cont","proc","do i"):
             pn, pa = extract_pending_tool(msgs)
@@ -340,6 +365,11 @@ def run_agent_loop(msgs, session_id, events=None):
                 continue
 
         if not tool_blocks:
+            if it == 0 and current_model != MODEL:
+                # planner model (1.5b) often ignores tool format — retry with main model
+                log.info("Planner iteration produced no tool blocks; retrying with %s", MODEL)
+                full += content + "\n"
+                continue
             full += content
             break
 
@@ -684,7 +714,7 @@ async def chat(req: ChatReq):
     loop = asyncio.get_running_loop()
     def emit(ev):
         loop.call_soon_threadsafe(q.put_nowait, ev)
-    task = asyncio.create_task(asyncio.to_thread(run_agent_loop, msgs, req.session_id, emit))
+    task = asyncio.create_task(asyncio.to_thread(run_agent_loop, msgs, req.session_id, emit, req.model or None))
     async def gen():
         # 1) live tool progress while the agent loop runs
         while True:
