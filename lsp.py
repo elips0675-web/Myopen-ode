@@ -210,6 +210,47 @@ class LSPClient:
             lines.append(f"  {kind} {name} — line {pos.get('line', 0)+1}")
         return "\n".join(lines)
 
+    def rename(self, path, line, character, new_name):
+        ext = Path(path).suffix
+        if not self._ensure_server(ext): return "LSP not available for " + ext
+        uri = self._open_doc(path)
+        rid = self._next_id()
+        self._send({
+            "jsonrpc": "2.0", "id": rid,
+            "method": "textDocument/rename",
+            "params": {
+                "textDocument": {"uri": uri},
+                "position": {"line": line, "character": character},
+                "newName": new_name
+            }
+        })
+        result = self._wait_response(rid)
+        self._close_doc(uri)
+        if not result or "error" in result or "result" not in result:
+            return "Rename failed"
+        changes = result["result"].get("changes", {}) or {}
+        total = 0
+        for uri2, edits in changes.items():
+            p = uri2.replace("file://", "").replace("/", "\\") if "://" in uri2 else uri2
+            try:
+                if not os.path.isabs(p): p = os.path.join(self.workspace, p)
+                with open(p, "r", encoding="utf-8") as f: text = f.read()
+                # Apply edits in reverse order
+                lines = text.split("\n")
+                for ed in sorted(edits, key=lambda e: -e["range"]["start"]["line"]):
+                    r = ed["range"]; s = r["start"]; en = r["end"]
+                    if s["line"] == en["line"]:
+                        line_text = lines[s["line"]]
+                        lines[s["line"]] = line_text[:s["character"]] + ed["newText"] + line_text[en["character"]:]
+                    else:
+                        lines[s["line"]] = lines[s["line"]][:s["character"]] + ed["newText"]
+                        del lines[s["line"]+1:en["line"]+1]
+                with open(p, "w", encoding="utf-8") as f: f.write("\n".join(lines))
+                total += len(edits)
+            except Exception as e:
+                return f"Rename apply error in {p}: {e}"
+        return f"Renamed: {total} edits applied"
+
     def _fmt_location(self, result, multi=False):
         if not result or "result" not in result or not result["result"]:
             return "Not found"

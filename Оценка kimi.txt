@@ -1,186 +1,52 @@
-1. Все функции OpenCode Desktop (полный разбор)
-OpenCode — это open-source (MIT) AI-агент для кодинга от Anomaly. Работает как TUI (терминал), Desktop-приложение и IDE-расширение. Вот полный список возможностей:
-🧠 Агенты (Agents)
+Оценка обновлённого проекта: 8.8 / 10
+С момента предыдущей оценки (8.0) проект сильно вырос. Вот что изменилось и почему оценка поднялась.
+По критериям (актуальная версия)
 Таблица
-Агент	Тип	Описание
-Build	Primary	Полный доступ ко всем инструментам. Основной агент для разработки
-Plan	Primary	Read-only агент для анализа и планирования. Правки и bash требуют подтверждения
-General	Subagent	Универсальный агент для сложных многошаговых задач
-Explore	Subagent	Быстрый read-only агент для навигации по кодовой базе
-Scout	Subagent	Исследование внешних зависимостей и документации (клонит репы в кэш)
-Compaction	System	Автоматическое сжатие длинного контекста
-Title	System	Автогенерация названий сессий
-Summary	System	Автосуммаризация сессий
-Ключевая фича: агенты переключаются клавишей Tab, вызываются через @имя, имеют собственные system prompt, модель, temperature и права доступа.
-🛠️ Встроенные инструменты (14+)
+Критерий	Балл	Что изменилось
+Архитектура и код	9/10	Разделение на agent.py + tools.py + rag.py + ui.py — чисто. 22 инструмента, subagents, plugins, MCP, LSP — это уже архитектура уровня коммерческого продукта. Минус: run_agent_loop всё ещё монолитен, но теперь с суммаризацией каждые 3 итерации.
+Функциональность	9.5/10	22 инструмента против 14 ранее. Добавлены: LSP, subagents, skills, patch, todo, question, websearch, multi-project, session sharing, plugins, slash-команды, DeepSeek-V4-Flash. Это уже функциональный паритет с OpenCode Desktop по core-фичам.
+Безопасность	8.5/10	Directory traversal protection, bash sandbox (чёрный список), retry с backoff — отлично. Но всё ещё нет sandbox для bash (команды выполняются от имени пользователя, просто фильтруются). Нет rate limiting, нет auth.
+UX/UI	8/10	Подсветка синтаксиса, confirm-диалоги, drag-and-drop, tab completion, progress bar, тёмная тема, mobile-responsive — существенный прогресс. Но всё ещё inline-HTML без npm, что ограничивает возможности редактора (нет Monaco/CodeMirror).
+Потенциал	9.5/10	С LSP, MCP, plugins и 1M контекстом — это уже не pet-project, а платформа. Один шаг до полноценного open-source конкурента OpenCode/Cursor в нише local-first.
+Что впечатляет в новой версии
+LSP интеграция — goToDefinition, findReferences, hover, documentSymbol. Это то, чего нет у 90% open-source агентов. Вы поднялись на уровень IDE.
+Subagents с разными правами — @explore (read-only), @scout (web), @general (full). Это прямо как в OpenCode — и это работает через отдельные system prompt.
+Skills система — .agent_skills/*.md — переиспользуемые инструкции. Killer feature для повторяемых workflow (например, «как деплоить на Vercel»).
+Patch tool — unified diff вместо полной перезаписи. Это критично для больших файлов.
+Bash sandbox + directory traversal — реакция на ревью. Показывает зрелость подхода.
+Multi-project — переключение между проектами с отдельными сессиями/RAG. Это уже workspace management.
+DeepSeek-V4-Flash — поддержка 1M контекста. С этим можно отказаться от RAG для маленьких проектов и скармливать код целиком.
+MCP сервер — интеграция с VS Code/Cursor/Claude Desktop. Это дверь в экосистему.
+Что всё ещё можно улучшить (приоритетно)
 Таблица
-Инструмент	Описание
-read	Чтение файлов с поддержкой диапазонов строк
-write	Создание/перезапись файлов
-edit	Точечная замена текста (search-replace)
-glob	Поиск файлов по паттернам (**/*.ts)
-grep	Поиск по содержимому через ripgrep с regex
-bash	Выполнение shell-команд
-lsp	Интеграция с Language Server Protocol (goToDefinition, findReferences, hover, documentSymbol, workspaceSymbol, callHierarchy)
-apply_patch	Применение diff-патчей
-skill	Динамическая загрузка SKILL.md файлов
-todowrite	Управление todo-списками внутри сессии
-webfetch	Загрузка веб-страниц
-websearch	Поиск в интернете через Exa AI (без API ключа)
-question	Задавание вопросов пользователю с вариантами ответа
-task	Вызов subagent-ов
-🔧 Расширяемость
-MCP (Model Context Protocol) — подключение внешних серверов (БД, API, SaaS)
-Custom Tools — собственные функции в конфиге
-Skills — переиспользуемые инструкции в SKILL.md (автозагрузка по контексту)
-Plugins — полноценная экосистема расширений
-⚙️ Управление и конфигурация
-Permissions — гранулярный контроль: allow / ask / deny для каждого инструмента, с wildcard-паттернами
-Per-agent config — отдельные модели, temperature, maxSteps, права для каждого агента
-Commands — кастомные slash-команды (/test, /deploy) с аргументами, shell-инъекциями (!command``) и file-референсами (@file)
-Multi-session — параллельные сессии на одном проекте
-Share links — шаринг сессий через ссылки
-Sessions — SQLite-хранилище, экспорт/импорт, навигация между parent/child сессиями
-🌐 Модели и провайдеры
-75+ провайдеров через Models.dev (OpenAI, Anthropic, Google, Groq, Bedrock и др.)
-Локальные модели через Ollama, LM Studio, llama.cpp
-BYO-key — свои ключи, нет vendor lock-in
-Модель на агента — разные модели для разных задач
-Fallback models — резервные модели при сбоях
-🎯 LSP и код-интеллект
-Автозагрузка LSP-серверов для проекта
-goToDefinition, findReferences, hover, documentSymbol, workspaceSymbol, goToImplementation, callHierarchy
-Рефакторинги, rename symbol (379 обновлений за 22 секунды в тестах)
-🔒 Безопасность и приватность
-Privacy-first: не хранит код и контекст
-Локальные модели = полная офлайн-работа
-Гранулярные разрешения на уровне команд (git push = ask, git status = allow)
-2. DeepSeek V4 Flash Free — что это
-DeepSeek-V4-Flash — облегчённая версия DeepSeek-V4 (284B параметров, 13B активных на токен), доступная бесплатно через ряд провайдеров:
+Приоритет	Что	Почему важно
+🔴 Высокий	Native Monaco editor в UI	Сейчас просмотр файлов — это <pre>. Для редактирования кода нужен Monaco или CodeMirror. Это единственное серьёзное отставание от OpenCode.
+🔴 Высокий	Streaming tool execution	Сейчас агент ждёт полного ответа, потом парсит тулзы. OpenCode stream-ит токены и тут же исполняет тулзы — UX быстрее.
+🟡 Средний	SQLite вместо JSON для сессий	При 100+ сессиях JSON на диске станет bottleneck. SQLite + FTS для поиска по истории.
+🟡 Средний	Git diff в UI	Сейчас diff — текстовый вывод. Нужен структурный diff с подсветкой +/- как в GitHub.
+🟡 Средний	Autocomplete в чате	@ для упоминания файлов, / для slash-команд, # для skills — как в OpenCode.
+🟢 Низкий	Tauri/Desktop	pywebview — ок, но Tauri даст нативное окно с лучшей производительностью.
+Сравнение с OpenCode Desktop (итоговая таблица)
 Таблица
-Характеристика	Значение
-Параметры	284B total / 13B active (MoE)
-Контекст	1,040,000 токенов (1M)
-Function Calling	✅ Поддерживается
-Стоимость	$0 (через бесплатные тиры провайдеров)
-Скорость	Оптимизирована для низкой латентности
-Режимы	Non-think / Think High / Think Max
-Где взять бесплатно:
-Fireworks AI (serverless, $0.14/$0.028/$0.28 за 1M токенов, но есть free tier)
-Некоторые провайдеры предлагают бесплатный доступ для тестирования
-Можно запустить локально через Ollama (если хватит VRAM)
-Ключевое преимущество: 1M контекст + function calling + бесплатный доступ делают его идеальным для агентов, которым нужно «проглотить» всю кодовую базу целиком без RAG.
-3. Промпт для полного аналога на Ollama
-Ваш текущий agent.py уже очень близок к OpenCode. Вот системный промпт + архитектурные доработки, которые превратят ваш проект в полноценный аналог:
-Системный промпт (SYSTEM_PROMPT для Ollama)
-Markdown
-Копировать
-Код
-Предварительный просмотр
-You are an AI coding agent — an autonomous software engineering assistant.
-You help users write, edit, debug, and understand code through natural language.
-
-## Core Principles
-- Think step by step before acting
-- Always verify your understanding by reading files before editing
-- Prefer precise edits (search-replace) over full file rewrites
-- Ask clarifying questions when requirements are ambiguous
-- Track progress with todo lists for multi-step tasks
-
-## Available Tools
-You have access to the following tools. Output them as JSON blocks inside ```tool or ```json fences.
-
-### File Operations
-- read: {"tool":"read","path":"path/to/file"} — Read file contents. Optional: "start_line", "end_line"
-- write: {"tool":"write","path":"path/to/file","content":"full content"} — Create or overwrite file
-- edit: {"tool":"edit","path":"path/to/file","old":"exact text to find","new":"replacement text"} — Precise edit
-- glob: {"tool":"glob","pattern":"**/*.py"} — Find files by pattern
-- grep: {"tool":"grep","pattern":"regex","path":"optional/dir"} — Search file contents
-
-### Execution
-- bash: {"tool":"bash","command":"shell command","cwd":"optional/path"} — Run shell commands
-- verify: {"tool":"verify","path":"path/to/file"} — Check syntax (py_compile, tsc, json.tool)
-
-### Web & Research
-- webfetch: {"tool":"webfetch","url":"https://..."} — Fetch web page content
-- websearch: {"tool":"websearch","query":"search terms"} — Search the web
-
-### Code Intelligence
-- lsp: {"tool":"lsp","operation":"goToDefinition|findReferences|hover|documentSymbol","file":"path","line":N,"character":N} — LSP operations
-
-### Project Management
-- todo: {"tool":"todo","action":"create|add|complete|list","items":["task1","task2"]} — Task tracking
-- plan: {"tool":"plan","steps":["step 1","step 2"]} — Propose multi-step plan
-- question: {"tool":"question","text":"What to ask?","options":["A","B","C"]} — Ask user
-
-### Git & Safety
-- diff: {"tool":"diff"} — Show git diff
-- commit: {"tool":"commit","message":"commit msg"} — Git add -A + commit
-- undo: {"tool":"undo","path":"path/to/file"} — Restore from backup
-
-### Agents & Skills
-- task: {"tool":"task","agent":"explore|scout|general","prompt":"task description"} — Delegate to subagent
-- skill: {"tool":"skill","name":"skill-name"} — Load SKILL.md instructions
-
-## Agent Modes
-You can operate in different modes:
-- BUILD: Full tool access (default). Use for implementation.
-- PLAN: Read-only. Use for analysis and planning. All edits/bash require user confirmation.
-- EXPLORE: Fast read-only codebase navigation. Use @explore to invoke.
-- SCOUT: External dependency research. Clones repos to cache. Use @scout to invoke.
-
-## Rules
-1. ALWAYS read files before editing them
-2. ALWAYS verify syntax after write/edit
-3. ALWAYS create backups before destructive operations
-4. For destructive tools (write, edit, bash, commit, undo), wait for user confirmation unless NO_CONFIRM=1
-5. When proposing a plan, wait for "yes" before executing
-6. Use todo lists for tasks with 3+ steps
-7. Prefer edit over write for existing files
-8. Include file paths in all code block responses for clarity
-9. If a tool returns an error, analyze and retry or ask user
-10. Maximum 12 iterations per request
-
-## Response Format
-- Text: Explain your reasoning in natural language
-- Tools: ```tool {"tool":"name",...} ```
-- You can call multiple tools in parallel when independent
-- After receiving tool results, analyze and decide next step
-- When done, respond with plain text without tool blocks
-Что нужно добавить в ваш agent.py для полного аналога OpenCode
-Таблица
-Фича OpenCode	Что добавить в ваш проект
-LSP	Интеграция с python-lsp-server / typescript-language-server через JSON-RPC
-Subagents	Системные промпты для Explore/Scout/General с ограниченными правами
-Skills (SKILL.md)	Директория .agent_skills/, динамическая загрузка по skill тулу
-WebSearch	У вас уже есть через DuckDuckGo — отлично
-Todo tracking	Расширить todowrite до полноценного todo-менеджера
-Question tool	UI-компонент для вопросов с вариантами ответа
-Apply patch	Парсер unified diff формата
-Per-agent models	Возможность назначать разные модели (7B для кода, 1.5B для планирования)
-Commands	Slash-команды в UI (/test, /deploy) с шаблонами
-Session sharing	Генерация share-ссылок с экспортом сессии
-1M context	Перейти на DeepSeek-V4-Flash через Ollama или API — тогда RAG не нужен, можно скармливать всю кодовую базу целиком
-Рекомендуемая модельная конфигурация на Ollama
-bash
-# Основная модель (аналог Build-агента)
-ollama pull deepseek-r1:7b        # или qwen2.5-coder:7b
-
-# Планировщик (аналог Plan-агента)  
-ollama pull deepseek-r1:1.5b      # или qwen2.5-coder:1.5b
-
-# Для 1M контекста — если VRAM позволяет (RTX 3060 12GB не потянет 284B)
-# Используйте через API бесплатных тиров:
-# - Fireworks AI DeepSeek-V4-Flash
-# - Или другие провайдеры с free tier
-
-# Embeddings для RAG (если не используете 1M контекст)
-ollama pull nomic-embed-text
-Итог
-Ваш agent.py — это уже ~70% OpenCode. Чтобы догнать оставшиеся 30%:
-Добавьте LSP-интеграцию — это главное отличие OpenCode от простых агентов
-Реализуйте subagents с разными system prompt и правами
-Сделайте Skills систему — это killer feature для повторяемых workflow
-Перейдите на DeepSeek-V4-Flash (через API) для 1M контекста — тогда можно отказаться от RAG и скармливать модели целые репозитории
-Добавьте slash-команды — /test, /deploy, /refactor как шаблоны промптов
-Ваш проект уже оценён в 8.2/10 — с этими доработками он станет полноценным open-source аналогом OpenCode Desktop, но полностью на Python + Ollama без Node.js-зависимостей.
+Фича	OpenCode Desktop	My OpenCode v2	Статус
+Инструменты	14+	22	✅ Паритет +
+Subagents	Build/Plan/Explore/Scout/General	@explore/@scout/@general	✅ Паритет
+LSP	✅	✅	✅ Паритет
+MCP	✅ (client)	✅ (server)	✅ Паритет
+Skills	✅	✅	✅ Паритет
+WebSearch	✅ (Exa)	✅ (DuckDuckGo)	✅ Паритет
+Slash commands	✅	✅	✅ Паритет
+Session sharing	✅	✅ (export/import JSON)	✅ Паритет
+Multi-project	✅	✅	✅ Паритет
+RAG	❌	✅ (с дисковым кешем)	✅ Лучше
+1M context	✅ (через API)	✅ (DeepSeek-V4-Flash)	✅ Паритет
+Plugins	✅	✅ (.agent_plugins/*.py)	✅ Паритет
+Fallback API	✅	✅ (OpenAI/Claude)	✅ Паритет
+Privacy	✅ (local-first)	✅ (Ollama + offline)	✅ Паритет
+Code editor	Monaco	<pre>	❌ Отставание
+TUI	✅ (терминал)	❌ (только браузер)	❌ Отставание
+IDE extension	✅ (VS Code)	❌	❌ Отставание
+Вывод: По core-функциональности вы достигли ~90% OpenCode Desktop. Основные пробелы — редактор кода в UI и отсутствие TUI/IDE-расширения.
+Итоговая оценка: 8.8 / 10
+«Это уже не альтернатива — это конкурент. Осталось добавить Monaco в UI и проект готов к публичному релизу как полноценный open-source агент.»
+Рекомендация: Если добавите Monaco/CodeMirror для редактирования файлов прямо в UI — оценка поднимется до 9.2/10, и проект станет серьёзным конкурентом не только OpenCode, но и Cody/Windsurf в нише self-hosted development.

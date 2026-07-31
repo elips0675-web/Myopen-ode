@@ -3,7 +3,7 @@
 import json, sys, os, tempfile
 from pathlib import Path
 sys.path.insert(0, "E:\\My OpenCode1")
-from tools import execute_tool, backup, undo, verify_file, resolve, init_config, init_backup
+from tools import execute_tool, backup, undo, verify_file, resolve, init_config, init_backup, validate_tool
 from agent import WORK_DIR
 
 init_config(WORK_DIR=WORK_DIR, OLLAMA_URL="http://localhost:11434", MODEL="test", NO_CONFIRM=True)
@@ -76,11 +76,46 @@ def test_backup_undo():
     assert tf.read_text() == "v1", f"undo failed: {tf.read_text()}"
     print("  [OK] backup + undo")
 
+def test_db_query():
+    r = execute_tool("db_query", {"query": "SELECT 1 as a, 'x' as b"})
+    assert "a | b" in r and "1 | x" in r, f"db_query failed: {r}"
+    print("  [OK] db_query")
+
+def test_testgen():
+    f = TMP / "sample_mod.py"
+    f.write_text("def add(a, b):\n    return a + b\n\ndef mul(a, b):\n    return a * b\n")
+    r = execute_tool("testgen", {"path": str(f)})
+    tp = TMP / "test_sample_mod.py"
+    assert "Generated" in r and tp.exists(), f"testgen failed: {r}"
+    content = tp.read_text()
+    assert "test_add" in content and "test_mul" in content, "testgen missing functions"
+    print("  [OK] testgen")
+
+def test_validation():
+    r = validate_tool({"tool": "write"})
+    assert "Missing required" in r, "validation should reject missing content"
+    r2 = validate_tool({"tool": "nope", "path": "x"})
+    assert "Unknown tool" in r2, "validation should reject unknown tool"
+    print("  [OK] validation")
+
+def test_save_api():
+    import requests
+    from agent import app
+    import threading, uvicorn
+    # Use TestClient-style via running server is heavy; test endpoint via app
+    # Direct: build the endpoint call
+    from fastapi.testclient import TestClient
+    client = TestClient(app)
+    r = client.put("/api/file", json={"path": ".test_tmp/api_save.txt", "content": "saved"})
+    assert r.json().get("ok"), f"save API failed: {r.json()}"
+    assert (WORK_DIR / ".test_tmp/api_save.txt").read_text() == "saved"
+    print("  [OK] save API (PUT /api/file)")
+
 if __name__ == "__main__":
     print(f"\nSmoke tests for agent.py\n{'='*40}")
     tests = [test_read, test_read_absolute, test_read_url, test_list, test_glob,
              test_write_and_undo, test_edit, test_bash, test_verify_py, test_verify_json,
-             test_backup_undo]
+             test_backup_undo, test_db_query, test_testgen, test_validation, test_save_api]
     passed = 0
     for t in tests:
         try:

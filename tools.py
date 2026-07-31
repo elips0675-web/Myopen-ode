@@ -133,6 +133,8 @@ TOOL_SCHEMAS = {
     "task": {"required": ["agent", "prompt"]},
     "todo": {"required": ["action"]},
     "lsp": {"required": ["operation", "path"]},
+    "testgen": {"required": ["path"]},
+    "db_query": {"required": ["query"]},
 }
 
 def validate_tool(tc):
@@ -314,9 +316,22 @@ SUBAGENT_PROMPTS = {
     "general": GENERAL_PROMPT,
 }
 
-# ─── call Ollama with fallback ────────────────────────────
+# ─── call Ollama with fallback + TTL cache ────────────────
+LLM_CACHE = {}
+LLM_CACHE_TTL = int(os.environ.get("LLM_CACHE_TTL", "60"))
+
+def _cache_key(messages, model):
+    body = json.dumps(messages, ensure_ascii=False, sort_keys=True)
+    return hashlib.md5((model + body).encode()).hexdigest()[:24]
+
 def call_ollama(messages, model=None):
     m = model or MODEL
+    if LLM_CACHE_TTL > 0:
+        key = _cache_key(messages, m)
+        hit = LLM_CACHE.get(key)
+        if hit and time.time() - hit[0] < LLM_CACHE_TTL:
+            log.info("LLM cache hit (TTL=%ds)", LLM_CACHE_TTL)
+            return hit[1], hit[2]
     max_retries = 3
     for attempt in range(max_retries):
         try:
@@ -330,7 +345,13 @@ def call_ollama(messages, model=None):
             msg = data.get("message", {}).get("content", "")
             tokens_used = data.get("eval_count", 0)
             msg = re.sub(r'<think>.*?</think>', '', msg, flags=re.DOTALL)
-            return msg if msg else "No response from model", tokens_used
+            if not msg: msg = "No response from model"
+            if LLM_CACHE_TTL > 0:
+                LLM_CACHE[key] = (time.time(), msg, tokens_used)
+                if len(LLM_CACHE) > 100:
+                    now = time.time()
+                    LLM_CACHE = {k: v for k, v in LLM_CACHE.items() if now - v[0] < LLM_CACHE_TTL}
+            return msg, tokens_used
         except Exception as e:
             log.warning("Ollama attempt %d/%d failed: %s", attempt+1, max_retries, e)
             if attempt < max_retries - 1:
@@ -655,7 +676,10 @@ def execute_tool(name, args):
                 return "[TODO]\n" + "\n".join(lines)
             return f"[TODO] Unknown action: {action}"
         elif name == "lsp":
-            from .lsp import LSPClient
+            try:
+                from lsp import LSPClient
+            except ImportError:
+                from .lsp import LSPClient
             op = args.get("operation", "")
             path = args.get("path", "")
             line = int(args.get("line", 0))
@@ -671,7 +695,55 @@ def execute_tool(name, args):
                 return client.hover(path, line, char)
             elif op == "symbols":
                 return client.document_symbols(path)
+            elif op == "rename":
+                new_name = args.get("new_name", "")
+                if not new_name: return "Missing new_name"
+                return client.rename(path, line, char, new_name)
             return f"Unknown LSP operation: {op}"
+        elif name == "testgen":
+            p = Path(args["path"]) if os.path.isabs(args["path"]) else WORK_DIR / args["path"]
+            if not p.exists(): return f"File not found: {args['path']}"
+            code = p.read_text("utf-8", errors="ignore")
+            ext = p.suffix
+            test_path = p.with_name("test_" + p.name)
+            if ext == ".py":
+                funcs = re.findall(r"def\s+(test)?(?!test_)\w+\s*\(", code) or re.findall(r"def\s+(\w+)\s*\(", code)
+                funcs = [f for f in re.findall(r"def\s+(\w+)\s*\(", code) if not f.startswith("test_")]
+                imports = ""
+                for m in re.finditer(r"^(from\s+\S+\s+import\s+.*|import\s+.*)$", code, re.M):
+                    imports += m.group(1) + "\n"
+                mod = p.stem
+                body = f"import unittest\n{imports}\nfrom {mod} import " + ", ".join(funcs[:20]) + "\n\n\n"
+                body += f"class Test{p.stem.title()}(unittest.TestCase):\n"
+                for f in funcs[:20]:
+                    body += f"    def test_{f}(self):\n        self.assertIsNotNone({f}())\n\n\n"
+                body += "if __name__ == '__main__':\n    unittest.main()\n"
+            elif ext in (".js", ".ts"):
+                funcs = re.findall(r"(?:export\s+)?(?:function|const)\s+(\w+)", code)
+                body = "// Auto-generated tests\n"
+                body += f"import {{ {', '.join(funcs[:20])} }} from './{p.stem}';\n\n"
+                for f in funcs[:20]:
+                    body += f"test('{f}', () => {{\n  expect({f}).toBeDefined();\n}});\n"
+            else:
+                return f"testgen not supported for {ext}"
+            test_path.write_text(body, "utf-8")
+            return f"Generated: {test_path.name} ({len(body)} bytes, {len(funcs)} functions)"
+        elif name == "db_query":
+            import sqlite3
+            conn = sqlite3.connect(":memory:")
+            query = args["query"]
+            try:
+                cur = conn.execute(query)
+                cols = [d[0] for d in cur.description or []]
+                rows = cur.fetchall()[:50]
+                out = " | ".join(cols) + "\n" + "-" * 60 + "\n"
+                out += "\n".join(" | ".join(str(c) for c in r) for r in rows)
+                out += f"\n({len(rows)} rows)" if rows else "Empty result"
+                return out
+            except Exception as e:
+                return f"db_query error: {e}"
+            finally:
+                conn.close()
         else:
             result = call_plugin(name, args)
             if result is not None: return result

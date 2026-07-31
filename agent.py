@@ -431,6 +431,16 @@ def get_file(path: str):
     if not p.exists() or p.is_dir(): return {"error": "Not found"}
     return {"content": p.read_text("utf-8", errors="ignore"), "path": path}
 
+@app.put("/api/file")
+def save_file(req: FileUploadReq):
+    p = WORK_DIR / req.path if not os.path.isabs(req.path) else Path(req.path)
+    if p.is_dir(): return {"error": "Is a directory"}
+    p.parent.mkdir(parents=True, exist_ok=True)
+    from tools import backup
+    backup(req.path)
+    p.write_text(req.content, "utf-8")
+    return {"ok": True, "path": req.path, "size": len(req.content)}
+
 @app.post("/api/upload")
 async def upload_file(req: FileUploadReq):
     p = WORK_DIR / req.path if not os.path.isabs(req.path) else Path(req.path)

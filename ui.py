@@ -3,6 +3,9 @@
 HTML = r"""<!DOCTYPE html>
 <html lang="en">
 <head><meta charset="UTF-8"><title>AI Coder v2 — OpenCode Desktop</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/theme/dracula.min.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/fold/foldgutter.min.css">
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 :root{--bg:#f5f5f5;--fg:#1a1a1a;--sidebar:#fff;--sidebar-border:#ddd;--accent:#2563eb;--accent-hover:#1d4ed8;--msg-u:#e8f0fe;--msg-a:#fff;--msg-a-border:#eee;--pre-bg:#f8f9fa;--code-bg:#f0f0f0;--inp-bg:#fff;--inp-border:#ccc;--btn:#2563eb;--btn-hover:#1d4ed8;--cnl-btn:#dc2626;--stat-bg:#fff;--st-c:#999;--diff-add:#dcfce7;--diff-add-fg:#166534;--diff-del:#fce7f3;--diff-del-fg:#991b1b;--diff-hdr:#f0f0f0;--plan:#eff6ff;--plan-fg:#1e40af;--tree-hover:#f0f0f0;--sp:10px;--s:#2563eb;--radius:8px;--font:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
@@ -81,6 +84,9 @@ body[data-theme="dark"]{--bg:#0f1117;--fg:#e2e8f0;--sidebar:#161b22;--sidebar-bo
 #inp button:hover{background:var(--btn-hover)}
 #inp button:disabled{opacity:.3;cursor:not-allowed}
 #inp #cnl{background:var(--cnl-btn);display:none}
+#hint-box{position:fixed;display:none;z-index:999;background:var(--sidebar);border:1px solid var(--sidebar-border);border-radius:6px;box-shadow:0 4px 16px rgba(0,0,0,.25);max-height:200px;overflow-y:auto;min-width:200px}
+#hint-box .hint-item{padding:6px 12px;font-size:12px;cursor:pointer;white-space:nowrap}
+#hint-box .hint-item.sel{background:var(--accent);color:#fff}
 #stat{height:22px;border-top:1px solid var(--sidebar-border);background:var(--stat-bg);font-size:11px;color:var(--st-c);padding:2px 16px;display:flex;align-items:center;gap:10px;flex-shrink:0}
 #stat .g{width:7px;height:7px;border-radius:50%;background:#3fb950;display:inline-block}
 #stat .r{width:7px;height:7px;border-radius:50%;background:#f85149;display:inline-block}
@@ -137,12 +143,13 @@ body[data-theme="dark"]{--bg:#0f1117;--fg:#e2e8f0;--sidebar:#161b22;--sidebar-bo
     <button onclick="delModel()" title="Delete model" style="background:var(--cnl-btn);color:#fff;border:none;border-radius:4px;padding:2px 8px;cursor:pointer;font-size:11px">-Del</button>
     <span class="badge" id="model-badge">Model</span>
     <span id="prj"></span>
-    <span id="st2"></span><button id="theme-btn" onclick="toggleTheme()" style="background:none;border:none;color:var(--st-c);cursor:pointer;font-size:16px;margin-left:8px">&#127769;</button>
+    <span id="st2"></span><a href="/docs" target="_blank" style="font-size:11px;color:var(--st-c);text-decoration:none;margin-left:8px">API</a><button id="theme-btn" onclick="toggleTheme()" style="background:none;border:none;color:var(--st-c);cursor:pointer;font-size:16px;margin-left:8px">&#127769;</button>
   </div>
   <div id="chat">
     <div id="msgs"><div class="msg s">Agent ready. Try: &quot;create a fibonacci function&quot;</div></div>
     <div id="inp">
       <textarea id="ta" rows="1" placeholder="Ask something... /test /review /fix /doc /deploy"></textarea>
+      <div id="hint-box"></div>
       <div style="display:flex;flex-direction:column;gap:4px;align-self:flex-end">
         <button id="snd" onclick="send()" style="height:auto;padding:4px 14px">Send</button>
         <button id="cnl" onclick="cancel()" style="display:none;height:auto;padding:4px 14px">Cancel</button>
@@ -151,8 +158,27 @@ body[data-theme="dark"]{--bg:#0f1117;--fg:#e2e8f0;--sidebar:#161b22;--sidebar-bo
   </div>
   <div id="stat"><span id="old"></span><span id="ols">Ollama...</span></div>
 </div>
-<div id="fileview"><div class="fv-bar"><span class="fv-name" id="fv-name"></span><button class="fv-close" onclick="closeFile()">&times;</button></div><div id="fv-content" style="flex:1;padding:16px;overflow:auto;font-size:12px;line-height:1.6;background:var(--pre-bg);margin:0;font-family:monospace;white-space:pre"></div></div>
+<div id="fileview"><div class="fv-bar"><div id="fv-tabs" style="display:flex;gap:2px;overflow-x:auto;flex:1"></div><button id="fv-save" onclick="saveFile()" style="display:none;background:var(--btn);color:#fff;border:none;border-radius:4px;padding:4px 12px;cursor:pointer;font-size:11px">Save (Ctrl+S)</button><button class="fv-close" onclick="closeFile()">&times;</button></div><div id="fv-content" style="flex:1;padding:0;overflow:hidden;background:var(--pre-bg);margin:0;font-family:monospace;white-space:pre"></div></div>
 <div id="dropzone"><div class="dz-box"><svg viewBox="0 0 24 24"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg><div class="dz-title">Drop files here</div><div class="dz-sub">Upload to workspace</div></div></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/python/python.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/javascript/javascript.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/xml/xml.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/css/css.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/htmlmixed/htmlmixed.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/markdown/markdown.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/json/json.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/shell/shell.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/go/go.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/rust/rust.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/clike/clike.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/yaml/yaml.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/edit/matchbrackets.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/fold/foldcode.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/fold/foldgutter.min.js"></script>
+<script>
+var CM_READY = typeof CodeMirror !== 'undefined';
+</script>
 <script>
 var A=window.location.origin,ms=[],sd=0,ac=null,curSid="",allSessions=[];
 function $(i){return document.getElementById(i)}
@@ -263,40 +289,70 @@ function toggleDir(path,el){
   var next=el.nextElementSibling;
   if(next&&next.classList.contains('children')){next.style.display=next.style.display==='none'?'block':'none';}
 }
+// CodeMirror editor with tabs
+var openTabs=[],curTab=null,cmEditor=null;
+function langFor(path){
+  var ext=('.'+path).split('.').pop().toLowerCase();
+  var map={py:'python',js:'javascript',jsx:'javascript',ts:'javascript',tsx:'javascript',mjs:'javascript',
+    html:'htmlmixed',htm:'htmlmixed',vue:'htmlmixed',css:'css',scss:'css',md:'markdown',
+    json:'json',jsonc:'json',sh:'shell',bat:'shell',ps1:'shell',go:'go',rs:'rust',
+    c:'clike',h:'clike',cpp:'clike',cc:'clike',java:'clike',cs:'clike',yaml:'yaml',yml:'yaml',toml:'shell'};
+  return map[ext]||'';
+}
+function makeEditor(el){
+  if(!CM_READY){
+    var ta=document.createElement('textarea');
+    ta.style.cssText='width:100%;height:100%;background:var(--pre-bg);color:var(--fg);border:none;outline:none;font-family:monospace;font-size:12px;padding:12px;resize:none';
+    el.appendChild(ta);
+    return {getValue:function(){return ta.value},setValue:function(v){ta.value=v},refresh:function(){},getWrapperElement:function(){return ta}};
+  }
+  var cm=CodeMirror(el,{
+    value:'',lineNumbers:true,matchBrackets:true,theme:'dracula',
+    foldGutter:true,gutters:['CodeMirror-linenumbers','CodeMirror-foldgutter'],
+    tabSize:2,indentUnit:2,lineWrapping:false
+  });
+  cm.setOption('extraKeys',{'Ctrl-S':function(){saveFile()},'Cmd-S':function(){saveFile()}});
+  return cm;
+}
 function openFile(path){
   fetch(A+'/api/file?path='+encodeURIComponent(path)).then(function(r){return r.json()}).then(function(d){
-    if(d.error)return;$('fv-name').textContent=path;$('fv-content').textContent=d.content;$('fileview').classList.add('open');
+    if(d.error)return;
+    if(openTabs.indexOf(path)<0)openTabs.push(path);
+    curTab=path;renderTabs();renderEditor(d.content,path);$('fileview').classList.add('open');
   });
+}
+function renderTabs(){
+  var el=$('fv-tabs');
+  el.innerHTML=openTabs.map(function(p){
+    return '<span onclick="selectTab(\''+p.replace(/'/g,"\\'")+'\')" style="padding:3px 10px;font-size:11px;cursor:pointer;border-radius:4px;white-space:nowrap;'+(p===curTab?'background:var(--accent);color:#fff':'background:var(--code-bg);color:var(--fg)')+'">'+esc(p.split('/').pop())+' <span onclick="event.stopPropagation();closeTab(\''+p.replace(/'/g,"\\'")+'\')" style="opacity:.6">&times;</span></span>';
+  }).join('');
+}
+function selectTab(p){curTab=p;renderTabs();fetch(A+'/api/file?path='+encodeURIComponent(p)).then(function(r){return r.json()}).then(function(d){if(!d.error)renderEditor(d.content,p)})}
+function closeTab(p){
+  openTabs.splice(openTabs.indexOf(p),1);
+  if(curTab===p){curTab=openTabs.length?openTabs[openTabs.length-1]:null;
+    if(curTab){fetch(A+'/api/file?path='+encodeURIComponent(curTab)).then(function(r){return r.json()}).then(function(d){if(!d.error)renderEditor(d.content,curTab)})}
+    else{if(cmEditor)cmEditor.getWrapperElement().remove();cmEditor=null;$('fv-save').style.display='none'}}
+  renderTabs();if(!openTabs.length)closeFile();
+}
+function renderEditor(content,path){
+  var el=$('fv-content');el.innerHTML='';
+  if(cmEditor)cmEditor.getWrapperElement().remove();
+  cmEditor=makeEditor(el);
+  cmEditor.setValue(content);
+  if(CM_READY)cmEditor.setOption('mode',langFor(path));
+  $('fv-save').style.display='inline-block';
+  setTimeout(function(){cmEditor.refresh&&cmEditor.refresh()},50);
+}
+function saveFile(){
+  if(!curTab||!cmEditor)return;
+  fetch(A+'/api/file',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({path:curTab,content:cmEditor.getValue()})})
+  .then(function(r){return r.json()}).then(function(d){
+    if(d.error)am('t err','Save error: '+d.error);
+    else{am('t ok','Saved: '+esc(curTab));loadFiles()}
+  }).catch(function(e){am('t err','Save failed: '+e.message)});
 }
 function closeFile(){$('fileview').classList.remove('open')}
-
-// Basic syntax highlighting for file viewer
-function highlightSyntax(code, ext){
-  var lang = ext.split('.').pop();
-  var h = esc(code);
-  if(['py','js','ts','jsx','tsx','java','go','rs','c','cpp','h','cs','json','yml','yaml','toml','ini','cfg','env'].includes(lang)){
-    if(lang==='py') h=h.replace(/(^|\n)([ \t]*#.*?)(?=\n|$)/g, '$1<span class="c">$2</span>');
-    else if(['yml','yaml'].includes(lang)) h=h.replace(/(^|\n)([ \t]*#.*?)(?=\n|$)/g, '$1<span class="c">$2</span>');
-    else if(['ini','cfg','env'].includes(lang)) h=h.replace(/(^|\n)([ \t]*[;#].*?)(?=\n|$)/g, '$1<span class="c">$2</span>');
-    else h=h.replace(/(^|\n)([ \t]*\/\/.*?)(?=\n|$)/g, '$1<span class="c">$2</span>');
-  }
-  if(['json','jsonc'].includes(lang)){
-    h=h.replace(/(&quot;[^&quot;]*&quot;)(\s*:)/g,'<span class="k">$1</span>$2');
-  }
-  h=h.replace(/(&quot;[^&quot;]*&quot;|&#39;[^&#39;]*&#39;|`[^`]*`)/g,'<span class="s">$1</span>');
-  var kw = lang==='py'
-    ? ['\\b(def|class|if|else|elif|for|while|return|import|from|as|try|except|finally|with|yield|async|await|pass|raise|in|not|and|or|True|False|None)\\b']
-    : ['\\b(function|class|if|else|for|while|return|import|from|try|catch|finally|throw|async|await|const|let|var|new|this|typeof|instanceof|switch|case|break|continue|export|default|extends|static|get|set|true|false|null|undefined|void|yield|of|in|interface|type|enum|implements|abstract|readonly|private|protected|public|declare|namespace|module|any|string|number|boolean)\\b'];
-  kw.forEach(function(p){h=h.replace(new RegExp(p,'g'),'<span class="k">$1</span>')});
-  h=h.replace(/\b(\d+\.?\d*)\b/g,'<span class="n">$1</span>');
-  return h;
-}
-function openFile(path){
-  fetch(A+'/api/file?path='+encodeURIComponent(path)).then(function(r){return r.json()}).then(function(d){
-    if(d.error)return;$('fv-name').textContent=path;
-    $('fv-content').innerHTML=highlightSyntax(d.content,path);$('fileview').classList.add('open');
-  });
-}
 
 // Init
 function toggleTheme(){var d=document.body.getAttribute("data-theme")==="dark";document.body.setAttribute("data-theme",d?"":"dark");$("theme-btn").textContent=d?"&#127769;":"&#9728;&#65039;";localStorage.setItem("theme",d?"":"dark")}
@@ -374,7 +430,9 @@ var SLASH_COMMANDS={
 };
 
 function send(){
-  var ta=$('ta'),txt=ta.value.trim();if(!txt||sd)return;ta.value='';ah();
+  var ta=$('ta'),txt=ta.value.trim();if(!txt||sd)return;
+  hist.unshift(txt);if(hist.length>50)hist.pop();histIdx=0;
+  ta.value='';ah();
   // Handle @agent and @skill shortcuts
   var agentMatch=txt.match(/^@(explore|scout|general)\s+(.*)/);
   var skillMatch=txt.match(/^@skill\s+(\w+)\s*(.*)/);
@@ -463,25 +521,76 @@ function loadTabPaths(){
     walk(d.tree||[],'');
   }).catch(function(){})
 }
-$('ta').addEventListener('keydown',function(e){
-  if(e.key=='Enter'&&!e.shiftKey){e.preventDefault();send()}
-  else if(e.key=='Tab'){
-    e.preventDefault();
-    var ta=$('ta'),val=ta.value,cursor=ta.selectionStart;
-    var before=val.slice(0,cursor),after=val.slice(cursor);
-    var wordMatch=before.match(/([\w\/\\\.\-]+)$/);
-    if(wordMatch){
-      var partial=wordMatch[1].toLowerCase();
-      var matches=tabPaths.filter(function(p){return p.toLowerCase().includes(partial)});
-      if(matches.length){
-        var match=matches[tabIdx%matches.length];
-        ta.value=before.slice(0,-partial.length)+match+after;
-        ta.selectionStart=ta.selectionEnd=before.length-partial.length+match.length;
-        tabIdx=(tabIdx+1)%matches.length;
-        ah();
-      }
+function completeTab(){
+  var ta=$('ta'),val=ta.value,cursor=ta.selectionStart;
+  var before=val.slice(0,cursor),after=val.slice(cursor);
+  var wordMatch=before.match(/([\w\/\\\.\-]+)$/);
+  if(wordMatch){
+    var partial=wordMatch[1].toLowerCase();
+    var matches=tabPaths.filter(function(p){return p.toLowerCase().includes(partial)});
+    if(matches.length){
+      var match=matches[tabIdx%matches.length];
+      ta.value=before.slice(0,-partial.length)+match+after;
+      ta.selectionStart=ta.selectionEnd=before.length-partial.length+match.length;
+      tabIdx=(tabIdx+1)%matches.length;
+      ah();return;
     }
   }
+  var hint=$('hint-box');
+  if(hint&&hint._items&&hint._items.length){
+    var items=hint._items;
+    var it=items[hint._idx%items.length];
+    ta.value=before.slice(0,-it._partial.length)+it.value+after;
+    ta.selectionStart=ta.selectionEnd=before.length-it._partial.length+it.value.length;
+    hint.style.display='none';ah();
+  }
+}
+// Autocomplete hints: @files, /commands, #skills
+function showHints(){
+  var ta=$('ta'),val=ta.value,cursor=ta.selectionStart;
+  var before=val.slice(0,cursor);
+  var hint=$('hint-box');if(!hint)return;
+  var m=before.match(/([@/#][\w\/\\\.\-]*)$/);
+  if(!m){hint.style.display='none';return}
+  var prefix=m[1],q=prefix.slice(1).toLowerCase(),items=[];
+  if(prefix[0]=='/'){
+    Object.keys(SLASH_COMMANDS).forEach(function(k){if(k.startsWith(q))items.push({value:'/'+k+' ',label:'/'+k+' — '+SLASH_COMMANDS[k].desc,_partial:prefix})});
+  }else if(prefix[0]=='#'){
+    fetch(A+'/api/skills').then(function(r){return r.json()}).then(function(sk){
+      var it=sk.filter(function(s){return s.name.startsWith(q)}).map(function(s){return {value:'@skill '+s.name+' ',label:'#'+s.name,_partial:prefix}});
+      if(it.length)showHintBox(it,cursor);else hideHint();
+    });return;
+  }else if(prefix[0]=='@'){
+    ['explore','scout','general'].forEach(function(a){if(a.startsWith(q))items.push({value:'@'+a+' ',label:'@'+a,_partial:prefix})});
+  }
+  if(items.length)showHintBox(items,cursor);else hideHint();
+}
+function showHintBox(items,cursor){
+  var ta=$('ta'),hint=$('hint-box');if(!hint)return;
+  hint.innerHTML=items.map(function(it,i){return '<div class="hint-item'+(i===0?' sel':'')+'" data-i="'+i+'">'+esc(it.label)+'</div>'}).join('');
+  hint._items=items;hint._idx=0;hint._cursor=cursor;
+  var r=ta.getBoundingClientRect();hint.style.left=r.left+'px';hint.style.top=(r.top-hint.offsetHeight-4)+'px';
+  hint.style.display='block';
+  hint.querySelectorAll('.hint-item').forEach(function(el){
+    el.onmousedown=function(ev){ev.preventDefault();applyHint(+el.getAttribute('data-i'))};
+    el.onmouseenter=function(){hint._idx=+el.getAttribute('data-i');hint.querySelectorAll('.hint-item').forEach(function(e,i){e.classList.toggle('sel',i===hint._idx)})};
+  });
+}
+function hideHint(){var h=$('hint-box');if(h)h.style.display='none'}
+function applyHint(i){
+  var ta=$('ta'),hint=$('hint-box'),it=hint._items[i];
+  var before=ta.value.slice(0,hint._cursor),after=ta.value.slice(hint._cursor);
+  ta.value=before.slice(0,-it._partial.length)+it.value+after;
+  ta.selectionStart=ta.selectionEnd=hint._cursor-it._partial.length+it.value.length;
+  hint.style.display='none';ah();
+}
+var hist=[],histIdx=0;
+$('ta').addEventListener('keydown',function(e){
+  if(e.key=='Enter'&&!e.shiftKey){e.preventDefault();send()}
+  else if(e.key=='Tab'){e.preventDefault();completeTab()}
+  else if(e.key=='ArrowUp'&&!$('ta').value.trim()&&histIdx<hist.length-1){histIdx++;$('ta').value=hist[histIdx];ah()}
+  else if(e.key=='ArrowDown'&&histIdx>0){histIdx--;$('ta').value=hist[histIdx];ah()}
+  else if(e.key!='Tab')setTimeout(showHints,80);
 });
 $('ta').addEventListener('input',ah);init();
 </script>

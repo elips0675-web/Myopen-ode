@@ -2,13 +2,15 @@
 
 Локальный AI-агент-программист на Ollama. Замена Cursor/Windsurf/Claude Code — бесплатно, приватно, офлайн.
 
-**Оценки:** Kimi 8.2/10 · DeepSeek 8.5/10 · Рекомендации из оценок реализованы
+**Оценки:** Kimi 8.8/10 · DeepSeek 8.5/10 · Рекомендации из оценок реализованы
 
 ## Возможности
 
-- **22 инструмента**: read, write, edit, bash, glob, grep, list, web, websearch, diff, commit, undo, verify, plan, search (RAG), **question**, **skill**, **patch**, **task**, **todo**, **lsp**
-- **UI**: файловое дерево + сессии, тёмная тема, подсветка синтаксиса, diff, drag-and-drop, confirm-диалоги
-- **RAG**: семантический поиск по codebase с **дисковым кешированием** — .py, .js, .ts, .go, .rs, .java, .yml, .toml, .env, .cfg, .ini
+- **25 инструментов**: read, write, edit, bash, glob, grep, list, web, websearch, diff, commit, undo, verify, plan, search (RAG), **question**, **skill**, **patch**, **task**, **todo**, **lsp**, **testgen**, **db_query** + плагины
+- **CodeMirror редактор**: вкладки, подсветка, сворачивание кода, Ctrl+S сохранение
+- **UI**: файловое дерево + сессии, тёмная тема, diff, drag-and-drop, confirm-диалоги, **автодополнение в чате** (@файлы, #скиллы, /команды), **история сообщений стрелками**
+- **RAG**: гибридный поиск (**BM25 + семантика**) с **инкрементальным дисковым кешем** по файлам — пересчитываются только изменённые
+- **LLM кеш** с TTL — повторные запросы не тратят токены (LLM_CACHE_TTL)
 - **Multi-agent**: PLANNER_MODEL (лёгкая 1.5b) планирует, основная модель исполняет
 - **WebSearch** через DuckDuckGo (без API ключа)
 - **Fallback**: OpenAI / Claude API, если Ollama недоступен
@@ -17,6 +19,7 @@
 - **Бэкапы**: до 50 версий, undo одной командой
 - **Управление моделями**: +Pull / -Del прямо из UI
 - **Async**: все блокирующие вызовы через `asyncio.to_thread`
+- **Swagger UI**: `/docs` — OpenAPI документация API
 - **CI/CD**: `.github/workflows/test.yml`
 
 ### Безопасность (добавлено по ревью)
@@ -27,18 +30,22 @@
 ### Производительность (добавлено по ревью)
 - ✅ **Точный подсчёт токенов** — через `eval_count` из ответа Ollama
 - ✅ **Суммаризация контекста внутри loop** — каждые 3 итерации
-- ✅ **RAG cache на диск** — эмбеддинги сохраняются в `.rag_cache/`, не пересчитываются при каждом запуске
+- ✅ **Инкрементальный RAG кеш** — per-file кеш в `.rag_cache/`, переиндексируются только изменённые файлы
+- ✅ **Гибридный поиск** — BM25 (Okapi) + косинусное сходство
+- ✅ **LLM кеш с TTL** — повторные вызовы не расходуют токены (LLM_CACHE_TTL=60)
 - ✅ **Настраиваемый таймаут** — AGENT_TIMEOUT для цикла и bash
 
 ### UI (добавлено по ревью)
-- ✅ **Подсветка синтаксиса** в просмотре файлов (Python, JS, TS, Go, Rust, Java, JSON, YAML, TOML, INI и др.)
+- ✅ **CodeMirror редактор** — вкладки файлов, подсветка, сворачивание, Ctrl+S сохранение
+- ✅ **Автодополнение в чате** — @ для файлов/агентов, / для команд, # для скиллов
+- ✅ **История сообщений** — стрелки ↑/↓ в пустом поле
 - ✅ **Question tool** — агент задаёт вопросы с вариантами ответа, пользователь выбирает кнопкой
 - ✅ **Skills система** — `.agent_skills/*.md` — переиспользуемые инструкции для агента
 - ✅ **Patch tool** — применение unified diff к файлам
 - ✅ **Session sharing** — экспорт/импорт сессий через JSON
 - ✅ **Subagents** — @explore (read-only), @scout (web), @general (full access) с разными правами
 - ✅ **Multi-project** — переключение между проектами из UI, отдельные сессии/файлы/RAG на проект
-- ✅ **LSP интеграция** — goToDefinition, findReferences, hover, documentSymbols через pylsp/typescript-language-server
+- ✅ **LSP интеграция** — goToDefinition, findReferences, hover, documentSymbols, **rename** через pylsp/typescript-language-server
 - ✅ **MCP сервер** — Model Context Protocol для интеграции с VS Code, Cursor, Claude Desktop
 - ✅ **Tab completion** — автодополнение путей по Tab в чате
 - ✅ **Progress bar** — SSE прогресс при pull модели
@@ -46,6 +53,8 @@
 - ✅ **Плагины** — `.agent_plugins/*.py`, динамическая загрузка новых инструментов
 - ✅ **Slash-команды** — /test, /deploy, /review, /fix, /doc в чате
 - ✅ **Todo tracking** — todo-лист внутри сессии (add/complete/list)
+- ✅ **testgen** — генерация unit-тестов из кода (Python, JS/TS)
+- ✅ **db_query** — выполнение SQL-запросов к локальной БД (SQLite)
 - ✅ **DeepSeek-V4-Flash** — поддержка 1M контекста через FLASH_PROVIDER/FLASH_API_KEY
 
 ```bash
@@ -78,6 +87,7 @@ python agent.py
 | `FLASH_PROVIDER` | `""` | Провайдер DeepSeek-V4-Flash (`fireworks`, `together`, `groq`) |
 | `FLASH_API_KEY` | `""` | API ключ для flash провайдера |
 | `FLASH_MODEL` | `deepseek-v4-flash` | Модель flash провайдера |
+| `LLM_CACHE_TTL` | `60` | TTL LLM-кеша в секундах (0 = выключен) |
 
 ## Архитектура
 
@@ -98,6 +108,7 @@ ui.py      — HTML UI (встроенный, без зависимостей)
 | `/api/models/{name}` | DELETE | Удалить модель |
 | `/api/files` | GET | Дерево файлов проекта |
 | `/api/file?path=` | GET | Содержимое файла (с подсветкой в UI) |
+| `/api/file` | PUT | Сохранить файл (из CodeMirror редактора) |
 | `/api/sessions` | GET/POST | Список / создание сессий |
 | `/api/sessions/{id}` | GET/DELETE | Загрузка / удаление сессии |
 | `/api/project` | GET | Информация о проекте |
@@ -135,13 +146,15 @@ go install golang.org/x/tools/gopls@latest  # Go
 
 Local AI coding agent powered by Ollama. Free, private, offline alternative to Cursor/Windsurf/Claude Code.
 
-**Ratings:** Kimi 8.2/10 · DeepSeek 8.5/10 · All review recommendations implemented
+**Ratings:** Kimi 8.8/10 · DeepSeek 8.5/10 · All review recommendations implemented
 
 ## Features
 
-- **22 tools**: read, write, edit, bash, glob, grep, list, web, websearch, diff, commit, undo, verify, plan, search (RAG), **question**, **skill**, **patch**, **task**, **todo**, **lsp**
-- **UI**: file tree explorer + session management, dark theme, **syntax highlighting**, diff view, drag-and-drop, confirm dialogs
-- **RAG**: semantic code search with **disk caching** — .py, .js, .ts, .go, .rs, .java, .yml, .toml, .env, .cfg, .ini
+- **25 tools**: read, write, edit, bash, glob, grep, list, web, websearch, diff, commit, undo, verify, plan, search (RAG), **question**, **skill**, **patch**, **task**, **todo**, **lsp**, **testgen**, **db_query** + plugins
+- **CodeMirror editor**: tabs, syntax highlighting, code folding, Ctrl+S save
+- **UI**: file tree explorer + session management, dark theme, diff view, drag-and-drop, confirm dialogs, **chat autocomplete** (@files, #skills, /commands), **message history** (↑/↓)
+- **RAG**: hybrid search (**BM25 + semantic**) with **incremental per-file disk cache** — only changed files re-embedded
+- **LLM cache with TTL** — repeated calls don't waste tokens (LLM_CACHE_TTL)
 - **Multi-agent**: PLANNER_MODEL (lightweight 1.5b) plans, main model executes
 - **WebSearch** via DuckDuckGo (no API key required)
 - **Fallback**: OpenAI / Claude API when Ollama is unavailable
@@ -150,6 +163,7 @@ Local AI coding agent powered by Ollama. Free, private, offline alternative to C
 - **Backups**: up to 50 file versions, undo via single command
 - **Model management**: +Pull / -Del from UI
 - **Async**: all blocking calls via `asyncio.to_thread`
+- **Swagger UI**: `/docs` — OpenAPI documentation
 - **CI/CD**: `.github/workflows/test.yml`
 
 ### Security
@@ -160,18 +174,22 @@ Local AI coding agent powered by Ollama. Free, private, offline alternative to C
 ### Performance
 - ✅ **Accurate token counting** via Ollama's `eval_count`
 - ✅ **In-loop context summarization** every 3 iterations
-- ✅ **RAG disk cache** — embeddings saved to `.rag_cache/`, not rebuilt on every launch
+- ✅ **Incremental RAG cache** — per-file cache in `.rag_cache/`, only changed files re-indexed
+- ✅ **Hybrid search** — BM25 (Okapi) + cosine similarity
+- ✅ **LLM cache with TTL** — repeated calls don't consume tokens (LLM_CACHE_TTL=60)
 - ✅ **Configurable timeout** — AGENT_TIMEOUT for loop and bash
 
 ### UI
-- ✅ **Syntax highlighting** in file viewer (Python, JS, TS, Go, Rust, Java, JSON, YAML, TOML, INI, etc.)
+- ✅ **CodeMirror editor** — file tabs, highlighting, code folding, Ctrl+S save
+- ✅ **Chat autocomplete** — @ for files/agents, / for commands, # for skills
+- ✅ **Message history** — ↑/↓ arrows in empty input
 - ✅ **Question tool** — agent asks questions with answer buttons
 - ✅ **Skills system** — `.agent_skills/*.md` — reusable instructions for the agent
 - ✅ **Patch tool** — apply unified diffs to files
 - ✅ **Session sharing** — export/import sessions as JSON
 - ✅ **Subagents** — @explore (read-only), @scout (web), @general (full access) with different permissions
 - ✅ **Multi-project** — switch between projects from UI, separate sessions/files/RAG per project
-- ✅ **LSP integration** — goToDefinition, findReferences, hover, documentSymbols via pylsp/typescript-language-server
+- ✅ **LSP integration** — goToDefinition, findReferences, hover, documentSymbols, **rename** via pylsp/typescript-language-server
 - ✅ **MCP server** — Model Context Protocol for VS Code, Cursor, Claude Desktop integration
 - ✅ **Tab completion** — path completion via Tab key in chat
 - ✅ **Progress bar** — SSE progress stream for model pull
@@ -179,6 +197,8 @@ Local AI coding agent powered by Ollama. Free, private, offline alternative to C
 - ✅ **Plugins** — `.agent_plugins/*.py`, dynamic tool loading
 - ✅ **Slash commands** — /test, /deploy, /review, /fix, /doc in chat
 - ✅ **Todo tracking** — in-session todo list (add/complete/list)
+- ✅ **testgen** — auto-generates unit tests from code (Python, JS/TS)
+- ✅ **db_query** — SQL queries against local SQLite DB
 - ✅ **DeepSeek-V4-Flash** — 1M context support via FLASH_PROVIDER/FLASH_API_KEY
 
 ```bash

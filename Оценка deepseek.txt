@@ -1,159 +1,69 @@
-Чтобы создать полноценный аналог на локальном Ollama, нужно понимать, чем отличаются эти инструменты. Я подготовил сравнительную таблицу, описание возможностей DeepSeek Flash 4 и конкретный план действий.
+Проект заметно вырос — спасибо за обновлённые файлы! Почти все мои предыдущие замечания (LSP, MCP, подсветка, безопасность, RAG-кеш, subagents, multi-project) уже реализованы. Остались три категории улучшений, которые поднимут проект на уровень коммерческих решений.
 
-1. Сравнение OpenCode Desktop и My OpenCode
-Функция	OpenCode Desktop	Ваш My OpenCode	Комментарий
-Интерфейс	TUI, Desktop App (бета), IDE Extension	Веб-интерфейс (FastAPI)	У вас уже есть веб-UI, что удобнее десктопного приложения
-Модели	75+ LLM провайдеров через OpenRouter	Ollama + fallback OpenAI/Anthropic	У вас локально, у них — облачная экосистема
-LSP интеграция	Есть (Language Server Protocol)	Нет	Это серьёзное отличие: LSP даёт точное понимание кода
-Агенты	Специализированные агенты (plan, explore, build)	plan + основной агент	У вас проще, но ядро есть
-Сессии	Мульти-сессии, шаринг ссылок	JSON-сессии	У вас локальные сессии, у них — с шарингом
-Плагины	Skills, Plugins, MCP серверы	Нет	У OpenCode экосистема расширений
-Инструменты	read, grep, glob, edit, write, apply_patch, bash	14 инструментов (read, write, edit, bash, glob, grep, list, web, diff, commit, undo, verify, plan, search, websearch)	У вас даже больше!
-Diff	Дифф-осознанное редактирование	Diff + подсветка	Паритет
-Подтверждения	Есть (permissions mode)	Есть (NO_CONFIRM)	Паритет
-Headless/CI	opencode run "<prompt>"	API endpoints	У вас API — более гибко
-Стоимость	Бесплатно (опенсорс)	Бесплатно	Паритет
-Локальность	Поддерживает локальные модели через Ollama	Полностью локальный	У вас 100% локально
-Главные差距 у OpenCode Desktop:
+1. Единственное, что заявлено как «не сделано» в TODO
+Пункт	Комментарий
+Native tool calling	Когда Ollama поддержит стандарт OpenAI tool_calls — тогда можно переписать парсинг ```tool на нативный. Сейчас работает, но не идеально. |
+Desktop App (Tauri)	pywebview уже есть, но Tauri даст меньше памяти, лучшее быстродействие и нативный вид. Можно упаковать как отдельную сборку.
+2. Что можно допилить сверх TODO (рекомендации)
+🖥️ Интерфейс и UX
+Встроенный редактор с подсветкой и автодополнением – сейчас только просмотр файлов. Хорошо бы добавить Monaco Editor (или CodeMirror) с возможностью редактирования и сохранения через Ctrl+S, а также автодополнение путей/символов через LSP.
 
-LSP интеграция — даёт понимание кода на уровне компилятора
+Вкладки для нескольких открытых файлов – как в IDE, чтобы одновременно смотреть код и чат.
 
-Плагины и MCP — экосистема расширений
+Интерактивный терминал – встроенный терминал для bash-команд с историей и возможностью прерывания (Ctrl+C).
 
-Специализированные агенты — несколько агентов для разных задач
+Поддержка жестов и клавиатурных сокращений – например, Ctrl+Enter для отправки, стрелки для истории сообщений.
 
-Шаринг сессий — командная работа
+⚙️ Функциональность
+Глубокий анализ зависимостей – автоматическое чтение requirements.txt, package.json, go.mod и предложение установки недостающих пакетов перед сборкой.
 
-2. DeepSeek Flash 4 Free — что это?
-DeepSeek V4 Flash — это бесплатная MoE-модель (284B параметров всего, 13B активных):
+Генерация тестов – инструмент testgen для автоматического создания unit-тестов на основе кода.
 
-Характеристика	Значение
-Контекст	1 млн токенов
-Бесплатно	Да, полностью free
-Формат	OpenAI-совместимый API
-Agentic Coding	Интегрируется с Claude Code, OpenClaw, OpenCode
-Function Calling	Поддерживается
-Thinking Mode	Есть (3 режима мышления)
-Скорость	Быстрая, оптимизирована для high-throughput
-Для чего использовать: кодинг-ассистенты, чат-системы, агентные рабочие процессы. V4-Flash по reasoning близка к V4-Pro и на простых агентных задачах работает на том же уровне.
+Рефакторинг с переименованием – rename с обновлением всех ссылок (через LSP rename).
 
-3. Промт для полного аналога на Ollama
-Ваш agent.py уже близок к OpenCode. Чтобы догнать функционал, нужен улучшенный системный промт:
+Поддержка баз данных – инструмент db_query для выполнения SQL-запросов к локальной БД (SQLite, Postgres) и возврата результатов в структурированном виде.
 
-markdown
-# SYSTEM PROMPT for AI Coding Agent (OpenCode-compatible)
+Интерактивный дебаггер – возможность поставить breakpoint в коде и пошагово выполнять с просмотром переменных (через pdb/debugpy).
 
-You are an autonomous AI coding agent. Your goal is to help the user write, debug, and refactor code in their project.
+🚀 Производительность и масштабирование
+Инкрементальная индексация RAG – отслеживать изменения файлов (inotify) и обновлять эмбеддинги только для изменённых файлов, а не перестраивать всё при каждом запуске.
 
-## AVAILABLE TOOLS
-You have these tools. Output them as ```tool blocks with JSON:
+Гибридный поиск (BM25 + semantic) – улучшить search, добавив ранжирование по TF-IDF в дополнение к косинусному сходству.
 
-1. **read** — Read file content. {"tool":"read","path":"src/main.py"}
-2. **write** — Create or overwrite file. {"tool":"write","path":"file.py","content":"..."}
-3. **edit** — Replace text in file. {"tool":"edit","path":"file.py","old":"...","new":"..."}
-4. **bash** — Run shell command. {"tool":"bash","command":"npm test","cwd":"/project"}
-5. **glob** — Find files by pattern. {"tool":"glob","pattern":"**/*.py"}
-6. **grep** — Search file contents. {"tool":"grep","pattern":"def main","path":"src/"}
-7. **list** — List directory. {"tool":"list","path":"src/"}
-8. **web** — Fetch URL content. {"tool":"web","url":"https://example.com"}
-9. **diff** — Show git diff. {"tool":"diff"}
-10. **commit** — Commit changes. {"tool":"commit","message":"fix: ..."}
-11. **undo** — Restore previous backup. {"tool":"undo","path":"file.py"}
-12. **verify** — Syntax check. {"tool":"verify","path":"file.py"}
-13. **plan** — Propose multi-step plan. {"tool":"plan","steps":["step1","step2"]}
-14. **search** — RAG semantic search. {"tool":"search","query":"authentication flow"}
-15. **websearch** — Search the web. {"tool":"websearch","query":"python asyncio best practices"}
+Кеширование вызовов LLM – для одинаковых запросов (например, повторная проверка синтаксиса) использовать кеш с TTL, чтобы не тратить токены и время.
 
-## AGENT BEHAVIOR
+Поддержка GPU-ускорения для эмбеддингов – если Ollama не использует GPU для nomic-embed-text, можно переключиться на sentence-transformers через ONNX.
 
-### Planning
-- For complex tasks (multi-file changes, refactoring, new features), FIRST use the `plan` tool to propose a step-by-step plan.
-- The user will reply "yes" to execute the plan.
-- After plan approval, execute each step one by one, verifying after each change.
+🔒 Безопасность
+Изоляция bash-команд в Docker-контейнере – чтобы даже при NO_CONFIRM=1 команды выполнялись в изолированной среде с ограниченным доступом к файловой системе.
 
-### Code Understanding
-- Before editing a file, ALWAYS read it first to understand the current state.
-- When reading code, pay attention to imports, function signatures, class definitions, and dependencies.
-- Use `grep` to find related code across the project.
-- Use `glob` to locate files by pattern.
+Поддержка политик безопасности – возможность определить, какие инструменты разрешены для каждого проекта (например, запретить bash для внешних репозиториев).
 
-### Editing Discipline
-- Make minimal, focused changes. Prefer `edit` over `write` for existing files.
-- After any write/edit of Python/JS/TS/JSON files, use `verify` to check syntax.
-- If verify fails, fix the errors immediately.
-- Commit logical units of work with clear messages.
+Аудит действий – логирование всех выполненных инструментов с возможностью просмотра истории изменений (кто, когда, что делал).
 
-### Context Management
-- You have a 32K token context window. Be concise.
-- If conversation becomes long, summarize previous work.
-- Use `search` (RAG) to find relevant code in large codebases.
+🧪 Разработка и тестирование
+Полное покрытие юнит-тестами – сейчас 11 smoke-тестов, нужно добавить тесты для каждого инструмента с моками, а также для агент-лупа, парсинга, безопасности.
 
-### Safety
-- Always ask for confirmation before destructive operations (write, edit, bash, commit, undo).
-- The user can say "yes" to approve, or "no" to cancel.
-- If a command would delete or overwrite important data, warn the user.
+Интеграционные тесты с реальной Ollama – запуск тестовой модели (например, tinyllama) и проверка сквозных сценариев.
 
-### Fallback
-- If a tool fails, explain what went wrong and suggest alternatives.
-- If you're unsure about a change, ask the user for clarification.
+CI/CD для автоматического релиза – сборка Docker-образа, публикация на GitHub Releases с готовым исполняемым файлом (PyInstaller) и десктоп-сборкой.
 
-## RESPONSE FORMAT
-1. Explain what you're about to do in plain text.
-2. Output the tool block(s):
-   ```tool
-   {"tool":"read","path":"file.py"}
-Wait for the tool result (it will come as a user message).
+🌐 Экосистема
+Реестр плагинов – публичный репозиторий с .agent_plugins/*.py, чтобы пользователи могли шарить свои инструменты (как npm).
 
-Based on the result, decide the next action.
+Поддержка MCP-серверов извне – возможность подключать внешние MCP-серверы (например, для работы с Jira, Slack) через конфиг.
 
-When the task is complete, summarize what was done.
+Интеграция с GitLab/GitHub – автоматическое создание PR/MR после коммита, возможность комментировать код в репозитории.
 
-PROJECT CONTEXT
-{project_name} — {project_path}
-Languages: {detected_languages}
+Документация API в формате OpenAPI – добавить fastapi.openapi() и сгенерировать Swagger UI для упрощения интеграции.
 
-text
+3. Итоговый приоритетный список (что даст максимум пользы)
+Встроенный редактор с LSP-автодополнением (UX + производительность кодинга).
 
----
+Инкрементальная индексация RAG (ускоряет работу с большими проектами).
 
-### 4. Что ещё нужно допилить для полного аналога
+Изоляция bash через Docker (безопасность для production).
 
-| Компонент | Статус | Что сделать |
-|---|---|---|
-| **LSP интеграция** | ❌ Нет | Добавить pyright для Python, tsserver для TS/JS |
-| **Мульти-агенты** | ⚠️ Частично (planner) | Добавить explore-агента (исследование кода) и build-агента (сборка) |
-| **Плагины** | ❌ Нет | Сделать простую систему плагинов (JS/Python скрипты) |
-| **MCP сервер** | ❌ Нет | Добавить поддержку Model Context Protocol |
-| **Шаринг сессий** | ❌ Нет | Экспорт/импорт сессий в JSON |
-| **Desktop App** | ❌ Нет | Упаковать в Electron (как Palot[reference:31]) |
-| **WebSearch** | ✅ Есть | Уже реализован через DuckDuckGo |
-| **RAG** | ✅ Есть | Уже есть через nomic-embed-text |
+Полное покрытие тестами (надёжность и упрощение рефакторинга).
 
-### 5. Конфиг для OpenCode-совместимости с Ollama
-
-Если хотите, чтобы ваш агент **работал как OpenCode с Ollama**, вот конфиг:
-
-```json
-{
-  "$schema": "https://opencode.ai/config.json",
-  "provider": {
-    "ollama": {
-      "npm": "@ai-sdk/openai-compatible",
-      "name": "Ollama",
-      "options": {
-        "baseURL": "http://localhost:11434/v1"
-      },
-      "models": {
-        "deepseek-r1:7b": {
-          "name": "deepseek-r1:7b"
-        },
-        "qwen2.5-coder:7b": {
-          "name": "qwen2.5-coder:7b"
-        }
-      }
-    }
-  }
-}
-Этот конфиг позволяет OpenCode использовать ваши локальные модели через Ollama. При этом OpenCode требует контекст 64K+ — у deepseek-r1:7b как раз 32K, так что для больших репозиториев лучше взять qwen2.5-coder:7b (128K) или deepseek-r1:14b.
-
-Итог: ваш agent.py уже покрывает ~80% функционала OpenCode Desktop. Главные вещи для дотягивания — LSP и плагины. DeepSeek Flash 4 можно использовать как fallback через OpenAI-совместимый API, если задача слишком сложная для 7B модели.
+Desktop App на Tauri (альтернатива браузеру, удобство).
