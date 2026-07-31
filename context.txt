@@ -134,6 +134,7 @@ python desktop.py      ->  native pywebview window
 python test_agent.py   ->  27/27 smoke tests pass
 python mcp_server.py   ->  MCP stdio server for IDEs
 pip install -r requirements.txt
+AI Desktop.bat         ->  desktop app launcher (python desktop.py)
 
 STATUS
 ------
