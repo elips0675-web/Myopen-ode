@@ -6,7 +6,8 @@
 
 ## Возможности
 
-- **26 инструментов**: read, write, edit, bash, glob, grep, list, web, websearch, diff, commit, undo, verify, plan, search (RAG), **question**, **skill**, **patch**, **task**, **todo**, **lsp**, **testgen**, **db_query**, **deps** + плагины
+- **27 инструментов**: read, write, edit, bash, glob, grep, list, web, websearch, diff, commit, undo, verify, plan, search (RAG), **question**, **skill**, **patch**, **task**, **todo**, **lsp**, **testgen**, **db_query**, **deps**, **mcp** + плагины
+- **Streaming tool execution**: live-прогресс в чате — вызовы инструментов видны в реальном времени по мере работы агента
 - **CodeMirror редактор**: вкладки, подсветка, сворачивание кода, Ctrl+S сохранение, **Ctrl+Space автодополнение (LSP)**
 - **UI**: файловое дерево + сессии, тёмная тема, diff, drag-and-drop, confirm-диалоги, **автодополнение в чате** (@файлы, #скиллы, /команды), **история сообщений стрелками**, **встроенный терминал** (SSE-стриминг, история, Ctrl+C)
 - **RAG**: гибридный поиск (**BM25 + семантика**) с **инкрементальным дисковым кешем** по файлам — пересчитываются только изменённые
@@ -58,6 +59,8 @@
 - ✅ **testgen** — генерация unit-тестов из кода (Python, JS/TS)
 - ✅ **db_query** — выполнение SQL-запросов к локальной БД (SQLite)
 - ✅ **deps** — анализ зависимостей: requirements.txt, pyproject.toml, package.json, go.mod, Cargo.toml, Pipfile
+- ✅ **MCP-клиенты** — внешние MCP-серверы через `mcp_servers.json` (stdio), инструмент `mcp`: `{"server":"filesystem","call":"read_file","args":{...}}`, `server:"_list"` — список доступных тулов
+- ✅ **Streaming tool execution** — SSE-события `tool`/`status` в реальном времени при работе агента (вызовы тулов видны в чате до финального ответа)
 - ✅ **Action audit** — `.agent_audit.log` — журнал всех вызовов инструментов
 - ✅ **DeepSeek-V4-Flash** — поддержка 1M контекста через FLASH_PROVIDER/FLASH_API_KEY
 
@@ -166,7 +169,8 @@ Local AI coding agent powered by Ollama. Free, private, offline alternative to C
 
 ## Features
 
-- **26 tools**: read, write, edit, bash, glob, grep, list, web, websearch, diff, commit, undo, verify, plan, search (RAG), **question**, **skill**, **patch**, **task**, **todo**, **lsp**, **testgen**, **db_query**, **deps** + plugins
+- **27 tools**: read, write, edit, bash, glob, grep, list, web, websearch, diff, commit, undo, verify, plan, search (RAG), **question**, **skill**, **patch**, **task**, **todo**, **lsp**, **testgen**, **db_query**, **deps**, **mcp** + plugins
+- **Streaming tool execution**: live tool progress visible in chat while the agent works
 - **CodeMirror editor**: tabs, syntax highlight, folding, Ctrl+S save, **Ctrl+Space LSP autocomplete**
 - **UI**: file tree + sessions, dark theme, diff, drag-and-drop, confirm dialogs, **chat autocomplete** (@files, #skills, /commands), **message history (arrows)**, **built-in terminal** (SSE streaming, history, Ctrl+C)
 - **RAG**: hybrid search (**BM25 + semantics**) with **incremental disk cache** per file — only changed files are reindexed

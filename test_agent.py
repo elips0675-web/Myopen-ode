@@ -111,11 +111,60 @@ def test_save_api():
     assert (WORK_DIR / ".test_tmp/api_save.txt").read_text() == "saved"
     print("  [OK] save API (PUT /api/file)")
 
+def test_terminal_api():
+    from fastapi.testclient import TestClient
+    client = TestClient(__import__("agent").app)
+    r = client.post("/api/terminal", json={"cmd": "echo term_test_123", "cwd": ""})
+    assert r.status_code == 200, f"terminal status {r.status_code}"
+    assert "term_test_123" in r.text, f"terminal output missing: {r.text[:200]}"
+    assert '"done": true' in r.text, "terminal missing done event"
+    r2 = client.post("/api/terminal/kill")
+    assert r2.json().get("killed", 0) >= 0
+    print("  [OK] terminal (SSE)")
+
+def test_deps_tool():
+    r = execute_tool("deps", {})
+    assert isinstance(r, str) and len(r) > 0, f"deps failed: {r}"
+    assert "requirements" in r.lower() or "package" in r.lower() or "No dependency" in r, f"deps output unexpected: {r[:100]}"
+    print("  [OK] deps")
+
+def test_audit():
+    log_file = WORK_DIR / ".agent_audit.log"
+    before = log_file.read_text(encoding="utf-8") if log_file.exists() else ""
+    execute_tool("list", {"path": "."})
+    after = log_file.read_text(encoding="utf-8") if log_file.exists() else ""
+    assert len(after) > len(before), "audit log not appended"
+    lines = [l for l in after.splitlines() if l.strip()]
+    assert any("list" in l for l in lines[-3:]), f"audit missing tool name: {lines[-3:]}"
+    print("  [OK] audit log")
+
+def test_rag_cache_incremental():
+    from rag import init_rag, rag_search, _FILE_STATS
+    import shutil
+    rdir = WORK_DIR / ".test_rag"
+    shutil.rmtree(rdir, ignore_errors=True)
+    rdir.mkdir(exist_ok=True)
+    (rdir / "a.py").write_text("def alpha_func():\n    return 1\n", encoding="utf-8")
+    init_rag(OLLAMA_URL="http://localhost:11434", WORK_DIR=rdir, EMBED_MODEL="nomic-embed-text")
+    results = rag_search("alpha_func", top_k=5)
+    assert isinstance(results, str) and "a.py" in results, f"rag search failed: {results}"
+    stats1 = dict(_FILE_STATS)
+    results2 = rag_search("alpha_func", top_k=5)
+    stats2 = dict(_FILE_STATS)
+    assert stats1 == stats2, "cache should be reused on unchanged file"
+    (rdir / "a.py").write_text("def alpha_func():\n    return 2\n\ndef beta_marker():\n    pass\n", encoding="utf-8")
+    rag_search("alpha_func", top_k=5)
+    stats3 = dict(_FILE_STATS)
+    assert stats3 != stats2, "cache should rebuild for changed file"
+    shutil.rmtree(rdir, ignore_errors=True)
+    print("  [OK] RAG incremental cache")
+
 if __name__ == "__main__":
     print(f"\nSmoke tests for agent.py\n{'='*40}")
     tests = [test_read, test_read_absolute, test_read_url, test_list, test_glob,
              test_write_and_undo, test_edit, test_bash, test_verify_py, test_verify_json,
-             test_backup_undo, test_db_query, test_testgen, test_validation, test_save_api]
+             test_backup_undo, test_db_query, test_testgen, test_validation, test_save_api,
+             test_terminal_api, test_deps_tool, test_audit, test_rag_cache_incremental]
     passed = 0
     for t in tests:
         try:

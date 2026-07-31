@@ -120,6 +120,9 @@ body[data-theme="dark"]{--bg:#0f1117;--fg:#e2e8f0;--sidebar:#161b22;--sidebar-bo
 #term-in{display:flex;border-top:1px solid var(--sidebar-border)}
 #term-in input{flex:1;background:transparent;border:none;color:var(--fg);font-family:inherit;font-size:12px;padding:6px 10px;outline:none}
 #term-in .t-kill{background:var(--cnl-btn);color:#fff;border:none;padding:0 12px;cursor:pointer;font-size:11px}
+.tline{font-family:Consolas,monospace;font-size:11px;color:var(--st-c);background:var(--code-bg);border:1px solid var(--sidebar-border);border-radius:4px;padding:3px 8px;margin:3px 0;word-break:break-all}
+.tline .tldone{color:#4ade80}
+.tline.terr{color:#f87171;border-color:rgba(248,113,113,.4)}
 </style></head><body>
 <div id="sidebar">
   <div class="logo"><svg viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>OpenCode <span>v2</span></div>
@@ -490,15 +493,29 @@ function send(){
   }
   am('u',fm(txt));ms.push({role:'user',content:txt});
   var m=$('chm').value||'deepseek-r1:7b';sd=1;$('snd').disabled=1;$('cnl').style.display='inline-block';ac=new AbortController();
-  var fl='',be=am('a','<span class="sp"></span>');$('st2').textContent='thinking...';
-  fetch(A+'/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},
+    var fl='',be=am('a','<span class="sp"></span>');$('st2').textContent='thinking...';
+    var tl=null,tlCount=0;
+    function toolLine(name,args,result){
+      if(!tl){tl=document.createElement('div');tl.className='tline';be.parentNode.appendChild(tl)}
+      var short=(args&&(args.path||args.cmd||args.pattern||args.query))?' '+(args.path||args.cmd||args.pattern||args.query).toString().slice(0,60):'';
+      tl.innerHTML='<span class="tldone">&#10003;</span> <b>'+esc(name)+'</b>'+esc(short);
+      if(result&&result.toString().toLowerCase().includes('error'))tl.className='tline terr';
+      tlCount++;
+    }
+    fetch(A+'/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},
     body:JSON.stringify({model:m,messages:ms,session_id:curSid}),signal:ac.signal})
   .then(function(r){if(!r.ok)throw Error(r.status);
     var rd=r.body.getReader(),dc=new TextDecoder(),bf='';
     (function rd2(){rd.read().then(function(v){
       if(v.done){ms.push({role:'assistant',content:fl});be.innerHTML=fm(fl)||'(empty)';sd=0;$('snd').disabled=0;$('cnl').style.display='none';$('st2').textContent='';loadFiles();return}
       bf+=dc.decode(v.value,{stream:1});var ls=bf.split('\n');bf=ls.pop()||'';
-      ls.forEach(function(l){if(l.startsWith('data: ')){try{var d=JSON.parse(l.slice(6));if(d.text)fl+=d.text}catch(e){}}});
+      ls.forEach(function(l){if(l.startsWith('data: ')){try{var d=JSON.parse(l.slice(6));
+        if(d.text){fl+=d.text}
+        else if(d.tool){
+          if(d.tool.type=='status')$('st2').textContent=d.tool.msg;
+          else if(d.tool.type=='tool')toolLine(d.tool.name,d.tool.args,d.tool.result);
+        }
+      }catch(e){}}});
       be.innerHTML=fm(fl)||'<span class="sp"></span>';rd2()
     }).catch(function(e){if(e.name!='AbortError'){be.innerHTML='Error: '+esc(e.message)}sd=0;$('snd').disabled=0;$('cnl').style.display='none';$('st2').textContent=''})})()
   }).catch(function(e){if(e.name!='AbortError'){be.innerHTML='Error: '+esc(e.message)}sd=0;$('snd').disabled=0;$('cnl').style.display='none';$('st2').textContent=''})

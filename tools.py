@@ -136,6 +136,7 @@ TOOL_SCHEMAS = {
     "testgen": {"required": ["path"]},
     "db_query": {"required": ["query"]},
     "deps": {},
+    "mcp": {"required": ["server", "call"]},
 }
 
 def validate_tool(tc):
@@ -816,6 +817,18 @@ def _execute_tool_inner(name, args):
                     out.append("")
             if not out: return "No dependency files found (requirements.txt, package.json, go.mod, Cargo.toml, Pipfile)"
             return "\n".join(out).rstrip()
+        elif name == "mcp":
+            try:
+                from mcp_client import mcp_call, mcp_tools_list
+            except ImportError:
+                from .mcp_client import mcp_call, mcp_tools_list
+            server = args.get("server", "")
+            if server == "_list":
+                pairs = mcp_tools_list()
+                if not pairs:
+                    return "No external MCP tools available (check mcp_servers.json)"
+                return "\n".join(f"  {s}.{t}" for s, t in pairs)
+            return mcp_call(server, args.get("call", ""), args.get("args", {}))
         else:
             result = call_plugin(name, args)
             if result is not None: return result

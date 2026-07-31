@@ -115,8 +115,6 @@ def bm25_score(query, doc_idx):
 
 def rag_index():
     global RAG_INDEX, RAG_CHUNKS, RAG_DIRTY
-    if not RAG_DIRTY and RAG_INDEX: return
-
     files = _scan_files()
     changed, removed = [], []
     for rel, mtime, size in files:
@@ -143,6 +141,8 @@ def rag_index():
             _index_file(rel, mtime, size)
 
     if not RAG_CHUNKS: return
+    if not changed and not removed and RAG_INDEX and not RAG_DIRTY:
+        return  # nothing changed since last index
     _build_bm25()
     RAG_INDEX = [c["emb"] for c in RAG_CHUNKS]
     RAG_DIRTY = False

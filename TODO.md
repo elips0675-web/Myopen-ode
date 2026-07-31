@@ -3,8 +3,9 @@
 ## Что сделано (Core)
 
 - [x] FastAPI сервер, SSE streaming, agent loop (12 итераций)
-- [x] 26 инструментов: read, write, edit, bash, glob, grep, list, web, websearch, diff, commit, undo, verify, plan, search, question, skill, patch, task, todo, lsp, testgen, db_query, deps + плагины
+- [x] 27 инструментов: read, write, edit, bash, glob, grep, list, web, websearch, diff, commit, undo, verify, plan, search, question, skill, patch, task, todo, lsp, testgen, db_query, deps, mcp + плагины
 - [x] Prompt-based tool calling
+- [x] Streaming tool execution — live-прогресс тулов в UI (SSE события tool/status по мере исполнения)
 - [x] Сессии (.agent_sessions/), экспорт/импорт
 - [x] Multi-project (projects.json, переключение из UI)
 - [x] UI: файловое дерево, сессии, тёмная тема, drag-and-drop, confirm-диалоги, tab completion
@@ -24,11 +25,12 @@
 - [x] WebSearch (DuckDuckGo)
 - [x] Async rewrite
 - [x] CI/CD
-- [x] 15 smoke-тестов
+- [x] 19 smoke-тестов
 - [x] Mobile-responsive sidebar
 - [x] Desktop App (pywebview)
 - [x] Плагины (.agent_plugins/)
 - [x] Action audit (.agent_audit.log)
+- [x] MCP-клиенты (mcp_servers.json + инструмент mcp)
 
 ## Редактор (добавлено по оценке Kimi 8.8)
 - [x] CodeMirror: вкладки, подсветка, folding, Ctrl+S сохранение, Ctrl+Space автодополнение (LSP)
@@ -62,7 +64,6 @@
 ## Не сделано (низкий приоритет)
 - [ ] Native tool calling (когда Ollama поддержит)
 - [ ] Desktop App (Tauri — pywebview уже работает)
-- [ ] Streaming tool execution (инструменты исполняются по мере генерации)
 - [ ] Docker-изоляция bash
-- [ ] Внешние MCP-клиенты
 - [ ] GPU embeddings (Ollama уже на GPU — фактически не требуется)
+- [ ] LSP completion без LSP-сервера (быстрый локальный fallback по токенам)

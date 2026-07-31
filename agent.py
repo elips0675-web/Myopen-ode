@@ -172,7 +172,12 @@ def _get_available_models():
 
 _available_models = _get_available_models()
 
-def run_agent_loop(msgs, session_id):
+def run_agent_loop(msgs, session_id, events=None):
+    """Run agent loop. events: optional callback(ev: dict) for live tool progress."""
+    def _emit(ev):
+        if events:
+            try: events(ev)
+            except: pass
     msgs = summarize_context(msgs)
     full = ""
     tool_pat = re.compile('```(?:tool|json)\n(.*?)\n```', re.DOTALL)
@@ -187,6 +192,8 @@ def run_agent_loop(msgs, session_id):
         if time.time() - start_time > max_time:
             full += f"\n[tool: TIMEOUT — agent loop exceeded {int(max_time)}s]\n"
             break
+
+        _emit({"type": "status", "msg": f"iteration {it+1}/{max_iter}"})
 
         # Summarize context every 3 iterations to keep token usage in check
         if it > 0 and it % 3 == 0:
@@ -229,6 +236,7 @@ def run_agent_loop(msgs, session_id):
             if pn:
                 log.info("Auto-exec pending %s after '%s'", pn, last_msg[:10])
                 r = execute_tool(pn, pa)
+                _emit({"type": "tool", "name": pn, "args": pa, "result": r[:200]})
                 full += f"\n[tool:{pn}] {r[:2000]}\n"
                 msgs.append({"role":"assistant","content":f"(auto-executed {pn})"})
                 msgs.append({"role":"user","content":r[:2000]})
@@ -276,6 +284,7 @@ def run_agent_loop(msgs, session_id):
                 last = (msgs[-1]["content"].strip().lower() if msgs else "")[:5]
                 if last in ("yes","y","go a","да","ok","cont","proc","do i"):
                     r = execute_tool(name,tc)
+                    _emit({"type": "tool", "name": name, "args": tc, "result": r[:200]})
                     all_results.append(f"[tool:{name}] {r[:2000]}")
                     calls_made.append(name)
                 else:
@@ -288,6 +297,7 @@ def run_agent_loop(msgs, session_id):
                     needs_break=True; break
                 continue
             r = execute_tool(name,tc)
+            _emit({"type": "tool", "name": name, "args": tc, "result": r[:200]})
             all_results.append(f"[tool:{name}] {r[:2000]}")
             calls_made.append(name)
 
@@ -580,11 +590,30 @@ async def chat(req: ChatReq):
     mem_text = memory_prompt()
     sys_content = SYSTEM_PROMPT + mem_text
     msgs = [{"role": "system", "content": sys_content}] + session_msgs + req.messages
-    full = await asyncio.to_thread(run_agent_loop, msgs, req.session_id)
-    if req.session_id and msgs:
-        try: save_memory(req.session_id, msgs)
-        except: pass
+    q = asyncio.Queue()
+    loop = asyncio.get_running_loop()
+    def emit(ev):
+        loop.call_soon_threadsafe(q.put_nowait, ev)
+    task = asyncio.create_task(asyncio.to_thread(run_agent_loop, msgs, req.session_id, emit))
     async def gen():
+        # 1) live tool progress while the agent loop runs
+        while True:
+            try:
+                ev = await asyncio.wait_for(q.get(), timeout=0.5)
+                yield f"data: {json.dumps({'tool': ev})}\n\n"
+            except asyncio.TimeoutError:
+                if task.done():
+                    while not q.empty():
+                        yield f"data: {json.dumps({'tool': q.get_nowait()})}\n\n"
+                    break
+        # 2) final text stream
+        try:
+            full = await task
+        except Exception as e:
+            full = f"[Error: {e}]"
+        if req.session_id and msgs:
+            try: save_memory(req.session_id, msgs)
+            except: pass
         for i in range(0, len(full), 3):
             chunk = full[i:i+3]
             if chunk.strip():
