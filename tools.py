@@ -135,6 +135,7 @@ TOOL_SCHEMAS = {
     "lsp": {"required": ["operation", "path"]},
     "testgen": {"required": ["path"]},
     "db_query": {"required": ["query"]},
+    "deps": {},
 }
 
 def validate_tool(tc):
@@ -483,7 +484,29 @@ def _validate_patch(diff_text):
     return None
 
 # ─── execute tool ─────────────────────────────────────────
+AUDIT_LOG = None
+
+def _audit(name, args, result):
+    """Log every tool call with timestamp (action audit)."""
+    global AUDIT_LOG
+    if AUDIT_LOG is None:
+        AUDIT_LOG = WORK_DIR / ".agent_audit.log"
+    try:
+        ts = datetime.now().isoformat(timespec="seconds")
+        arg_preview = json.dumps(args, ensure_ascii=False)[:200]
+        with open(AUDIT_LOG, "a", encoding="utf-8") as f:
+            f.write(f"[{ts}] {name} {arg_preview}\n")
+    except: pass
+
 def execute_tool(name, args):
+    try:
+        result = _execute_tool_inner(name, args)
+        _audit(name, args, result)
+        return result
+    except Exception as e:
+        return f"Error: {e}"
+
+def _execute_tool_inner(name, args):
     try:
         if name == "read":
             p = args["path"]
@@ -703,6 +726,10 @@ def execute_tool(name, args):
                 new_name = args.get("new_name", "")
                 if not new_name: return "Missing new_name"
                 return client.rename(path, line, char, new_name)
+            elif op == "completion":
+                items = client.completion(path, line, char, args.get("text"))
+                if not items: return "No completions"
+                return "\n".join(f"{it['label']}  ({it['detail'] or 'kind ' + str(it['kind'])})" for it in items[:30])
             return f"Unknown LSP operation: {op}"
         elif name == "testgen":
             p = Path(args["path"]) if os.path.isabs(args["path"]) else WORK_DIR / args["path"]
@@ -748,6 +775,47 @@ def execute_tool(name, args):
                 return f"db_query error: {e}"
             finally:
                 conn.close()
+        elif name == "deps":
+            # Dependency analysis: requirements.txt / package.json / go.mod / pyproject.toml
+            out = []
+            for pattern in ("requirements*.txt", "pyproject.toml", "package.json", "go.mod", "Cargo.toml", "Pipfile"):
+                for f in sorted(Path(WORK_DIR).glob(pattern)):
+                    rel = str(f.relative_to(WORK_DIR))
+                    try:
+                        content = f.read_text("utf-8", errors="ignore")
+                    except: continue
+                    out.append(f"### {rel}")
+                    if f.name == "requirements.txt":
+                        pkgs = [l.strip() for l in content.splitlines() if l.strip() and not l.startswith(("#", "-"))]
+                        if pkgs:
+                            out.append("pip packages:")
+                            for p in pkgs: out.append(f"  {p}")
+                            out.append("Install: pip install " + " ".join(re.split(r'[<>=!~\[; ]+', p)[0] for p in pkgs))
+                    elif f.name == "pyproject.toml":
+                        deps = re.findall(r'^([\w\-]+)\s*=\s*["\^~>=<0-9.\[]+', content, re.M)
+                        if deps: out.append("pyproject deps: " + ", ".join(deps))
+                    elif f.name == "package.json":
+                        try:
+                            j = json.loads(content)
+                            deps = list(j.get("dependencies", {}).keys()) + list(j.get("devDependencies", {}).keys())
+                            if deps:
+                                out.append("npm deps:")
+                                for d in deps: out.append(f"  npm install {d}")
+                        except: out.append("package.json: invalid JSON")
+                    elif f.name == "go.mod":
+                        deps = re.findall(r'^\s*([\w\.\-]+/\S+)\s+v\S+', content, re.M)
+                        if deps:
+                            out.append("go deps:")
+                            for d in deps: out.append(f"  go get {d}")
+                    elif f.name == "Cargo.toml":
+                        deps = re.findall(r'^([\w\-]+)\s*=\s*\{?\s*version', content, re.M)
+                        if deps: out.append("cargo deps: " + ", ".join(deps))
+                    elif f.name == "Pipfile":
+                        deps = re.findall(r'^([\w\-]+)\s*=\s*"', content, re.M)
+                        if deps: out.append("pipenv deps: " + ", ".join(deps))
+                    out.append("")
+            if not out: return "No dependency files found (requirements.txt, package.json, go.mod, Cargo.toml, Pipfile)"
+            return "\n".join(out).rstrip()
         else:
             result = call_plugin(name, args)
             if result is not None: return result

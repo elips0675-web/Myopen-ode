@@ -210,6 +210,46 @@ class LSPClient:
             lines.append(f"  {kind} {name} — line {pos.get('line', 0)+1}")
         return "\n".join(lines)
 
+    def completion(self, path, line, character, text=None):
+        """Request autocomplete items. text = current editor buffer (optional)."""
+        ext = Path(path).suffix
+        if not self._ensure_server(ext): return None
+        uri = f"file://{Path(path).resolve()}"
+        if text is not None:
+            self._send({
+                "jsonrpc": "2.0", "method": "textDocument/didOpen",
+                "params": {
+                    "textDocument": {"uri": uri, "languageId": self._lang(path), "version": 1, "text": text}
+                }
+            })
+        else:
+            uri = self._open_doc(path)
+        rid = self._next_id()
+        self._send({
+            "jsonrpc": "2.0", "id": rid,
+            "method": "textDocument/completion",
+            "params": {
+                "textDocument": {"uri": uri},
+                "position": {"line": line, "character": character},
+                "context": {"triggerKind": 1}
+            }
+        })
+        result = self._wait_response(rid)
+        self._close_doc(uri)
+        if not result or "error" in result or "result" not in result:
+            return None
+        items = result["result"]
+        if isinstance(items, dict): items = items.get("items", [])
+        return [
+            {
+                "label": it.get("label", ""),
+                "kind": it.get("kind", 0),
+                "detail": it.get("detail", ""),
+                "insertText": it.get("insertText") or it.get("label", ""),
+            }
+            for it in items[:50]
+        ]
+
     def rename(self, path, line, character, new_name):
         ext = Path(path).suffix
         if not self._ensure_server(ext): return "LSP not available for " + ext

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """AI Coding Agent v2 — OpenCode Desktop alternative with DeepSeek support."""
 
-import json, os, glob, webbrowser, re, time, logging, asyncio
+import json, os, glob, webbrowser, re, time, logging, asyncio, subprocess
 from pathlib import Path
 from datetime import datetime
 import requests, uvicorn
@@ -321,6 +321,7 @@ class SessionReq(BaseModel): title: str = ""
 class FileUploadReq(BaseModel): path: str = ""; content: str = ""
 class ProjectReq(BaseModel): name: str = ""; path: str = ""
 class ProjectSwitchReq(BaseModel): path: str = ""
+class TerminalReq(BaseModel): cmd: str = ""; cwd: str = ""
 
 # ─── FastAPI app ─────────────────────────────────────────
 app = FastAPI()
@@ -512,6 +513,61 @@ def import_session(req: ChatReq):
     sf = SESSIONS_DIR / f"{sid}.json"
     sf.write_text(json.dumps({"title": title, "messages": messages, "updated": datetime.now().isoformat()}, ensure_ascii=False), "utf-8")
     return {"id": sid, "title": title}
+
+TERMINAL_PROCS = {}
+
+@app.post("/api/terminal")
+async def terminal(req: TerminalReq):
+    """Run a shell command, streaming output via SSE."""
+    cmd = req.cmd.strip()
+    if not cmd:
+        return {"error": "Empty command"}
+    async def gen():
+        try:
+            proc = subprocess.Popen(
+                cmd, shell=True, cwd=req.cwd or WORK_DIR,
+                stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                text=True, encoding="utf-8", errors="replace",
+                creationflags=subprocess.CREATE_NO_WINDOW,
+            )
+            TERMINAL_PROCS[id(gen)] = proc
+            yield f"data: {json.dumps({'line': f'$ {cmd}', 'done': False})}\n\n"
+            for line in proc.stdout:
+                yield f"data: {json.dumps({'line': line, 'done': False})}\n\n"
+            proc.wait()
+            code = proc.returncode
+            yield f"data: {json.dumps({'line': '', 'done': True, 'code': code})}\n\n"
+        except Exception as e:
+            yield f"data: {json.dumps({'line': f'Error: {e}', 'done': True, 'code': -1})}\n\n"
+        finally:
+            TERMINAL_PROCS.pop(id(gen), None)
+    return StreamingResponse(gen(), media_type="text/event-stream",
+                             headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+
+@app.post("/api/terminal/kill")
+def terminal_kill():
+    n = 0
+    for proc in list(TERMINAL_PROCS.values()):
+        try:
+            proc.kill()
+            n += 1
+        except: pass
+    return {"killed": n}
+
+@app.post("/api/lsp/completion")
+def lsp_completion(req: dict):
+    """Editor autocomplete: returns completion items as JSON list."""
+    path = req.get("path", "")
+    text = req.get("text")
+    line = int(req.get("line", 0))
+    character = int(req.get("character", 0))
+    try:
+        from lsp import LSPClient
+        client = LSPClient(WORK_DIR)
+        items = client.completion(path, line, character, text)
+        return {"items": items or []}
+    except Exception as e:
+        return {"items": [], "error": str(e)}
 
 @app.post("/api/chat")
 async def chat(req: ChatReq):

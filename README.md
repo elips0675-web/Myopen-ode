@@ -6,9 +6,9 @@
 
 ## Возможности
 
-- **25 инструментов**: read, write, edit, bash, glob, grep, list, web, websearch, diff, commit, undo, verify, plan, search (RAG), **question**, **skill**, **patch**, **task**, **todo**, **lsp**, **testgen**, **db_query** + плагины
-- **CodeMirror редактор**: вкладки, подсветка, сворачивание кода, Ctrl+S сохранение
-- **UI**: файловое дерево + сессии, тёмная тема, diff, drag-and-drop, confirm-диалоги, **автодополнение в чате** (@файлы, #скиллы, /команды), **история сообщений стрелками**
+- **26 инструментов**: read, write, edit, bash, glob, grep, list, web, websearch, diff, commit, undo, verify, plan, search (RAG), **question**, **skill**, **patch**, **task**, **todo**, **lsp**, **testgen**, **db_query**, **deps** + плагины
+- **CodeMirror редактор**: вкладки, подсветка, сворачивание кода, Ctrl+S сохранение, **Ctrl+Space автодополнение (LSP)**
+- **UI**: файловое дерево + сессии, тёмная тема, diff, drag-and-drop, confirm-диалоги, **автодополнение в чате** (@файлы, #скиллы, /команды), **история сообщений стрелками**, **встроенный терминал** (SSE-стриминг, история, Ctrl+C)
 - **RAG**: гибридный поиск (**BM25 + семантика**) с **инкрементальным дисковым кешем** по файлам — пересчитываются только изменённые
 - **LLM кеш** с TTL — повторные запросы не тратят токены (LLM_CACHE_TTL)
 - **Multi-agent**: PLANNER_MODEL (лёгкая 1.5b) планирует, основная модель исполняет
@@ -17,6 +17,7 @@
 - **Agent memory**: `.agent_memory/` — кросс-сессионная память (лимит настраивается)
 - **Verify**: автопроверка синтаксиса после write/edit
 - **Бэкапы**: до 50 версий, undo одной командой
+- **Action audit**: `.agent_audit.log` — журнал всех вызовов инструментов
 - **Управление моделями**: +Pull / -Del прямо из UI
 - **Async**: все блокирующие вызовы через `asyncio.to_thread`
 - **Swagger UI**: `/docs` — OpenAPI документация API
@@ -36,7 +37,8 @@
 - ✅ **Настраиваемый таймаут** — AGENT_TIMEOUT для цикла и bash
 
 ### UI (добавлено по ревью)
-- ✅ **CodeMirror редактор** — вкладки файлов, подсветка, сворачивание, Ctrl+S сохранение
+- ✅ **CodeMirror редактор** — вкладки файлов, подсветка, сворачивание, Ctrl+S сохранение, **Ctrl+Space автодополнение через LSP** (POST /api/lsp/completion)
+- ✅ **Интерактивный терминал** — панель в UI, потоковый вывод через SSE (POST /api/terminal), история команд, Kill (Ctrl+C)
 - ✅ **Автодополнение в чате** — @ для файлов/агентов, / для команд, # для скиллов
 - ✅ **История сообщений** — стрелки ↑/↓ в пустом поле
 - ✅ **Question tool** — агент задаёт вопросы с вариантами ответа, пользователь выбирает кнопкой
@@ -45,7 +47,7 @@
 - ✅ **Session sharing** — экспорт/импорт сессий через JSON
 - ✅ **Subagents** — @explore (read-only), @scout (web), @general (full access) с разными правами
 - ✅ **Multi-project** — переключение между проектами из UI, отдельные сессии/файлы/RAG на проект
-- ✅ **LSP интеграция** — goToDefinition, findReferences, hover, documentSymbols, **rename** через pylsp/typescript-language-server
+- ✅ **LSP интеграция** — goToDefinition, findReferences, hover, documentSymbols, **rename**, **completion** через pylsp/typescript-language-server
 - ✅ **MCP сервер** — Model Context Protocol для интеграции с VS Code, Cursor, Claude Desktop
 - ✅ **Tab completion** — автодополнение путей по Tab в чате
 - ✅ **Progress bar** — SSE прогресс при pull модели
@@ -55,6 +57,8 @@
 - ✅ **Todo tracking** — todo-лист внутри сессии (add/complete/list)
 - ✅ **testgen** — генерация unit-тестов из кода (Python, JS/TS)
 - ✅ **db_query** — выполнение SQL-запросов к локальной БД (SQLite)
+- ✅ **deps** — анализ зависимостей: requirements.txt, pyproject.toml, package.json, go.mod, Cargo.toml, Pipfile
+- ✅ **Action audit** — `.agent_audit.log` — журнал всех вызовов инструментов
 - ✅ **DeepSeek-V4-Flash** — поддержка 1M контекста через FLASH_PROVIDER/FLASH_API_KEY
 
 ```bash
@@ -162,20 +166,21 @@ Local AI coding agent powered by Ollama. Free, private, offline alternative to C
 
 ## Features
 
-- **25 tools**: read, write, edit, bash, glob, grep, list, web, websearch, diff, commit, undo, verify, plan, search (RAG), **question**, **skill**, **patch**, **task**, **todo**, **lsp**, **testgen**, **db_query** + plugins
-- **CodeMirror editor**: tabs, syntax highlighting, code folding, Ctrl+S save
-- **UI**: file tree explorer + session management, dark theme, diff view, drag-and-drop, confirm dialogs, **chat autocomplete** (@files, #skills, /commands), **message history** (↑/↓)
-- **RAG**: hybrid search (**BM25 + semantic**) with **incremental per-file disk cache** — only changed files re-embedded
-- **LLM cache with TTL** — repeated calls don't waste tokens (LLM_CACHE_TTL)
-- **Multi-agent**: PLANNER_MODEL (lightweight 1.5b) plans, main model executes
-- **WebSearch** via DuckDuckGo (no API key required)
-- **Fallback**: OpenAI / Claude API when Ollama is unavailable
-- **Agent memory**: `.agent_memory/` — cross-session memory (configurable limit)
-- **Verify**: auto syntax check after write/edit (py_compile, tsc, json.tool)
-- **Backups**: up to 50 file versions, undo via single command
+- **26 tools**: read, write, edit, bash, glob, grep, list, web, websearch, diff, commit, undo, verify, plan, search (RAG), **question**, **skill**, **patch**, **task**, **todo**, **lsp**, **testgen**, **db_query**, **deps** + plugins
+- **CodeMirror editor**: tabs, syntax highlight, folding, Ctrl+S save, **Ctrl+Space LSP autocomplete**
+- **UI**: file tree + sessions, dark theme, diff, drag-and-drop, confirm dialogs, **chat autocomplete** (@files, #skills, /commands), **message history (arrows)**, **built-in terminal** (SSE streaming, history, Ctrl+C)
+- **RAG**: hybrid search (**BM25 + semantics**) with **incremental disk cache** per file — only changed files are reindexed
+- **LLM cache** with TTL — repeated queries save tokens (LLM_CACHE_TTL)
+- **Multi-agent**: PLANNER_MODEL (light 1.5b) plans, main model executes
+- **WebSearch** via DuckDuckGo (no API key)
+- **Fallback**: OpenAI / Claude API if Ollama is down
+- **Agent memory**: `.agent_memory/` — cross-session memory
+- **Verify**: auto syntax check after write/edit
+- **Backups**: up to 50 versions, one-command undo
+- **Action audit**: `.agent_audit.log` — journal of all tool calls
 - **Model management**: +Pull / -Del from UI
 - **Async**: all blocking calls via `asyncio.to_thread`
-- **Swagger UI**: `/docs` — OpenAPI documentation
+- **Swagger UI**: `/docs` — OpenAPI docs
 - **CI/CD**: `.github/workflows/test.yml`
 
 ### Security

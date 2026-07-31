@@ -109,6 +109,17 @@ body[data-theme="dark"]{--bg:#0f1117;--fg:#e2e8f0;--sidebar:#161b22;--sidebar-bo
 #dropzone .dz-box svg{width:40px;height:40px;fill:var(--accent);margin-bottom:12px}
 #dropzone .dz-box .dz-title{font-size:16px;font-weight:600;color:var(--fg)}
 #dropzone .dz-box .dz-sub{font-size:12px;color:var(--st-c);margin-top:4px}
+
+#term-panel{position:fixed;left:230px;right:0;bottom:0;height:220px;background:var(--pre-bg);border-top:1px solid var(--sidebar-border);display:none;flex-direction:column;z-index:50;font-family:Consolas,monospace}
+#term-panel.open{display:flex}
+#term-bar{padding:4px 10px;background:var(--sidebar);border-bottom:1px solid var(--sidebar-border);display:flex;align-items:center;gap:8px}
+#term-bar .t-title{font-size:11px;font-weight:600;color:var(--st-c)}
+#term-out{flex:1;overflow-y:auto;padding:6px 10px;font-size:12px;white-space:pre-wrap;word-break:break-all;line-height:1.4}
+#term-out .t-cmd{color:var(--accent);font-weight:600}
+#term-out .t-done{color:var(--st-c)}
+#term-in{display:flex;border-top:1px solid var(--sidebar-border)}
+#term-in input{flex:1;background:transparent;border:none;color:var(--fg);font-family:inherit;font-size:12px;padding:6px 10px;outline:none}
+#term-in .t-kill{background:var(--cnl-btn);color:#fff;border:none;padding:0 12px;cursor:pointer;font-size:11px}
 </style></head><body>
 <div id="sidebar">
   <div class="logo"><svg viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>OpenCode <span>v2</span></div>
@@ -143,7 +154,7 @@ body[data-theme="dark"]{--bg:#0f1117;--fg:#e2e8f0;--sidebar:#161b22;--sidebar-bo
     <button onclick="delModel()" title="Delete model" style="background:var(--cnl-btn);color:#fff;border:none;border-radius:4px;padding:2px 8px;cursor:pointer;font-size:11px">-Del</button>
     <span class="badge" id="model-badge">Model</span>
     <span id="prj"></span>
-    <span id="st2"></span><a href="/docs" target="_blank" style="font-size:11px;color:var(--st-c);text-decoration:none;margin-left:8px">API</a><button id="theme-btn" onclick="toggleTheme()" style="background:none;border:none;color:var(--st-c);cursor:pointer;font-size:16px;margin-left:8px">&#127769;</button>
+    <span id="st2"></span><a href="/docs" target="_blank" style="font-size:11px;color:var(--st-c);text-decoration:none;margin-left:8px">API</a><button onclick="toggleTerm()" title="Terminal" style="background:none;border:none;color:var(--st-c);cursor:pointer;font-size:14px;margin-left:8px">&#9654;_</button><button id="theme-btn" onclick="toggleTheme()" style="background:none;border:none;color:var(--st-c);cursor:pointer;font-size:16px;margin-left:8px">&#127769;</button>
   </div>
   <div id="chat">
     <div id="msgs"><div class="msg s">Agent ready. Try: &quot;create a fibonacci function&quot;</div></div>
@@ -159,6 +170,11 @@ body[data-theme="dark"]{--bg:#0f1117;--fg:#e2e8f0;--sidebar:#161b22;--sidebar-bo
   <div id="stat"><span id="old"></span><span id="ols">Ollama...</span></div>
 </div>
 <div id="fileview"><div class="fv-bar"><div id="fv-tabs" style="display:flex;gap:2px;overflow-x:auto;flex:1"></div><button id="fv-save" onclick="saveFile()" style="display:none;background:var(--btn);color:#fff;border:none;border-radius:4px;padding:4px 12px;cursor:pointer;font-size:11px">Save (Ctrl+S)</button><button class="fv-close" onclick="closeFile()">&times;</button></div><div id="fv-content" style="flex:1;padding:0;overflow:hidden;background:var(--pre-bg);margin:0;font-family:monospace;white-space:pre"></div></div>
+<div id="term-panel">
+  <div id="term-bar"><span class="t-title">Terminal</span><span id="term-cwd" style="font-size:10px;color:var(--st-c)"></span></div>
+  <div id="term-out"></div>
+  <div id="term-in"><input id="term-input" placeholder="Run command... (Enter to run, Ctrl+C to kill)"><button class="t-kill" onclick="termKill()">Kill</button></div>
+</div>
 <div id="dropzone"><div class="dz-box"><svg viewBox="0 0 24 24"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg><div class="dz-title">Drop files here</div><div class="dz-sub">Upload to workspace</div></div></div>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/python/python.min.js"></script>
@@ -311,7 +327,7 @@ function makeEditor(el){
     foldGutter:true,gutters:['CodeMirror-linenumbers','CodeMirror-foldgutter'],
     tabSize:2,indentUnit:2,lineWrapping:false
   });
-  cm.setOption('extraKeys',{'Ctrl-S':function(){saveFile()},'Cmd-S':function(){saveFile()}});
+  cm.setOption('extraKeys',{'Ctrl-S':function(){saveFile()},'Cmd-S':function(){saveFile()},'Ctrl-Space':function(){editorComplete()}});
   return cm;
 }
 function openFile(path){
@@ -351,6 +367,33 @@ function saveFile(){
     if(d.error)am('t err','Save error: '+d.error);
     else{am('t ok','Saved: '+esc(curTab));loadFiles()}
   }).catch(function(e){am('t err','Save failed: '+e.message)});
+}
+function closeFile(){$('fileview').classList.remove('open')}
+function editorComplete(){
+  if(!curTab||!cmEditor)return;
+  var pos=cmEditor.getCursor(),txt=cmEditor.getValue();
+  fetch(A+'/api/lsp/completion',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({path:curTab,text:txt,line:pos.line,character:pos.ch})})
+  .then(function(r){return r.json()}).then(function(d){
+    if(!d.items||!d.items.length)return;
+    var cw=cmEditor.getWrapperElement(),rect=cw.getBoundingClientRect();
+    var tip=document.createElement('div');
+    tip.style.cssText='position:fixed;z-index:1000;background:var(--code-bg);border:1px solid var(--sidebar-border);border-radius:4px;max-height:220px;overflow-y:auto;min-width:240px;box-shadow:0 4px 16px rgba(0,0,0,.35)';
+    d.items.forEach(function(it,i){
+      var row=document.createElement('div');
+      row.style.cssText='padding:4px 10px;font-family:Consolas,monospace;font-size:12px;cursor:pointer;color:var(--fg);display:flex;justify-content:space-between;gap:16px';
+      row.innerHTML='<span>'+esc(it.label)+'</span><span style="color:var(--st-c);font-size:10px;white-space:nowrap">'+esc((it.detail||'').slice(0,40))+'</span>';
+      row.onmousedown=function(ev){ev.preventDefault();var cur=cmEditor.getCursor();cmEditor.replaceRange(it.insertText||it.label,cur);document.body.removeChild(tip)};
+      row.onmouseenter=function(){d.items.forEach(function(_,j){rows[j].style.background='transparent'});this.style.background='var(--accent)'};
+      tip.appendChild(row);
+    });
+    var rows=tip.children;
+    tip.style.left=Math.min(rect.left+pos.ch*7+10,window.innerWidth-260)+'px';
+    tip.style.top=(rect.top+22)+'px';
+    var hd=function(e){if(!tip.parentNode)return;if(!tip.contains(e.target)){document.body.removeChild(tip);document.removeEventListener('mousedown',hd,true)}};
+    document.addEventListener('mousedown',hd,true);
+    document.body.appendChild(tip);
+  }).catch(function(){});
 }
 function closeFile(){$('fileview').classList.remove('open')}
 
@@ -593,5 +636,68 @@ $('ta').addEventListener('keydown',function(e){
   else if(e.key!='Tab')setTimeout(showHints,80);
 });
 $('ta').addEventListener('input',ah);init();
+
+// ─── Terminal ─────────────────────────────────────────────
+var termBusy=false,termHist=[],termHIdx=0,termAbc=null;
+function toggleTerm(){var p=$('term-panel');p.classList.toggle('open');if(p.classList.contains('open')){var ti=$('term-input');ti.focus()}}
+function termCwd(){return $('prj').getAttribute('data-path')||''}
+function termPrint(line,cls){
+  var out=$('term-out');if(!line&&cls!='t-done')return;
+  var d=document.createElement('div');if(cls)d.className=cls;
+  d.textContent=line;out.appendChild(d);out.scrollTop=out.scrollHeight;
+}
+function termRun(cmd){
+  if(!cmd)return;termPrint('$ '+cmd,'t-cmd');
+  termHist.unshift(cmd);if(termHist.length>50)termHist.pop();termHIdx=-1;
+  termBusy=true;termPrint('',null);termPrint('running...','t-done');
+  var body=JSON.stringify({cmd:cmd,cwd:termCwd()});
+  var ctrl=new AbortController();termAbc=ctrl;
+  fetch(A+'/api/terminal',{method:'POST',headers:{'Content-Type':'application/json'},body:body,signal:ctrl.signal})
+    .then(function(r){
+      if(!r.ok)throw new Error('HTTP '+r.status);
+      var rd=r.body.getReader(),dec=new TextDecoder(),buf='';
+      function pump(){
+        return rd.read().then(function(res){
+          if(res.done){finish(null);return}
+          buf+=dec.decode(res.value,{stream:true});
+          var i;
+          while((i=buf.indexOf('\n\n'))>=0){
+            var chunk=buf.slice(0,i);buf=buf.slice(i+2);
+            if(chunk.startsWith('data: ')){
+              try{
+                var d=JSON.parse(chunk.slice(6));
+                if(d.done){finish(d.code);continue}
+                termPrint(d.line);
+              }catch(e){}
+            }
+          }
+          return pump();
+        });
+      }
+      function finish(code){
+        var last=$('term-out').lastElementChild;
+        if(last&&last.textContent=='running...')last.remove();
+        if(code!=null)termPrint('exit code: '+code,'t-done');
+        termBusy=false;termAbc=null;
+      }
+      pump();
+    })
+    .catch(function(e){
+      var last=$('term-out').lastElementChild;
+      if(last&&last.textContent=='running...')last.remove();
+      termPrint('Error: '+e.message,'t-done');termBusy=false;termAbc=null;
+    });
+}
+function termKill(){
+  if(termAbc){termAbc.abort();termAbc=null}
+  fetch(A+'/api/terminal/kill',{method:'POST'});
+  termPrint('(killed)','t-done');termBusy=false;
+}
+$('term-input').addEventListener('keydown',function(e){
+  if(e.key=='Enter'){e.preventDefault();var v=this.value;this.value='';termRun(v)}
+  else if(e.key=='ArrowUp'&&termHIdx<termHist.length-1){termHIdx++;this.value=termHist[termHIdx]}
+  else if(e.key=='ArrowDown'&&termHIdx>0){termHIdx--;this.value=termHist[termHIdx]}
+  else if(e.key=='c'&&e.ctrlKey){e.preventDefault();termKill()}
+});
 </script>
 </body></html>"""

@@ -14,8 +14,8 @@ KEY ACHIEVEMENT
 ---------------
 - Prompt-based tool calling: local models do NOT support native tool_calls in Ollama.
   Engineered a working agent loop: model outputs ```tool blocks, backend parses, executes, feeds back.
-- 25 tools: read, write, edit, bash, glob, grep, list, web, websearch, diff, commit, undo,
-  verify, plan, search, question, skill, patch, task, todo, lsp, testgen, db_query + plugins
+- 26 tools: read, write, edit, bash, glob, grep, list, web, websearch, diff, commit, undo,
+  verify, plan, search, question, skill, patch, task, todo, lsp, testgen, db_query, deps + plugins
 - Sessions: full session management with save/load to .agent_sessions/*.json
 - RAG: hybrid search (BM25 + semantic) with incremental per-file disk cache
 - Self-hosted, zero-cost, fully offline alternative to Cursor/Claude Code
@@ -23,7 +23,7 @@ KEY ACHIEVEMENT
 
 ARCHITECTURE
 ------------
-Modular: agent.py (FastAPI) + tools.py (25 tools) + rag.py (hybrid RAG) +
+Modular: agent.py (FastAPI) + tools.py (26 tools) + rag.py (hybrid RAG) +
 lsp.py (LSP client) + ui.py (inline HTML UI) + mcp_server.py (MCP for IDEs) +
 desktop.py (pywebview native window). Zero npm deps, only fastapi+uvicorn+requests.
 
@@ -38,11 +38,13 @@ desktop.py (pywebview native window). Zero npm deps, only fastapi+uvicorn+reques
 9. RAG: hybrid BM25 + cosine similarity, incremental per-file cache (.rag_cache/)
 10. Sessions: full CRUD (create, list, load, delete, export/import JSON)
 11. Multi-project: projects.json, per-project sessions/RAG/memory
-12. LSP: definition, references, hover, symbols, rename (pylsp/ts-ls/gopls)
-13. MCP server: all 25 tools via Model Context Protocol (VS Code/Cursor/Claude Desktop)
+12. LSP: definition, references, hover, symbols, rename, completion (pylsp/ts-ls/gopls)
+13. MCP server: all 26 tools via Model Context Protocol (VS Code/Cursor/Claude Desktop)
 14. Plugins: .agent_plugins/*.py — dynamic tool registration
+15. Terminal: POST /api/terminal — SSE streaming shell, kill endpoint
+16. Action audit: .agent_audit.log — every tool call logged with timestamp
 
-TOOLS (25)
+TOOLS (26)
 ----------
 read      — file content (absolute/relative paths + http/https URLs)
 write     — create file (with backup + verify)
@@ -64,14 +66,17 @@ skill     — load .agent_skills/*.md instruction
 patch     — apply unified diff to file
 task      — subagents: @explore (read-only), @scout (web), @general (full)
 todo      — todo list inside session (add/complete/list)
-lsp       — definition/references/hover/symbols/rename
+lsp       — definition/references/hover/symbols/rename/completion
 testgen   — generate unit tests (Python, JS/TS)
 db_query  — SQL queries against SQLite
+deps      — dependency analysis (requirements/pyproject/package.json/go.mod/Cargo.toml/Pipfile)
 count_lines / format_code / git_stats — example plugin tools
 
 UI FEATURES
 -----------
-- CodeMirror editor: tabs, syntax highlighting, code folding, Ctrl+S save (PUT /api/file)
+- CodeMirror editor: tabs, syntax highlighting, code folding, Ctrl+S save (PUT /api/file),
+  Ctrl+Space LSP autocomplete (POST /api/lsp/completion)
+- Built-in terminal: bottom panel, SSE streaming, command history, Ctrl+C / Kill button
 - Chat autocomplete: @files, #skills, /commands with clickable dropdown
 - Message history: ↑/↓ arrows, Tab path completion
 - Dark theme, mobile-responsive sidebar, drag-and-drop upload
@@ -130,10 +135,11 @@ EVALUATIONS
 -----------
 Kimi: 8.8/10 — "Это уже не альтернатива, это конкурент"
 DeepSeek: 8.5/10 — "заметно вырос, почти все замечания реализованы"
-All recommendations implemented: CodeMirror editor, chat autocomplete, LSP rename,
-testgen, db_query, hybrid RAG, incremental cache, LLM TTL cache, Swagger.
+All recommendations implemented: CodeMirror editor, chat autocomplete, LSP rename+completion,
+testgen, db_query, deps, interactive terminal, action audit, hybrid RAG, incremental cache,
+LLM TTL cache, Swagger.
 
-Remaining low-priority: interactive terminal (xterm.js), Docker bash isolation,
+Remaining low-priority: streaming tool execution, Docker bash isolation,
 Tauri desktop, external MCP clients.
 
 COMPARISON
