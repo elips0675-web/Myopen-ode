@@ -23,7 +23,7 @@
 - [x] LSP интеграция (definition, references, hover, symbols, rename, completion)
 - [x] Управление моделями (+Pull/-Del с прогрессом)
 - [x] WebSearch (DuckDuckGo)
-- [x] Async rewrite
+- [x] Async rewrite (все blocking-вызовы через asyncio.to_thread)
 - [x] CI/CD
 - [x] 27 smoke-тестов (включая интеграционные с мок-моделью, SQLite-сессии, patch line-aware, bash-фильтр, thread-safety)
 - [x] Mobile-responsive sidebar
@@ -32,6 +32,7 @@
 - [x] Action audit (.agent_audit.log)
 - [x] MCP-клиенты (mcp_servers.json + инструмент mcp)
 - [x] Автодополнение без LSP (fallback по токенам файла + keywords)
+- [x] requirements.txt (зависимости проекта)
 
 ## Редактор (добавлено по оценке Kimi 8.8)
 - [x] CodeMirror: вкладки, подсветка, folding, Ctrl+S сохранение, Ctrl+Space автодополнение (LSP)
@@ -44,7 +45,7 @@
 - [x] Интерактивный терминал (SSE, история, Ctrl+C kill)
 
 ## Безопасность
-- [x] Directory traversal protection
+- [x] Directory traversal protection (read/write/edit/patch вне WORK_DIR заблокированы)
 - [x] Bash sandbox (чёрный список + нормализация пробелов/кавычек + вложенные интерпретаторы bash -c / cmd /c / powershell -c)
 - [x] Retry с exponential backoff
 - [x] Path validation
@@ -62,11 +63,44 @@
 ## Документация
 - [x] README рус + англ
 - [x] Все env vars описаны
+- [x] Swagger /docs
 
-## Не сделано (низкий приоритет)
+## По оценкам Kimi (7.8) — что осталось
+
+### P0 (критично) — все сделаны
+- [x] patch / _apply_diff — переписан на line-aware unified diff parser (был сломан: игнорировал @@, собирал + строки в кучу)
+- [x] Bash sandbox — нормализация + рекурсивная проверка вложенных интерпретаторов (blacklist усилен; полный whitelist см. P1)
+- [x] Threading.Lock на TODO_LIST, LLM_CACHE, RAG-глобалы
+
+### P1 (важно) — сделать следующими
+- [ ] stream=True в call_ollama — парсинг tool blocks «на лету» (сейчас агент ждёт полный ответ модели, десятки секунд тишины в UI)
+- [ ] RAG-индексация в фоновом потоке (сейчас запрос к /api/embed блокирует поток запроса)
+- [ ] Pydantic-модели для аргументов каждого инструмента — валидация типов (path: str, steps: list, top_k > 0, diff содержит @@)
+- [ ] Bash whitelist или shlex.split + валидация аргументов (чёрный список обходится: `rm -rf /tmp/..`, обфускация)
+- [ ] ensure_safe_path: проверка симлинков до resolve() (symlink на /etc внутри WORK_DIR сейчас проходит)
+
+### P2 (улучшение)
+- [ ] Graceful cancellation: проверка флага отмены внутри agent loop (сейчас abort ловит только следующий fetch)
+- [ ] CodeMirror 6 / Monaco (если готов пожертвовать zero-dep)
+- [ ] AST-based multi-file edit (parso для Python, tree-sitter для остального)
+- [ ] xterm.js терминал (сейчас свой SSE-терминал — работает, но xterm.js даст полный эмулятор)
+
+## По оценкам DeepSeek (9/10) — что осталось
+
+### P1 (важно)
+- [ ] Оптимизация RAG: память (сейчас все чанки в ОЗУ) + FAISS или аналог для эффективного поиска
+- [ ] Чанкинг RAG: по размеру (~500 симв.) с перекрытием вместо только def/class-границ (не универсально для всех языков)
+
+### P2 (улучшение)
+- [ ] Конкретные типы исключений вместо широких except Exception + лучше логирование
+- [ ] Разбить длинные функции в agent.py/tools.py, добавить docstring и тайп-хинты
+- [ ] Вынести JS из ui.py в отдельный модуль/файл
+- [ ] LSP: поддержка большего числа языков (Rust, C++)
+- [ ] Docker-изоляция bash (строгая песочница)
+
+## Собственные идеи (низкий приоритет)
 - [ ] Native tool calling (когда Ollama поддержит)
 - [ ] Desktop App (Tauri — pywebview уже работает)
-- [ ] Docker-изоляция bash (whitelist-подход — следующий шаг по оценке Kimi)
 - [ ] GPU embeddings (Ollama уже на GPU — фактически не требуется)
-- [ ] deepseek-coder-v2:16b — пулл в фоне (для стабильного кодинга на 12GB)
+- [ ] deepseek-coder-v2:16b — пулл (для стабильного кодинга на 12GB)
 - [ ] Полнотекстовый поиск по сессиям в UI

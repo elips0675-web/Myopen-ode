@@ -77,7 +77,7 @@ python test_agent.py   # 27/27 smoke-тестов
 ```bash
 ollama pull deepseek-r1:7b
 ollama pull nomic-embed-text
-pip install fastapi uvicorn requests duckduckgo_search
+pip install -r requirements.txt
 python agent.py
 # → http://localhost:8765/
 ```
@@ -244,7 +244,7 @@ Integration tests with mock model (agent loop + tool calls + live SSE events), S
 ```bash
 ollama pull deepseek-r1:7b
 ollama pull nomic-embed-text
-pip install fastapi uvicorn requests duckduckgo_search
+pip install -r requirements.txt
 python agent.py
 # → http://localhost:8765/
 ```
