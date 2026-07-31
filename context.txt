@@ -118,10 +118,10 @@ HOW AGENT LOOP WORKS
 MODELS
 ------
 Primary: deepseek-r1:7b or qwen2.5-coder:7b (RTX 3060, ~5.5GB VRAM)
-Planner: deepseek-r1:1.5b (PLANNER_MODEL)
+Planner: deepseek-r1:1.5b — installed (PLANNER_MODEL); auto-fallback to MODEL if missing
 RAG: nomic-embed-text
 Fallback API: OpenAI / Claude / DeepSeek-V4-Flash (1M context) via FLASH_* env vars
-deepseek-coder-v2:16b also fits on 12GB at Q4 (ollama pull deepseek-coder-v2)
+deepseek-coder-v2:16b also fits on 12GB at Q4 (ollama pull deepseek-coder-v2) — optional
 
 RUNNING
 -------
