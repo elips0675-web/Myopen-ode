@@ -154,8 +154,10 @@ with line-aware hunks (bottom-up apply, context matching), returns error on mism
 Sessions now in SQLite (sessions.db) with one-time migration from legacy JSON files.
 Thread-safety: locks around LLM cache, todo list, RAG index (RLock) — safe under concurrent uvicorn requests.
 
-Remaining low-priority: native tool calling (needs Ollama), Docker bash isolation,
-Tauri desktop, deepseek-coder-v2:16b pull (in progress).
+Remaining (see TODO.md, priorities from evaluations): Kimi P1 — stream=True tool-block parsing,
+RAG indexing in background thread, pydantic arg validation, bash whitelist/shlex, symlink-safe paths;
+DeepSeek P1 — FAISS/optimize RAG, size-based chunking. Own ideas: native tool calling (needs Ollama),
+Docker bash isolation, Tauri desktop, deepseek-coder-v2:16b pull.
 
 COMPARISON
 ----------
