@@ -54,7 +54,9 @@ def ensure_safe_path(path):
     p = resolve(path).resolve()
     wk = WORK_DIR.resolve()
     if wk not in p.parents and p != wk:
-        return f"Error: path '{path}' is outside workspace '{WORK_DIR}'"
+        return (f"Error: path '{path}' is outside workspace '{WORK_DIR}'. "
+                f"Use RELATIVE paths inside the workspace (use list/glob to see files). "
+                f"Do NOT give tutorials — retry with a correct path.")
     return None
 
 def _similar_files(path, limit=5):
