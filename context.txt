@@ -211,3 +211,33 @@ COMPARISON
 | LSP           | YES             | YES             | NO          |
 | Editor        | CodeMirror      | VS Code-based   | CLI         |
 | Plugins       | YES (py)        | YES             | NO          |
+
+ARCHITECTURE GUIDE (from analysis "how to build an Ollama coding agent")
+----------------------------------------------------------------------
+CORE FACT: local Ollama models have NO native tool_calls — the model must be
+forced to emit ```tool JSON blocks via prompt engineering; backend parses + executes.
+
+3 LAYERS: HTML/CLI UI --HTTP/SSE--> FastAPI agent loop (LLM -> parse -> tool -> LLM)
+          --HTTP--> Ollama 127.0.0.1:11434.
+
+AGENT LOOP (run_agent_loop): ask model -> strip <think> (re.sub r'<think>.*?</think>',
+done in call_ollama, tools.py:423) -> parse ```tool blocks -> if none: return text ->
+execute tools, append "[tool:name] result" as user msg -> repeat until max_iter=12.
+
+PROBLEM -> FIX TABLE (all implemented in this project):
+| Model writes prose instead of ```tool       | strict SYSTEM_PROMPT rules 1-3, format_retried strict retry |
+| Model invents paths (/path/to/x)            | ensure_safe_path + rule 16 "never invent paths" + invented-absurd path block |
+| Model writes "action plan" after tool error | tool-error nudge: system reminder "corrected ```tool block" (err_hint_retried<2) |
+| <think> tags pollute output (deepseek-r1)   | re.sub <think> in call_ollama (tools.py:423) |
+| Model loops on same tool                    | anti-repeat last_call_key + err_repeat after not-found (repeats>=2 -> stop) |
+| Context overflow                            | total_tokens guard MAX_TOKENS, LLM cache TTL, summarization via planner model |
+| Dangerous bash                              | BASH_BLACKLIST + confirm before destructive (write/edit/bash/commit/undo) |
+| Path escape                                | ensure_safe_path workspace jail + RELATIVE paths only |
+| No live progress in UI                      | SSE events from run_agent_loop(events=cb) -> /api/chat stream |
+
+MODELS (installed via ollama): deepseek-r1:7b (~5.5GB main-capable but <think>-
+heavy, ignores tool format sometimes), qwen2.5-coder:7b (~5GB, best code +
+fewer hallucinations, now DEFAULT via AI_MODEL), deepseek-r1:1.5b (~1.5GB planner/
+summary), nomic-embed-text (~0.5GB RAG embeddings), qwen2.5-coder:1.5b/3b,
+llama3.1, qwen3:8b.
+
