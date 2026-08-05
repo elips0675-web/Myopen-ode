@@ -55,6 +55,7 @@ def _cancel_pending(session_id):
 
 # ─── import tools & rag ───────────────────────────────────
 from tools import (init_config, execute_tool, validate_tool, call_ollama,
+                   stream_ollama,
     extract_pending_tool, SYSTEM_PROMPT, init_backup)
 from rag import init_rag, rag_search
 
@@ -369,12 +370,21 @@ def run_agent_loop(msgs, session_id, events=None, model=None):
                 # short first message = simple question/chat, planner is a waste
                 log.info("Short first message — skipping planner, using %s", MODEL)
                 current_model = MODEL
-        result = call_ollama(msgs, current_model)
-        if isinstance(result, tuple):
-            content, tokens_used = result
+        if events:
+            try:
+                content = stream_ollama(
+                    msgs, current_model,
+                    on_chunk=lambda f: _emit({"type": "text", "text": f}))
+                tokens_used = 0
+            except Exception as e:
+                log.warning("stream failed (%s), falling back to call_ollama", e)
+                result = call_ollama(msgs, current_model)
+                content, tokens_used = (result if isinstance(result, tuple)
+                                        else (result, 0))
         else:
-            content = result
-            tokens_used = 0
+            result = call_ollama(msgs, current_model)
+            content, tokens_used = (result if isinstance(result, tuple)
+                                    else (result, 0))
         if not content: break
         total_tokens += tokens_used or (len(content) / 4)
 
@@ -888,24 +898,39 @@ async def chat(req: ChatReq):
     if req.session_id:
         _cancel_clear(req.session_id)
     async def gen():
-        # 1) live tool progress while the agent loop runs
+        # 1) live events (tool progress + streamed model text) while the loop runs
+        live_text = False
         while True:
             try:
                 ev = await asyncio.wait_for(q.get(), timeout=0.5)
-                yield f"data: {json.dumps({'tool': ev})}\n\n"
+                if ev.get("type") == "text":
+                    live_text = True
+                    yield f"data: {json.dumps({'text': ev['text']})}\n\n"
+                else:
+                    yield f"data: {json.dumps({'tool': ev})}\n\n"
             except asyncio.TimeoutError:
                 if task.done():
                     # loop ended: drain remaining events with a small grace
                     # period so events emitted right before completion arrive
                     for _ in range(20):
                         if not q.empty():
-                            yield f"data: {json.dumps({'tool': q.get_nowait()})}\n\n"
+                            ev = q.get_nowait()
+                            if ev.get("type") == "text":
+                                live_text = True
+                                yield f"data: {json.dumps({'text': ev['text']})}\n\n"
+                            else:
+                                yield f"data: {json.dumps({'tool': ev})}\n\n"
                         else:
                             await asyncio.sleep(0.1)
                     while not q.empty():
-                        yield f"data: {json.dumps({'tool': q.get_nowait()})}\n\n"
+                        ev = q.get_nowait()
+                        if ev.get("type") == "text":
+                            live_text = True
+                            yield f"data: {json.dumps({'text': ev['text']})}\n\n"
+                        else:
+                            yield f"data: {json.dumps({'tool': ev})}\n\n"
                     break
-        # 2) final text stream
+        # 2) final text stream (only if nothing was streamed live — avoids duplication)
         try:
             full = await task
         except Exception as e:
@@ -913,10 +938,11 @@ async def chat(req: ChatReq):
         if req.session_id and msgs:
             try: save_memory(req.session_id, msgs)
             except: pass
-        for i in range(0, len(full), 3):
-            chunk = full[i:i+3]
-            if chunk.strip():
-                yield f"data: {json.dumps({'text':chunk})}\n\n"
+        if not live_text:
+            for i in range(0, len(full), 3):
+                chunk = full[i:i+3]
+                if chunk.strip():
+                    yield f"data: {json.dumps({'text':chunk})}\n\n"
         yield "data: [DONE]\n\n"
     return StreamingResponse(gen(), media_type="text/event-stream")
 

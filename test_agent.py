@@ -160,7 +160,8 @@ def test_rag_cache_incremental():
     print("  [OK] RAG incremental cache")
 
 def test_agent_loop_tool_call():
-    """Integration: loop parses tool block, executes it, then returns final text."""
+    """Integration: loop parses tool block, executes it, then returns final text.
+    With events present the model response streams through stream_ollama."""
     import agent as agent_mod
     calls = {"n": 0}
     def mock_ollama(msgs, model):
@@ -168,8 +169,20 @@ def test_agent_loop_tool_call():
         if calls["n"] == 1:
             return 'I will list files.\n```tool\n{"tool": "list", "path": "."}\n```', 10
         return "Done after listing.", 5
+    def mock_stream(msgs, model, on_chunk=None):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            text = 'I will list files.\n```tool\n{"tool": "list", "path": "."}\n```'
+        else:
+            text = "Done after listing."
+        if on_chunk:
+            for i in range(0, len(text), 5):
+                on_chunk(text[i:i+5])
+        return text
     original = agent_mod.call_ollama
+    original_stream = agent_mod.stream_ollama
     agent_mod.call_ollama = mock_ollama
+    agent_mod.stream_ollama = mock_stream
     try:
         events = []
         out = agent_mod.run_agent_loop(
@@ -177,11 +190,14 @@ def test_agent_loop_tool_call():
             events=lambda e: events.append(e))
     finally:
         agent_mod.call_ollama = original
+        agent_mod.stream_ollama = original_stream
     assert "Done after listing." in out, f"final text missing: {out[:300]}"
     assert "list" in out, f"tool result missing: {out[:300]}"
     assert any(e.get("type") == "tool" and e.get("name") == "list" for e in events), \
         f"live tool event missing: {events}"
-    print("  [OK] agent loop: tool execution + live events")
+    assert any(e.get("type") == "text" for e in events), \
+        f"streamed text events missing: {events}"
+    print("  [OK] agent loop: tool execution + live streamed text events")
 
 def test_agent_loop_plain_text():
     """Integration: loop returns plain text without tools (short question skips planner)."""

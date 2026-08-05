@@ -397,6 +397,49 @@ def _cache_key(messages, model):
     body = json.dumps(messages, ensure_ascii=False, sort_keys=True)
     return hashlib.md5((model + body).encode()).hexdigest()[:24]
 
+def stream_ollama(messages, model=None, on_chunk=None):
+    """Stream a chat completion from Ollama. on_chunk(text_fragment) is called
+    for every fragment as it arrives; returns the full text (think tags stripped)."""
+    m = model or MODEL
+    num_ctx = int(os.environ.get("OLLAMA_NUM_CTX", "16384"))
+    parts = []
+    last_err = None
+    for attempt in range(2):
+        try:
+            with requests.post(f"{OLLAMA_URL}/api/chat", json={
+                "model": m, "messages": [msg for msg in messages if msg.get("content")],
+                "stream": True, "keep_alive": -1,
+                "options": {"temperature": 0.2, "num_predict": 2048, "num_ctx": num_ctx}
+            }, stream=True, timeout=180) as r:
+                r.raise_for_status()
+                for line in r.iter_lines(decode_unicode=True):
+                    if not line:
+                        continue
+                    try:
+                        data = json.loads(line)
+                    except Exception:
+                        continue
+                    frag = (data.get("message") or {}).get("content") or ""
+                    if frag:
+                        parts.append(frag)
+                        if on_chunk:
+                            try:
+                                on_chunk(frag)
+                            except Exception:
+                                pass
+                    if data.get("done"):
+                        break
+            text = re.sub(r'<think>.*?</think>', '', "".join(parts), flags=re.DOTALL)
+            if not text:
+                text = "No response from model"
+            return text
+        except Exception as e:
+            last_err = e
+            log.warning("stream_ollama attempt %d/2 failed: %s", attempt + 1, e)
+            if attempt == 0:
+                time.sleep(1)
+    raise RuntimeError(f"stream_ollama failed: {last_err}")
+
 def call_ollama(messages, model=None):
     global LLM_CACHE
     m = model or MODEL

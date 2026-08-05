@@ -119,7 +119,7 @@
 - [x] Threading.Lock на TODO_LIST, LLM_CACHE, RAG-глобалы
 
 ### P1 (важно) — сделать следующими
-- [ ] stream=True в call_ollama — парсинг tool blocks «на лету» (сейчас агент ждёт полный ответ модели, десятки секунд тишины в UI)
+- [x] stream=True в call_ollama — парсинг tool blocks «на лету» (сейчас агент ждёт полный ответ модели, десятки секунд тишины в UI) — сделано: stream_ollama (tools.py) + text-события {type:"text"} в /api/chat gen() → UI печатает текст по мере генерации (тест: text-события в test_agent_loop_tool_call)
 - [x] RAG-индексация в фоновом потоке — сделано: после холодного старта реиндексация изменённых файлов идёт в фоновом потоке (rag._schedule_bg_index), поиск отвечает по текущему индексу; cold start остаётся синхронным (rag.py rag_search)
 - [x] Pydantic-модели для аргументов каждого инструмента — сделано расширение validate_tool: типы (str/int), диапазоны (top_k 1-50, max_results 1-20), enum-ы (task.agent, todo.action, lsp.operation, mcp.server/_list)
 - [x] Bash whitelist вместо чёрного списка — сделано: whitelist команд (BASH_ALLOWED), рекурсивная проверка вложенных интерпретаторов (добавлены python -c/-m, node -e), запрет `..`-обхода для деструктивных команд (rm/del/cp/mv), разрешены только локальные скрипты проекта (test_bash_filter)
