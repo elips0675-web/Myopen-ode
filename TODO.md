@@ -187,6 +187,16 @@
 - [ ] UI: просмотр .agent_audit.log (админ-панель аудита)
 - [ ] Troubleshooting guide («модель не отвечает», «тулы не работают», «Ollama не видит GPU»)
 
+## По оценке Kimi 3 (8.7/10, 2026-08-06) — рекомендации
+Что нужно для 9/10: рефакторинг монолитов (2-3 дня), динамический контекст (2-3 часа), few-shot при ошибках (1 день), USER_GUIDE.md (1 день).
+- [ ] Рефакторинг монолитов (P1): core/agent_loop.py (только цикл LLM→parse→execute→feedback), core/tool_parser.py (```tool/yaml/bare/lenient JSON), core/tool_executor.py (dispatch+validation+stats), core/safety/bash_guard.py (whitelist+docker+path), core/safety/path_guard.py (ensure_safe_path+symlink). agent.py — только HTTP-роутинг, tools.py — только инструменты
+- [ ] Динамический контекст в промпте (P1, 2-3 часа): перед каждым вызовом — «You are working in project: X / Last action: {tool} on {file} (result: {status}) / Current open files: {tabs}» — +15-20% к точности путей
+- [ ] Few-shot при ошибке тула (P1, 1 день): вместо голого nudge — конкретный пример исправления (tried → error → corrected tool)
+- [ ] USER_GUIDE.md (P1): Установка → Первый запуск → Как задать задачу → Что делать, если модель зациклилась → Как добавить свой skill
+- [ ] xterm.js + WebSocket (P2, критично для кодинга): полноценный PTY для долгих процессов
+- [ ] Интеграционный тест с реальной моделью (P2): «создай hello.py с функцией greet» → проверка def greet (ловит регрессии prompt-формата)
+Для 9.5/10: xterm.js, интеграционные тесты, RAG-сегментация по папкам (>100k строк), CLI-режим (python -m myopencode "задача")
+
 ## Собственные идеи (низкий приоритет)
 - [ ] Native tool calling (когда Ollama поддержит)
 - [ ] Desktop App (Tauri — pywebview уже работает)

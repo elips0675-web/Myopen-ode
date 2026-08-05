@@ -176,6 +176,13 @@ first-turn must-read rule, retry with temp 0.1, TOOL_STATS in prompt (careful), 
 flags, /health endpoint, session crash recovery, thinking indicator, RAG progress bar, audit in UI,
 troubleshooting guide. Prompt regression guard added: test_system_prompt_rules (rules 16-19 + EXAMPLES).
 Tests: 58/58.
+KIMI EVAL 3 (2026-08-06): 8.7/10 — "most mature open-source coding agent seen on 7B". For 9/10:
+split monoliths (agent.py/tools.py -> core/agent_loop.py, core/tool_parser.py,
+core/tool_executor.py, core/safety/bash_guard.py, core/safety/path_guard.py),
+dynamic context in prompt (project/last action/open tabs), tool-error few-shot,
+USER_GUIDE.md. For 9.5/10: xterm.js+WS, live integration test (hello.py/greet),
+RAG folder segmentation, CLI mode. Note: reviewer cited 57 tests; we're at 58/58
+(+test_system_prompt_rules).
 DONE from eval 2: few-shot examples + rules 17-19 (one tool per reply, [DONE] finish, code only via
 write/edit), code detector nudge (max 2), TOOL_STATS + /api/stats (warn at 3+ fails),
 lenient _parse_tool_json (single quotes/unquoted keys/trailing comma/garbage truncation),
