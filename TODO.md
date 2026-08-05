@@ -149,6 +149,24 @@
 - [x] LSP: поддержка большего числа языков (Rust, C++) — сделано: добавлены clangd (.c/.h/.cpp/.cc/.cxx/.hpp), bash-language-server (.sh), vscode-css/html-language-server (.css/.scss/.html) + KEYWORDS для всех новых; исправлена опечатка CREATE_NO_WINDOW (окно cmd при старте серверов)
 - [ ] Docker-изоляция bash (строгая песочница)
 
+## По оценке Kimi 2 (8.3/10, 2026-08-05) — рекомендации
+### Безопасность (приоритет №1 по Kimi)
+- [ ] Docker-изоляция bash — docker run --rm -v $(pwd):/workspace -w /workspace; на Windows требует Docker Desktop (это блокер «production-ready» для команд)
+- [x] Whitelist bash вместо blacklist — УЖЕ СДЕЛАНО (BASH_ALLOWED + recursive python -c/-m, node -e, запрет `..`-обхода) — Kimi не видел это в оценке
+- [ ] Git pre-backup перед batch-операциями + «restore all» (сейчас .agent_backups есть, restore — частично через undo)
+### Надёжность модели
+- [ ] Few-shot examples в system prompt (2-3 примера диалога user → tool → result → assistant) — Kimi обещает -30-40% галлюцинаций на 7B
+- [ ] Code detector: если ответ содержит def/class/import БЕЗ ```tool → system-nudge «Не пиши код, используй write tool»
+- [ ] JSON Schema constrained output через Ollama format:"json" (экспериментально, {"thought": "...", "tool": {...}})
+- [ ] Таймаут после [CONFIRM]: 3 раза без tool подряд → прервать цикл
+- [ ] RAG source attribution: модель должна цитировать [file:line] в ответах
+- [ ] Модель-роутер: авто-переключение на qwen2.5-coder при галлюцинациях deepseek-r1 (метрика: % tool-blocks)
+### UX / инфраструктура
+- [ ] Vendor CodeMirror 5 с CDN в static/vendor/ (единственная внешняя зависимость — CDN fallback)
+- [ ] StaticFiles mount: app.mount("/static", StaticFiles(directory="static")) вместо ручного FileResponse
+- [ ] Inline diff preview перед подтверждением edit (как в Cursor)
+- [ ] Полноценный MCP client для внешних инструментов (браузер, БД) — mcp_client.py уже есть
+
 ## Собственные идеи (низкий приоритет)
 - [ ] Native tool calling (когда Ollama поддержит)
 - [ ] Desktop App (Tauri — pywebview уже работает)
