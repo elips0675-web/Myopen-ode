@@ -25,7 +25,7 @@
 - [x] WebSearch (DuckDuckGo)
 - [x] Async rewrite (все blocking-вызовы через asyncio.to_thread)
 - [x] CI/CD
-- [x] 36 smoke-тестов (включая интеграционные с мок-моделью, SQLite-сессии, patch line-aware, bash-фильтр, thread-safety, anti-loop)
+- [x] 38 smoke-тестов (включая интеграционные с мок-моделью, SQLite-сессии, patch line-aware, bash-фильтр, thread-safety, anti-loop)
 - [x] Mobile-responsive sidebar
 - [x] Desktop App (pywebview)
 - [x] Плагины (.agent_plugins/)
@@ -74,7 +74,8 @@
 
 ### Не исправлены (критично для кодинга)
 - [x] **Подтверждение "yes" не завершало цикл** — ИСПРАВЛЕНО: отложенный tool хранится в `_PENDING_CONFIRM` (session_id → name/args), при "yes" авто-выполняется БЕЗ вызова модели (agent.py:311). Live-проверено: write → CONFIRM → yes → файл создан → verify
-- [x] **Агент зацикливался на `question` («Кто ты?» → 12 вызовов вопроса с опциями)** — ИСПРАВЛЕНО: (1) `question` завершает итерацию сразу после выполнения (результат в msgs + break, ждёт ответ пользователя); (2) anti-loop: одинаковый вызов инструмента дважды подряд блокируется (`[tool: identical call repeated...]` + break); (3) при явной переданной модели планировщик (planner-retry) больше не вмешивается. Live-проверено: 1 вопрос + ответ модели. Тесты: test_question_stops_loop, test_repeated_tool_blocked
+- [x] **Агент зацикливался на `question` («Кто ты?» → 12 вызовов вопроса с опциями)** — ИСПРАВЛЕНО: (1) `question` завершает итерацию сразу после выполнения (результат в msgs + break, ждёт ответ пользователя); (2) anti-loop: одинаковый вызов инструмента дважды подряд блокируется (`[tool: identical call repeated...]` + break), теперь покрывает и битые блоки (missing 'tool' key); (3) при явной переданной модели планировщик (planner-retry) больше не вмешивается. Live-проверено: 1 вопрос + ответ модели. Тесты: test_question_stops_loop, test_repeated_tool_blocked, test_missing_tool_key_stops_loop
+- [x] **Модель «долго думала» (60+ сек на «Кто ты?», TIMEOUT-галлюцинации)** — ИСПРАВЛЕНО: (1) num_ctx 32768→16384 — KV-кэш вдвое меньше, модель целиком в GPU: 7→50-60 tok/s (~8x); (2) num_predict 4096→2048; (3) AGENT_TIMEOUT 60→300s; (4) сервер запускается с WORK_DIR=E:\My OpenCode1 (раньше файлы/скиллы искались в пустой E:\My OpenCode — «read file.py not found», «Available: none»); (5) системный промпт: запрет выдумывать инструменты/туториалы, ответ на языке пользователя. Live: «Кто ты?» — 5 сек; write→CONFIRM→yes→файл в правильной папке. Тест: test_timeout_env
 - [ ] **deepseek-r1:7b нестабилен в tool-формате**: иногда выдаёт фриформат (`tool block\n define add function`) вместо JSON → лучше рекомендовать qwen2.5-coder:7b как основную модель для кодинга (проверено: стабильные блоки), либо расширить yaml-парсер
 
 ## Тесты — сделать
@@ -84,6 +85,8 @@
 - [x] `test_agent_loop_planner_fallback`: planner без tool-блоков → retry с основной моделью (сделан)
 - [x] `test_question_stops_loop`: question завершает итерацию после 1-го вызова (сделан)
 - [x] `test_repeated_tool_blocked`: одинаковый вызов дважды → блокировка (сделан)
+- [x] `test_missing_tool_key_stops_loop`: битые блоки дважды → блокировка (сделан)
+- [x] `test_timeout_env`: AGENT_TIMEOUT ограничивает цикл (сделан)
 - [x] Live-проверка полного цикла: задача → write (CONFIRM) → "yes" → файл создан → verify (пройдена)
 - [x] Live-проверка «Кто ты?»: 1 вопрос, цикл не зацикливается (пройдена)
 

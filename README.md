@@ -69,7 +69,7 @@
 ## Тесты
 
 ```bash
-python test_agent.py   # 36/36 smoke-тестов
+python test_agent.py   # 38/38 smoke-тестов
 ```
 
 Интеграционные тесты с мок-моделью (agent loop + tool calls + live events), SQLite-сессии (CRUD + миграция из JSON), patch line-aware (мульти-хунки, mismatch → None), bash-фильтр (вложенные `bash -c` / `cmd /c`), thread-safety todo, RAG инкрементальный кеш, аудит, терминал, deps, anti-loop (question останавливает итерацию, повтор вызова блокируется).
@@ -89,7 +89,7 @@ python agent.py
 | `AI_MODEL` | `deepseek-r1:7b` | Основная модель |
 | `PLANNER_MODEL` | `deepseek-r1:1.5b` | Модель для планирования |
 | `EMBED_MODEL` | `nomic-embed-text` | Модель для RAG |
-| `WORK_DIR` | `E:\\My OpenCode` | Рабочая директория (проект) |
+| `WORK_DIR` | папка репозитория | Рабочая директория (проект) |
 | `NO_CONFIRM` | `0` | `1` = без подтверждений для write/edit/bash |
 | `PORT` | `8765` | Порт сервера |
 | `OLLAMA_URL` | `http://localhost:11434` | URL сервера Ollama |
@@ -236,7 +236,7 @@ Local AI coding agent powered by Ollama. Free, private, offline alternative to C
 ### Tests
 
 ```bash
-python test_agent.py   # 36/36 smoke tests
+python test_agent.py   # 38/38 smoke tests
 ```
 
 Integration tests with mock model (agent loop + tool calls + live SSE events), SQLite sessions (CRUD + JSON migration), line-aware patch (multi-hunk, mismatch → None), bash filter (nested `bash -c` / `cmd /c`), todo thread-safety, incremental RAG cache, audit, terminal, deps.
@@ -256,7 +256,7 @@ python agent.py
 | `AI_MODEL` | `deepseek-r1:7b` | Main model |
 | `PLANNER_MODEL` | `deepseek-r1:1.5b` | Planning model |
 | `EMBED_MODEL` | `nomic-embed-text` | Embedding model for RAG |
-| `WORK_DIR` | `E:\\My OpenCode` | Workspace directory |
+| `WORK_DIR` | repo folder | Workspace directory |
 | `NO_CONFIRM` | `0` | `1` = skip confirmations |
 | `PORT` | `8765` | Server port |
 | `OLLAMA_URL` | `http://localhost:11434` | Ollama server URL |

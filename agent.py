@@ -19,7 +19,7 @@ log.setLevel(logging.DEBUG if os.environ.get("DEBUG") else logging.INFO)
 OLLAMA_URL = os.environ.get("OLLAMA_URL", "http://localhost:11434")
 MODEL = os.environ.get("AI_MODEL", "deepseek-r1:7b")
 PLANNER_MODEL = os.environ.get("PLANNER_MODEL", "deepseek-r1:1.5b")
-WORK_DIR = Path(os.environ.get("WORK_DIR", "E:\\My OpenCode"))
+WORK_DIR = Path(os.environ.get("WORK_DIR") or Path(__file__).resolve().parent)
 NO_CONFIRM = os.environ.get("NO_CONFIRM", "0") == "1"
 EMBED_MODEL = os.environ.get("EMBED_MODEL", "nomic-embed-text")
 MAX_TOKENS = int(os.environ.get("MAX_TOKENS", "0"))
@@ -293,7 +293,7 @@ def run_agent_loop(msgs, session_id, events=None, model=None):
     yaml_tool_pat = re.compile(r'```[^\n]*\ntool\s+(\w+)\n(.*?)\n```', re.DOTALL)
     VALID_TOOLS = ("read","write","edit","bash","glob","grep","list","web","diff","commit","undo","verify","plan","search","websearch","question","skill","patch","task","todo","lsp")
     max_iter = int(os.environ.get("AGENT_MAX_ITER", "12"))
-    max_time = float(os.environ.get("AGENT_TIMEOUT", "60.0"))
+    max_time = float(os.environ.get("AGENT_TIMEOUT", "300"))
     start_time = time.time()
     total_tokens = sum(len(m.get("content", "")) / 4 for m in msgs)
     format_retried = 0
@@ -421,14 +421,8 @@ def run_agent_loop(msgs, session_id, events=None, model=None):
             name = tc.get("tool", "")
             raw_tc = dict(tc)
             tc.pop("tool", None)
-            # Aliases: models often call python/shell/terminal instead of bash
-            if name in ("python", "shell", "terminal", "cmd", "run"):
-                tc["cmd"] = tc.get("cmd", tc.get("command", ""))
-                name = "bash"
-            if not name:
-                all_results.append(f"[tool: missing 'tool' key in block {idx+1}]")
-                continue
-            # anti-repeat: identical tool call twice in a row = model loop, stop it
+            # anti-repeat: identical tool call twice in a row = model loop, stop it.
+            # Must run BEFORE the name check so broken/empty blocks are caught too.
             call_key = (name, json.dumps(tc, ensure_ascii=False, sort_keys=True))
             if call_key == last_call_key:
                 repeats += 1
@@ -438,6 +432,13 @@ def run_agent_loop(msgs, session_id, events=None, model=None):
                     break
             else:
                 last_call_key, repeats = call_key, 1
+            # Aliases: models often call python/shell/terminal instead of bash
+            if name in ("python", "shell", "terminal", "cmd", "run"):
+                tc["cmd"] = tc.get("cmd", tc.get("command", ""))
+                name = "bash"
+            if not name:
+                all_results.append(f"[tool: missing 'tool' key in block {idx+1}]")
+                continue
             ve = validate_tool({**tc, "tool": name})
             if ve:
                 all_results.append(f"[tool:{name}] {ve}")

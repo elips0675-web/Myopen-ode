@@ -197,6 +197,10 @@ RULES:
 4. NEVER write code blocks. ONLY ```tool blocks.
 5. Every tool call MUST include ALL required fields. Missing fields will be rejected.
 6. When user confirms with "yes" or "да" — you MUST repeat the exact same ```tool block. No explanations.
+7. NEVER invent tools and NEVER explain how to create a tool. All tools already exist and are listed below.
+8. If a tool returns an error (file not found, bad args) — fix the arguments or report the error to the user. Never give tutorials.
+9. If no tool is needed to answer — reply with plain text, no tool block.
+10. Answer in the user's language (same language as the last user message).
 
 TOOLS (required fields in bold):
 ```tool
@@ -364,13 +368,14 @@ def call_ollama(messages, model=None):
                 log.info("LLM cache hit (TTL=%ds)", LLM_CACHE_TTL)
                 return hit[1], hit[2]
     max_retries = 3
+    num_ctx = int(os.environ.get("OLLAMA_NUM_CTX", "16384"))
     for attempt in range(max_retries):
         try:
             r = requests.post(f"{OLLAMA_URL}/api/chat", json={
                 "model": m, "messages": [msg for msg in messages if msg.get("content")],
                 "stream": False, "keep_alive": -1,
-                "options": {"temperature": 0.2, "num_predict": 4096, "num_ctx": 32768}
-            }, timeout=120)
+                "options": {"temperature": 0.2, "num_predict": 2048, "num_ctx": num_ctx}
+            }, timeout=180)
             r.raise_for_status()
             data = r.json()
             msg = data.get("message", {}).get("content", "")

@@ -131,7 +131,7 @@ RUNNING
 -------
 python agent.py        ->  http://localhost:8765/
 python desktop.py      ->  native pywebview window
-python test_agent.py   ->  36/36 smoke tests pass
+python test_agent.py   ->  38/38 smoke tests pass
 python mcp_server.py   ->  MCP stdio server for IDEs
 pip install -r requirements.txt
 AI Desktop.bat         ->  desktop app launcher (python desktop.py)
@@ -176,12 +176,20 @@ symlink safety; open: stream=True, RAG background thread, bash whitelist/shlex.
 UPDATE (2026-08-05): agent looped on `question` tool (live "Кто ты?" → 12 identical question calls,
 no answer). Fixed: (1) question now ends the iteration right after execution — result appended to msgs,
 break, loop waits for user reply (no repeated model calls); (2) anti-loop guard: the exact same tool call
-twice in a row is blocked ("[tool: identical call repeated — stop repeating, answer directly]" + break);
-(3) planner-retry branch no longer fires when the user explicitly passed a model (it == 0 and
-current_model != MODEL now requires not model), so qwen2.5-coder:7b answers in 1 iteration;
-(4) "[Format error — retrying with strict hint]" marker no longer leaks into the visible output.
-Live-verified: 1 question + real answer. Tests: 36/36 (added test_question_stops_loop,
-test_repeated_tool_blocked; test_agent_loop_model_param now expects 1 call — no false planner retry).
+twice in a row is blocked ("[tool: identical call repeated — stop repeating, answer directly]" + break),
+now also covers broken blocks without a 'tool' key; (3) planner-retry branch no longer fires when the
+user explicitly passed a model; (4) "[Format error — retrying with strict hint]" marker no longer leaks
+into the visible output. Live-verified: 1 question + real answer. Tests: 36/36.
+UPDATE (2026-08-05 late): performance + reliability pass. Root causes of slow/looping behavior:
+(1) num_ctx=32768 in call_ollama → 7B Q4 + 32k KV cache overflowed 12GB VRAM → CPU offload → 7 tok/s.
+Fixed: num_ctx=16384 (env OLLAMA_NUM_CTX), num_predict=2048 → ~50-60 tok/s (~8x). "Кто ты?" now answers
+in ~5s instead of 60s+. (2) AGENT_TIMEOUT default 60→300s (slow models hit TIMEOUT mid-loop; test added).
+(3) Server was started without WORK_DIR, so files/skills/plugins/memory were resolved against the old
+empty copy E:\My OpenCode instead of the project folder → "read file.py not found", "[SKILL] ... Available:
+none". Start with WORK_DIR=E:\My OpenCode1 (context of this project). (4) System prompt hardened:
+NEVER invent tools / give tutorials on tool errors, answer in user's language. Live-verified full coding
+loop: write → CONFIRM → yes → file created in correct folder. Tests: 38/38 (test_timeout_env,
+test_missing_tool_key_stops_loop added). Fast model for chat: qwen2.5-coder:3b (125 tok/s vs 7b's 50-60).
 
 COMPARISON
 ----------

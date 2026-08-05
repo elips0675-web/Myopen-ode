@@ -422,6 +422,46 @@ def test_repeated_tool_blocked():
     assert calls["n"] == 2, f"expected 2 iterations then block, got {calls['n']}"
     print("  [OK] agent loop: identical repeat blocked")
 
+def test_missing_tool_key_stops_loop():
+    """Broken blocks (no 'tool' key) repeated twice in a row must stop the loop."""
+    import agent as agent_mod
+    calls = {"n": 0}
+    def mock_ollama(msgs, model):
+        calls["n"] += 1
+        return ("```tool\n{}\n```\n```tool\n{}\n```\n```tool\n{}\n```", 10)
+    original = agent_mod.call_ollama
+    agent_mod.call_ollama = mock_ollama
+    try:
+        out = agent_mod.run_agent_loop(
+            [{"role": "user", "content": "do it"}], None)
+    finally:
+        agent_mod.call_ollama = original
+    assert "identical call repeated" in out, f"broken blocks not blocked: {out[:200]}"
+    assert calls["n"] == 1, f"loop must stop after broken blocks, got {calls['n']} calls"
+    print("  [OK] agent loop: broken tool blocks blocked")
+
+def test_timeout_env():
+    """AGENT_TIMEOUT must cap the loop and return a TIMEOUT marker."""
+    import agent as agent_mod
+    import time as _time
+    calls = {"n": 0}
+    def mock_ollama(msgs, model):
+        calls["n"] += 1
+        _time.sleep(0.3)
+        return '```tool\n{"tool": "read", "path": "x.txt"}\n```', 10
+    original = agent_mod.call_ollama
+    agent_mod.call_ollama = mock_ollama
+    os.environ["AGENT_TIMEOUT"] = "0.05"
+    try:
+        out = agent_mod.run_agent_loop(
+            [{"role": "user", "content": "read x"}], None)
+    finally:
+        agent_mod.call_ollama = original
+        os.environ.pop("AGENT_TIMEOUT", None)
+    assert "TIMEOUT" in out, f"timeout marker missing: {out[:200]}"
+    assert calls["n"] == 1, f"loop should stop before 2nd call, got {calls['n']}"
+    print("  [OK] agent loop: timeout respected")
+
 def test_agent_loop_shell_alias():
     """Integration: 'shell' alias maps to bash and executes."""
     import agent as agent_mod
@@ -566,6 +606,7 @@ if __name__ == "__main__":
              test_confirm_yes_autoexec, test_agent_loop_model_param,
              test_validate_tool_types, test_symlink_safe_path, test_main_model_freeform_retry,
              test_question_stops_loop, test_repeated_tool_blocked,
+             test_missing_tool_key_stops_loop, test_timeout_env,
              test_sessions_sqlite, test_session_json_migration,
              test_patch_line_aware, test_bash_filter, test_todo_thread_safety]
     passed = 0
