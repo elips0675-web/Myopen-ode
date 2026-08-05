@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Smoke tests for agent tool loop."""
-import json, sys, os, tempfile
+import json, sys, os, tempfile, time
 from pathlib import Path
 sys.path.insert(0, "E:\\My OpenCode1")
 from tools import execute_tool, backup, undo, verify_file, resolve, init_config, init_backup, validate_tool
@@ -492,6 +492,34 @@ def test_cancel_flag():
     assert "[cancelled]" in out.get("r", ""), f"cancel marker missing: {out.get('r','')[:200]}"
     print(f"  [OK] agent loop: cancel flag respected ({calls['n']} calls)")
 
+def test_rag_split_chunk():
+    """Size-based chunking with overlap (DeepSeek P1)."""
+    from rag import _split_chunk
+    t = "x" * 1300
+    parts = _split_chunk(t, 500, 80)
+    assert len(parts) == 3, len(parts)
+    assert all(len(p) <= 500 for p in parts)
+    assert parts[0] == "x" * 500 and len(parts[-1]) == 460
+    assert parts[0][420:] == parts[1][:80], "overlap missing"
+    assert _split_chunk("short", 500, 80) == ["short"]
+    print("  [OK] rag split chunk (size + overlap)")
+
+def test_session_search():
+    """Full-text search across session messages."""
+    import agent as agent_mod
+    sid = "srch_" + str(int(time.time()))
+    agent_mod.save_session(sid, "Search me",
+        [{"role": "user", "content": "Как работает потоковый SSE в агенте?"}])
+    try:
+        res = agent_mod.search_sessions(q="потоковый")
+        assert any(r["id"] == sid for r in res), f"not found: {res}"
+        r = next(r for r in res if r["id"] == sid)
+        assert r["snippets"] and "потоковый" in r["snippets"][0]
+        assert agent_mod.search_sessions(q="несуществующеесловоxyz") == []
+    finally:
+        agent_mod.delete_session_db(sid)
+    print("  [OK] session full-text search")
+
 def test_agent_loop_shell_alias():
     """Integration: 'shell' alias maps to bash and executes."""
     import agent as agent_mod
@@ -647,7 +675,8 @@ if __name__ == "__main__":
              test_question_stops_loop, test_repeated_tool_blocked,
              test_missing_tool_key_stops_loop, test_timeout_env, test_cancel_flag,
              test_sessions_sqlite, test_session_json_migration,
-             test_patch_line_aware, test_bash_filter, test_todo_thread_safety]
+             test_patch_line_aware, test_bash_filter, test_todo_thread_safety,
+             test_rag_split_chunk, test_session_search]
     passed = 0
     for t in tests:
         try:

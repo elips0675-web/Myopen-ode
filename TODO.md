@@ -25,7 +25,7 @@
 - [x] WebSearch (DuckDuckGo)
 - [x] Async rewrite (все blocking-вызовы через asyncio.to_thread)
 - [x] CI/CD
-- [x] 39 smoke-тестов (включая интеграционные с мок-моделью, SQLite-сессии, patch line-aware, bash-фильтр, thread-safety, anti-loop)
+- [x] 41 smoke-тестов (включая интеграционные с мок-моделью, SQLite-сессии, patch line-aware, bash-фильтр, thread-safety, anti-loop, RAG-чанкинг, поиск по сессиям)
 - [x] Mobile-responsive sidebar
 - [x] Desktop App (pywebview)
 - [x] Плагины (.agent_plugins/)
@@ -90,6 +90,7 @@
 - [x] `test_cancel_flag`: флаг отмены останавливает цикл между итерациями (сделан)
 - [x] Live-проверка полного цикла: задача → write (CONFIRM) → "yes" → файл создан → verify (пройдена)
 - [x] Live-проверка «Кто ты?»: 1 вопрос, цикл не зацикливается (пройдена)
+- [x] Live-проверка /api/sessions/search: сессия найдена со сниппетом (пройдена)
 
 ## По оценкам Kimi (7.8) — что осталось
 
@@ -100,7 +101,7 @@
 
 ### P1 (важно) — сделать следующими
 - [ ] stream=True в call_ollama — парсинг tool blocks «на лету» (сейчас агент ждёт полный ответ модели, десятки секунд тишины в UI)
-- [ ] RAG-индексация в фоновом потоке (сейчас запрос к /api/embed блокирует поток запроса)
+- [x] RAG-индексация в фоновом потоке — сделано: после холодного старта реиндексация изменённых файлов идёт в фоновом потоке (rag._schedule_bg_index), поиск отвечает по текущему индексу; cold start остаётся синхронным (rag.py rag_search)
 - [x] Pydantic-модели для аргументов каждого инструмента — сделано расширение validate_tool: типы (str/int), диапазоны (top_k 1-50, max_results 1-20), enum-ы (task.agent, todo.action, lsp.operation, mcp.server/_list)
 - [x] Bash whitelist вместо чёрного списка — сделано: whitelist команд (BASH_ALLOWED), рекурсивная проверка вложенных интерпретаторов (добавлены python -c/-m, node -e), запрет `..`-обхода для деструктивных команд (rm/del/cp/mv), разрешены только локальные скрипты проекта (test_bash_filter)
 - [x] ensure_safe_path: проверка симлинков до resolve() — уже заблокировано: resolve() раскрывает симлинк, итог проверяется в пределах WORK_DIR (test_symlink_safe_path)
@@ -115,7 +116,7 @@
 
 ### P1 (важно)
 - [ ] Оптимизация RAG: память (сейчас все чанки в ОЗУ) + FAISS или аналог для эффективного поиска
-- [ ] Чанкинг RAG: по размеру (~500 симв.) с перекрытием вместо только def/class-границ (не универсально для всех языков)
+- [x] Чанкинг RAG: по размеру (~500 симв.) с перекрытием вместо только def/class-границ — сделано: _split_chunk (500 симв., overlap 80) + def/class-границы (rag.py)
 
 ### P2 (улучшение)
 - [ ] Конкретные типы исключений вместо широких except Exception + лучше логирование
@@ -129,4 +130,4 @@
 - [ ] Desktop App (Tauri — pywebview уже работает)
 - [ ] GPU embeddings (Ollama уже на GPU — фактически не требуется)
 - [ ] deepseek-coder-v2:16b — пулл (для стабильного кодинга на 12GB)
-- [ ] Полнотекстовый поиск по сессиям в UI
+- [x] Полнотекстовый поиск по сессиям — GET /api/sessions/search?q=&limit= (SQLite LIKE + JSON-fallback, сниппеты с контекстом, test_session_search)

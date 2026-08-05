@@ -149,6 +149,22 @@ def rag_index():
         RAG_INDEX = [c["emb"] for c in RAG_CHUNKS]
         RAG_DIRTY = False
 
+def _split_chunk(text, size=500, overlap=80):
+    """Split long chunks into ~size-char pieces with overlap so context at
+    boundaries is not lost (works for any language, not just def/class)."""
+    if len(text) <= size:
+        return [text]
+    parts = []
+    i = 0
+    n = len(text)
+    while i < n:
+        end = min(i + size, n)
+        parts.append(text[i:end])
+        if end == n:
+            break
+        i = max(i + size - overlap, i + 1)
+    return parts
+
 def _index_file(rel, mtime, size):
     global RAG_CHUNKS
     cached = _load_file_cache(rel, mtime, size)
@@ -173,7 +189,11 @@ def _index_file(rel, mtime, size):
             current.append(line)
     if current:
         chunks.append(("\n".join(current), rel, current_start))
-    chunk_data = [{"text": t[:500], "file": rel, "line": ln, "emb": []} for t, r, ln in chunks]
+    # size-based re-chunking with overlap (language-agnostic)
+    chunk_data = []
+    for t, r, ln in chunks:
+        for piece in _split_chunk(t):
+            chunk_data.append({"text": piece, "file": rel, "line": ln, "emb": []})
     if not chunk_data: return
     try:
         r = requests.post(f"{OLLAMA_URL}/api/embed", json={
@@ -200,9 +220,30 @@ def _cos_sim(a, b):
     nb = sum(y*y for y in b)**0.5
     return dot / (na * nb + 1e-10)
 
+def _schedule_bg_index():
+    """Run re-indexing in a background thread so searches never block on it
+    (after the cold start). Deduplicates concurrent scheduling."""
+    global _BG_THREAD
+    with RAG_LOCK:
+        if _BG_THREAD and _BG_THREAD.is_alive():
+            return
+        _BG_THREAD = threading.Thread(target=_bg_index_work, daemon=True)
+        _BG_THREAD.start()
+
+def _bg_index_work():
+    try:
+        rag_index()
+    except Exception as e:
+        log.warning("Background RAG index failed: %s", e)
+
+_BG_THREAD = None
+
 def rag_search(query, top_k=5, hybrid=True):
     with RAG_LOCK:
-        rag_index()
+        if RAG_INDEX is None:
+            rag_index()  # cold start: synchronous so the first search has data
+        else:
+            _schedule_bg_index()  # subsequent re-indexes happen in background
         if RAG_INDEX is None or not RAG_CHUNKS: return "RAG not available"
         try:
             r = requests.post(f"{OLLAMA_URL}/api/embed", json={

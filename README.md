@@ -1,4 +1,4 @@
-# AI Coder v2 — OpenCode Desktop Alternative
+﻿# AI Coder v2 — OpenCode Desktop Alternative
 
 Локальный AI-агент-программист на Ollama. Замена Cursor/Windsurf/Claude Code — бесплатно, приватно, офлайн.
 
@@ -69,7 +69,7 @@
 ## Тесты
 
 ```bash
-python test_agent.py   # 39/39 smoke-тестов
+python test_agent.py   # 41/41 smoke-тестов
 ```
 
 Интеграционные тесты с мок-моделью (agent loop + tool calls + live events), SQLite-сессии (CRUD + миграция из JSON), patch line-aware (мульти-хунки, mismatch → None), bash-фильтр (вложенные `bash -c` / `cmd /c`), thread-safety todo, RAG инкрементальный кеш, аудит, терминал, deps, anti-loop (question останавливает итерацию, повтор вызова блокируется).
@@ -237,7 +237,7 @@ Local AI coding agent powered by Ollama. Free, private, offline alternative to C
 ### Tests
 
 ```bash
-python test_agent.py   # 39/39 smoke tests
+python test_agent.py   # 41/41 smoke tests
 ```
 
 Integration tests with mock model (agent loop + tool calls + live SSE events), SQLite sessions (CRUD + JSON migration), line-aware patch (multi-hunk, mismatch → None), bash filter (nested `bash -c` / `cmd /c`), todo thread-safety, incremental RAG cache, audit, terminal, deps.

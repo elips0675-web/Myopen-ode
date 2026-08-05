@@ -676,6 +676,55 @@ async def upload_file(req: FileUploadReq):
 def list_sessions():
     return list_sessions_db()
 
+@app.get("/api/sessions/search")
+def search_sessions(q: str = "", limit: int = 20):
+    """Full-text search across session messages (SQLite LIKE + JSON fallback)."""
+    if not q.strip():
+        return []
+    ql = q.lower().strip()
+    results = []
+    try:
+        with _db() as conn:
+            rows = conn.execute(
+                "SELECT id, title, messages, updated FROM sessions WHERE lower(messages) LIKE ? ORDER BY updated DESC LIMIT ?",
+                (f"%{ql}%", limit)).fetchall()
+        for sid, title, raw, updated in rows:
+            snippets = []
+            try:
+                msgs = json.loads(raw)
+                for m in msgs:
+                    c = m.get("content", "")
+                    if isinstance(c, str) and ql in c.lower():
+                        i = c.lower().find(ql)
+                        a = max(0, i - 80)
+                        snippets.append("…" + c[a:i + len(q) + 80].replace("\n", " ") + "…")
+            except Exception:
+                pass
+            results.append({"id": sid, "title": title, "updated": updated,
+                            "snippets": snippets[:3], "matches": len(snippets)})
+    except Exception as e:
+        log.warning("Session search db: %s", e)
+    for f in sorted(SESSIONS_DIR.glob("*.json"), key=lambda x: x.stat().st_mtime, reverse=True):
+        if any(r["id"] == f.stem for r in results):
+            continue
+        try:
+            data = json.loads(f.read_text())
+            msgs = data.get("messages", [])
+            snippets = []
+            for m in msgs:
+                c = m.get("content", "")
+                if isinstance(c, str) and ql in c.lower():
+                    i = c.lower().find(ql)
+                    a = max(0, i - 80)
+                    snippets.append("…" + c[a:i + len(q) + 80].replace("\n", " ") + "…")
+            if snippets:
+                results.append({"id": f.stem, "title": data.get("title", f.stem),
+                                "updated": data.get("updated", ""),
+                                "snippets": snippets[:3], "matches": len(snippets)})
+        except Exception:
+            continue
+    return results[:limit]
+
 @app.post("/api/sessions")
 def create_session(req: SessionReq):
     sid = datetime.now().strftime("%Y%m%d_%H%M%S")
