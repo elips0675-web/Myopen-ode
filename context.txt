@@ -41,7 +41,7 @@ desktop.py (pywebview native window). Zero npm deps, only fastapi+uvicorn+reques
 9. RAG: hybrid BM25 + cosine similarity, incremental per-file cache (.rag_cache/)
 10. Sessions: full CRUD (create, list, load, delete, export/import JSON)
 11. Multi-project: projects.json, per-project sessions/RAG/memory
-12. LSP: definition, references, hover, symbols, rename, completion (pylsp/ts-ls/gopls)
+12. LSP: definition, references, hover, symbols, rename, completion (pylsp/ts-ls/gopls/clangd/bash/css/html)
     + token-based fallback (token_completions in lsp.py) when no language server installed
 13. MCP server: all 28 tools via Model Context Protocol (VS Code/Cursor/Claude Desktop)
 14. Plugins: .agent_plugins/*.py — dynamic tool registration

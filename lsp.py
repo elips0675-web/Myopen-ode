@@ -14,6 +14,16 @@ LSP_SERVERS = {
     ".go":  ["gopls"],
     ".rs":  ["rust-analyzer"],
     ".java": ["java", "-jar", "eclipse.jdt.ls"],
+    ".c":   ["clangd"],
+    ".h":   ["clangd"],
+    ".cpp": ["clangd"],
+    ".cc":  ["clangd"],
+    ".cxx": ["clangd"],
+    ".hpp": ["clangd"],
+    ".sh":  ["bash-language-server", "start"],
+    ".css": ["vscode-css-language-server", "--stdio"],
+    ".scss":["vscode-css-language-server", "--stdio"],
+    ".html":["vscode-html-language-server", "--stdio"],
 }
 
 KEYWORDS = {
@@ -40,6 +50,42 @@ KEYWORDS = {
               "String", "new", "return", "if", "else", "for", "while", "switch", "case",
               "break", "continue", "try", "catch", "finally", "throw", "throws", "import",
               "package", "this", "super", "null", "true", "false"],
+    ".c": ["int", "void", "char", "float", "double", "long", "short", "unsigned", "signed",
+           "struct", "union", "enum", "typedef", "const", "static", "extern", "volatile",
+           "register", "auto", "return", "if", "else", "for", "while", "do", "switch",
+           "case", "default", "break", "continue", "goto", "sizeof", "inline", "NULL"],
+    ".h": ["int", "void", "char", "float", "double", "long", "short", "unsigned", "signed",
+           "struct", "union", "enum", "typedef", "const", "static", "extern", "volatile",
+           "register", "auto", "return", "if", "else", "for", "while", "do", "switch",
+           "case", "default", "break", "continue", "goto", "sizeof", "inline", "NULL"],
+    ".cpp": ["int", "void", "char", "float", "double", "bool", "auto", "const", "static",
+             "extern", "class", "struct", "union", "enum", "namespace", "template", "using",
+             "typedef", "typename", "virtual", "override", "final", "public", "private",
+             "protected", "this", "new", "delete", "nullptr", "return", "if", "else", "for",
+             "while", "do", "switch", "case", "default", "break", "continue", "try", "catch",
+             "throw", "true", "false", "std"],
+    ".hpp": ["int", "void", "char", "float", "double", "bool", "auto", "const", "static",
+             "extern", "class", "struct", "union", "enum", "namespace", "template", "using",
+             "typedef", "typename", "virtual", "override", "final", "public", "private",
+             "protected", "this", "new", "delete", "nullptr", "return", "if", "else", "for",
+             "while", "do", "switch", "case", "default", "break", "continue", "try", "catch",
+             "throw", "true", "false", "std"],
+    ".sh": ["if", "then", "else", "elif", "fi", "for", "while", "until", "do", "done",
+            "case", "esac", "function", "return", "local", "export", "readonly", "echo",
+            "exit", "set", "shift", "source", "break", "continue", "test", "cd", "ls",
+            "mkdir", "rm", "cp", "mv", "grep", "awk", "sed"],
+    ".css": ["color", "background", "background-color", "margin", "padding", "border",
+             "display", "position", "top", "left", "right", "bottom", "width", "height",
+             "font-size", "font-family", "font-weight", "text-align", "opacity", "z-index",
+             "overflow", "float", "flex", "grid", "transition", "animation", "!important"],
+    ".scss": ["color", "background", "background-color", "margin", "padding", "border",
+              "display", "position", "top", "left", "right", "bottom", "width", "height",
+              "font-size", "font-family", "font-weight", "text-align", "opacity", "z-index",
+              "overflow", "float", "flex", "grid", "transition", "animation", "!important",
+              "@import", "@mixin", "@include", "@extend", "$var", "&"],
+    ".html": ["div", "span", "class", "id", "style", "script", "link", "meta", "title",
+              "body", "head", "html", "input", "button", "form", "img", "a", "href", "src",
+              "type", "value", "name", "onclick", "onload", "style", "css"],
 }
 
 def token_completions(path, text, line, character, limit=30):
@@ -84,7 +130,7 @@ class LSPClient:
             self.proc = subprocess.Popen(
                 cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE, cwd=self.workspace,
-                creationflags=subprocess.CREATE_NO_WINDOW if hasattr(subprocess, 'CREAT_NO_WINDOW') else 0
+                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0)
             )
             threading.Thread(target=self._reader, daemon=True).start()
             self._send({

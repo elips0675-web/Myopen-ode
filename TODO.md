@@ -141,7 +141,7 @@
 - [ ] Конкретные типы исключений вместо широких except Exception + лучше логирование
 - [ ] Разбить длинные функции в agent.py/tools.py, добавить docstring и тайп-хинты
 - [ ] Вынести JS из ui.py в отдельный модуль/файл
-- [ ] LSP: поддержка большего числа языков (Rust, C++)
+- [x] LSP: поддержка большего числа языков (Rust, C++) — сделано: добавлены clangd (.c/.h/.cpp/.cc/.cxx/.hpp), bash-language-server (.sh), vscode-css/html-language-server (.css/.scss/.html) + KEYWORDS для всех новых; исправлена опечатка CREATE_NO_WINDOW (окно cmd при старте серверов)
 - [ ] Docker-изоляция bash (строгая песочница)
 
 ## Собственные идеи (низкий приоритет)
