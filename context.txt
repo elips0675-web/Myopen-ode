@@ -169,6 +169,10 @@ UPDATE (2026-07-31 evening): confirm flow FIXED — _PENDING_CONFIRM stores defe
 "yes" auto-executes it without a model call. Live-verified full loop: write → CONFIRM → yes → file
 created → verify. Tests: 31/31. Note: server WORK_DIR defaults to E:\My OpenCode; set WORK_DIR env
 when running from another folder.
+UPDATE (2026-07-31 late): arg validation hardened (types, ranges, enums for task/todo/lsp/mcp/search),
+free-form main-model answers get one strict retry hint (deepseek-r1:7b workaround), symlink escape
+already blocked (resolve-then-check). Tests: 34/34. Kimi P1 items done: pydantic-style validation,
+symlink safety; open: stream=True, RAG background thread, bash whitelist/shlex.
 
 COMPARISON
 ----------

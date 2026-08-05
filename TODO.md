@@ -93,9 +93,9 @@
 ### P1 (важно) — сделать следующими
 - [ ] stream=True в call_ollama — парсинг tool blocks «на лету» (сейчас агент ждёт полный ответ модели, десятки секунд тишины в UI)
 - [ ] RAG-индексация в фоновом потоке (сейчас запрос к /api/embed блокирует поток запроса)
-- [ ] Pydantic-модели для аргументов каждого инструмента — валидация типов (path: str, steps: list, top_k > 0, diff содержит @@)
+- [x] Pydantic-модели для аргументов каждого инструмента — сделано расширение validate_tool: типы (str/int), диапазоны (top_k 1-50, max_results 1-20), enum-ы (task.agent, todo.action, lsp.operation, mcp.server/_list)
 - [ ] Bash whitelist или shlex.split + валидация аргументов (чёрный список обходится: `rm -rf /tmp/..`, обфускация)
-- [ ] ensure_safe_path: проверка симлинков до resolve() (symlink на /etc внутри WORK_DIR сейчас проходит)
+- [x] ensure_safe_path: проверка симлинков до resolve() — уже заблокировано: resolve() раскрывает симлинк, итог проверяется в пределах WORK_DIR (test_symlink_safe_path)
 
 ### P2 (улучшение)
 - [ ] Graceful cancellation: проверка флага отмены внутри agent loop (сейчас abort ловит только следующий fetch)

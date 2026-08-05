@@ -150,8 +150,19 @@ def validate_tool(tc):
     if schema is None: return f"Unknown tool '{name}'"
     missing = [k for k in schema.get("required", []) if k not in tc]
     if missing: return f"Missing required fields: {', '.join(missing)} in {name}"
-    if "path" in tc and not isinstance(tc["path"], str): return "path must be string"
-    if "content" in tc and not isinstance(tc["content"], str): return "content must be string"
+    def need_str(key, label):
+        if key in tc and not isinstance(tc[key], str): return f"{label} must be string"
+    def need_int(key, label, min_val=None, max_val=None):
+        if key in tc and not isinstance(tc[key], int): return f"{label} must be integer"
+        if key in tc and isinstance(tc[key], int):
+            if min_val is not None and tc[key] < min_val: return f"{label} must be >= {min_val}"
+            if max_val is not None and tc[key] > max_val: return f"{label} must be <= {max_val}"
+    for key in ("path", "content", "old", "new", "cmd", "pattern", "query", "text", "name", "url", "diff", "message", "operation", "prompt"):
+        err = need_str(key, key); 
+        if err: return err
+    for key, lo, hi in (("top_k", 1, 50), ("line", 0, 10**9), ("character", 0, 10**9), ("index", 0, 10**9), ("max_results", 1, 20)):
+        err = need_int(key, key, lo, hi)
+        if err: return err
     if tc.get("tool") == "plan" and "steps" in tc:
         if isinstance(tc["steps"], str):
             tc["steps"] = [s.strip() for s in re.split(r'[.,;\n]+', tc["steps"]) if s.strip()]
@@ -160,6 +171,17 @@ def validate_tool(tc):
     if tc.get("tool") == "question" and "options" in tc:
         if isinstance(tc["options"], str):
             tc["options"] = [o.strip() for o in tc["options"].split(",") if o.strip()]
+        elif not isinstance(tc["options"], list):
+            return "question.options must be an array"
+    if tc.get("tool") == "task" and tc.get("agent") not in ("explore", "scout", "general"):
+        return "task.agent must be one of: explore, scout, general"
+    if tc.get("tool") == "todo" and tc.get("action") not in ("add", "complete", "list"):
+        return "todo.action must be one of: add, complete, list"
+    if tc.get("tool") == "lsp" and tc.get("operation") not in ("definition", "references", "hover", "symbols", "rename", "completion"):
+        return f"lsp.operation must be one of: definition, references, hover, symbols, rename, completion"
+    if tc.get("tool") == "mcp":
+        if not isinstance(tc.get("server"), str) or not tc.get("server"): return "mcp.server must be a non-empty string"
+        if tc.get("server") != "_list" and not isinstance(tc.get("call"), str): return "mcp.call must be a string"
     if tc.get("tool") == "patch" and "diff" in tc:
         err = _validate_patch(tc["diff"])
         if err: return err

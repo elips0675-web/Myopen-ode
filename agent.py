@@ -296,6 +296,7 @@ def run_agent_loop(msgs, session_id, events=None, model=None):
     max_time = float(os.environ.get("AGENT_TIMEOUT", "60.0"))
     start_time = time.time()
     total_tokens = sum(len(m.get("content", "")) / 4 for m in msgs)
+    format_retried = 0
 
     for it in range(max_iter):
         if time.time() - start_time > max_time:
@@ -393,6 +394,14 @@ def run_agent_loop(msgs, session_id, events=None, model=None):
                 # planner model (1.5b) often ignores tool format — retry with main model
                 log.info("Planner iteration produced no tool blocks; retrying with %s", MODEL)
                 full += content + "\n"
+                continue
+            if format_retried < 1 and len(content.strip()) > 20:
+                # main model ignored tool format (free-form answer) — one strict retry
+                hint = "[Format error: reply ONLY with ```tool JSON blocks. No prose, no code blocks.]"
+                msgs.append({"role": "assistant", "content": content})
+                msgs.append({"role": "user", "content": hint})
+                full += content + "\n[Format error — retrying with strict hint]\n"
+                format_retried += 1
                 continue
             full += content
             break

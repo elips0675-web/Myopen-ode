@@ -307,6 +307,82 @@ def test_agent_loop_model_param():
     assert len(calls) == 2, f"planner should be skipped entirely, got {len(calls)} calls"
     print("  [OK] agent loop: model param overrides planner")
 
+def test_validate_tool_types():
+    """Kimi P1: argument type/range validation (top_k>0, task.agent, todo.action, lsp.op)."""
+    from tools import validate_tool
+    cases = [
+        ({"tool": "search", "query": "x", "top_k": 0}, True),
+        ({"tool": "search", "query": "x", "top_k": 100}, True),
+        ({"tool": "search", "query": "x", "top_k": 5}, False),
+        ({"tool": "search", "query": 42}, True),
+        ({"tool": "task", "agent": "hacker", "prompt": "x"}, True),
+        ({"tool": "task", "agent": "explore", "prompt": "x"}, False),
+        ({"tool": "todo", "action": "delete", "items": []}, True),
+        ({"tool": "todo", "action": "complete", "index": 1}, False),
+        ({"tool": "lsp", "operation": "hack", "path": "a.py"}, True),
+        ({"tool": "lsp", "operation": "rename", "path": "a.py", "line": 0, "character": 0}, False),
+        ({"tool": "bash", "cmd": 123}, True),
+        ({"tool": "bash", "cmd": "echo hi"}, False),
+        ({"tool": "mcp", "server": "fs"}, True),
+        ({"tool": "mcp", "server": "fs", "call": "read_file", "args": {}}, False),
+    ]
+    for tc, expect_err in cases:
+        err = validate_tool(tc)
+        if expect_err:
+            assert err, f"expected validation error for {tc}"
+        else:
+            assert not err, f"unexpected error for {tc}: {err}"
+    print("  [OK] validate_tool: types/ranges/enums")
+
+def test_symlink_safe_path():
+    """Symlink/junction escaping WORK_DIR must be blocked."""
+    import tools
+    outside = Path(tempfile.mkdtemp())
+    (outside / "secret.txt").write_text("s3cr3t", "utf-8")
+    link = TMP / "evil_link"
+    try:
+        if hasattr(os, "symlink"):
+            os.symlink(outside, link, target_is_directory=True)
+        else:
+            os.link(outside, link)
+        if link.exists():
+            rel = os.path.relpath(link)
+            err = tools.ensure_safe_path(str(link))
+            assert err is not None, "symlink escape must be blocked"
+            err2 = tools.ensure_safe_path(rel)
+            assert err2 is not None, "relative symlink escape must be blocked"
+            print("  [OK] symlink/junction escape blocked")
+        else:
+            print("  [SKIP] symlink creation unsupported")
+    except OSError as e:
+        print(f"  [SKIP] symlink unsupported: {e}")
+    finally:
+        import shutil
+        shutil.rmtree(outside, ignore_errors=True)
+        shutil.rmtree(link, ignore_errors=True)
+
+def test_main_model_freeform_retry():
+    """Main model free-form answer (no tool blocks) gets one strict retry."""
+    import agent as agent_mod
+    calls = {"n": 0}
+    def mock_ollama(msgs, model):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            return "First I will explain the approach in detail and then do it.", 10
+        if calls["n"] == 2:
+            return '```tool\n{"tool": "list", "path": "."}\n```', 10
+        return "Done.", 5
+    original = agent_mod.call_ollama
+    agent_mod.call_ollama = mock_ollama
+    try:
+        out = agent_mod.run_agent_loop(
+            [{"role": "user", "content": "list"}], None, None, agent_mod.MODEL)
+    finally:
+        agent_mod.call_ollama = original
+    assert calls["n"] == 3, f"expected free-form retry + tool + final, got {calls['n']}"
+    assert "list" in out, f"tool result missing: {out[:300]}"
+    print("  [OK] agent loop: free-form retry with strict hint")
+
 def test_agent_loop_shell_alias():
     """Integration: 'shell' alias maps to bash and executes."""
     import agent as agent_mod
@@ -449,6 +525,7 @@ if __name__ == "__main__":
              test_agent_loop_tool_call, test_agent_loop_plain_text, test_agent_loop_shell_alias,
              test_agent_loop_yaml_style_tool, test_agent_loop_planner_fallback,
              test_confirm_yes_autoexec, test_agent_loop_model_param,
+             test_validate_tool_types, test_symlink_safe_path, test_main_model_freeform_retry,
              test_sessions_sqlite, test_session_json_migration,
              test_patch_line_aware, test_bash_filter, test_todo_thread_safety]
     passed = 0
