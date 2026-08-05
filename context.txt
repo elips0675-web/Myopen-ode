@@ -163,8 +163,17 @@ Docker bash isolation, Tauri desktop, deepseek-coder-v2:16b pull.
 ALL P1s ARE DONE (2026-08-05): stream=True (live streaming), RAG background index, pydantic-style
 validation, bash whitelist, symlink safety, FAISS/numpy fast search, size-based chunking.
 Open: P2 only — split long functions, CodeMirror 6/Monaco, AST multi-file edit, xterm.js,
-Docker bash isolation, native tool calling (needs Ollama support), Tauri desktop,
+Docker bash isolation (DONE 2026-08-06 — BASH_DOCKER=1 opt-in, whitelist enforced, local fallback),
+native tool calling (needs Ollama support), Tauri desktop,
 deepseek-coder-v2:16b pull (12GB VRAM coding), more LSP/refactor polish.
+Open (from eval 2, 2026-08-05): few-shot at tool-error moment, dynamic context line in prompt,
+xterm.js+WS (priority 2), integration tests with real model, RAG folder segmentation,
+CLI mode, crash recovery, cross-platform tests, user docs, update check, JSON Schema format:"json".
+DONE from eval 2: few-shot examples + rules 17-19 (one tool per reply, [DONE] finish, code only via
+write/edit), code detector nudge (max 2), TOOL_STATS + /api/stats (warn at 3+ fails),
+lenient _parse_tool_json (single quotes/unquoted keys/trailing comma/garbage truncation),
+Cache-Control on /static/app.js. [CONFIRM]-timeout NOT needed: loop breaks after CONFIRM by design.
+RAG background index crash fixed (inhomogeneous embeddings filtered in _rebuild_fast_index).
 CRITICAL OPEN BUG (2026-07-31, live check): confirm flow broken — user "yes" after [CONFIRM] does NOT
 re-execute the tool (extract_pending_tool can't find the block in msgs), so agent can't write files
 interactively. Fixed same day: model selection now honored (req.model), planner-iteration retries with
