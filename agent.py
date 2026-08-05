@@ -297,6 +297,8 @@ def run_agent_loop(msgs, session_id, events=None, model=None):
     start_time = time.time()
     total_tokens = sum(len(m.get("content", "")) / 4 for m in msgs)
     format_retried = 0
+    last_call_key = None
+    repeats = 0
 
     for it in range(max_iter):
         if time.time() - start_time > max_time:
@@ -390,7 +392,7 @@ def run_agent_loop(msgs, session_id, events=None, model=None):
                 continue
 
         if not tool_blocks:
-            if it == 0 and current_model != MODEL:
+            if not model and it == 0 and current_model != MODEL:
                 # planner model (1.5b) often ignores tool format — retry with main model
                 log.info("Planner iteration produced no tool blocks; retrying with %s", MODEL)
                 full += content + "\n"
@@ -400,7 +402,7 @@ def run_agent_loop(msgs, session_id, events=None, model=None):
                 hint = "[Format error: reply ONLY with ```tool JSON blocks. No prose, no code blocks.]"
                 msgs.append({"role": "assistant", "content": content})
                 msgs.append({"role": "user", "content": hint})
-                full += content + "\n[Format error — retrying with strict hint]\n"
+                full += content + "\n"
                 format_retried += 1
                 continue
             full += content
@@ -426,11 +428,30 @@ def run_agent_loop(msgs, session_id, events=None, model=None):
             if not name:
                 all_results.append(f"[tool: missing 'tool' key in block {idx+1}]")
                 continue
+            # anti-repeat: identical tool call twice in a row = model loop, stop it
+            call_key = (name, json.dumps(tc, ensure_ascii=False, sort_keys=True))
+            if call_key == last_call_key:
+                repeats += 1
+                if repeats >= 2:
+                    full += "[tool: identical call repeated — stop repeating, answer directly]\n"
+                    needs_break = True
+                    break
+            else:
+                last_call_key, repeats = call_key, 1
             ve = validate_tool({**tc, "tool": name})
             if ve:
                 all_results.append(f"[tool:{name}] {ve}")
                 calls_made.append(name)
                 continue
+            if name == "question":
+                r = execute_tool(name, tc)
+                _emit({"type": "tool", "name": name, "args": tc, "result": r[:200]})
+                all_results.append(f"[tool:{name}] {r[:2000]}")
+                calls_made.append(name)
+                full += f"[tool:question] {r[:2000]}\n"
+                msgs.append({"role":"assistant","content":content})
+                msgs.append({"role":"user","content":r[:2000]})
+                needs_break=True; break
             if name == "plan":
                 steps = tc.get("steps", [])
                 if isinstance(steps, str):

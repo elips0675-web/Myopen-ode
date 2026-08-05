@@ -131,7 +131,7 @@ RUNNING
 -------
 python agent.py        ->  http://localhost:8765/
 python desktop.py      ->  native pywebview window
-python test_agent.py   ->  27/27 smoke tests pass
+python test_agent.py   ->  36/36 smoke tests pass
 python mcp_server.py   ->  MCP stdio server for IDEs
 pip install -r requirements.txt
 AI Desktop.bat         ->  desktop app launcher (python desktop.py)
@@ -173,6 +173,15 @@ UPDATE (2026-07-31 late): arg validation hardened (types, ranges, enums for task
 free-form main-model answers get one strict retry hint (deepseek-r1:7b workaround), symlink escape
 already blocked (resolve-then-check). Tests: 34/34. Kimi P1 items done: pydantic-style validation,
 symlink safety; open: stream=True, RAG background thread, bash whitelist/shlex.
+UPDATE (2026-08-05): agent looped on `question` tool (live "Кто ты?" → 12 identical question calls,
+no answer). Fixed: (1) question now ends the iteration right after execution — result appended to msgs,
+break, loop waits for user reply (no repeated model calls); (2) anti-loop guard: the exact same tool call
+twice in a row is blocked ("[tool: identical call repeated — stop repeating, answer directly]" + break);
+(3) planner-retry branch no longer fires when the user explicitly passed a model (it == 0 and
+current_model != MODEL now requires not model), so qwen2.5-coder:7b answers in 1 iteration;
+(4) "[Format error — retrying with strict hint]" marker no longer leaks into the visible output.
+Live-verified: 1 question + real answer. Tests: 36/36 (added test_question_stops_loop,
+test_repeated_tool_blocked; test_agent_loop_model_param now expects 1 call — no false planner retry).
 
 COMPARISON
 ----------

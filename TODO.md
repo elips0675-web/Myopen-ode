@@ -25,7 +25,7 @@
 - [x] WebSearch (DuckDuckGo)
 - [x] Async rewrite (все blocking-вызовы через asyncio.to_thread)
 - [x] CI/CD
-- [x] 27 smoke-тестов (включая интеграционные с мок-моделью, SQLite-сессии, patch line-aware, bash-фильтр, thread-safety)
+- [x] 36 smoke-тестов (включая интеграционные с мок-моделью, SQLite-сессии, patch line-aware, bash-фильтр, thread-safety, anti-loop)
 - [x] Mobile-responsive sidebar
 - [x] Desktop App (pywebview)
 - [x] Плагины (.agent_plugins/)
@@ -74,6 +74,7 @@
 
 ### Не исправлены (критично для кодинга)
 - [x] **Подтверждение "yes" не завершало цикл** — ИСПРАВЛЕНО: отложенный tool хранится в `_PENDING_CONFIRM` (session_id → name/args), при "yes" авто-выполняется БЕЗ вызова модели (agent.py:311). Live-проверено: write → CONFIRM → yes → файл создан → verify
+- [x] **Агент зацикливался на `question` («Кто ты?» → 12 вызовов вопроса с опциями)** — ИСПРАВЛЕНО: (1) `question` завершает итерацию сразу после выполнения (результат в msgs + break, ждёт ответ пользователя); (2) anti-loop: одинаковый вызов инструмента дважды подряд блокируется (`[tool: identical call repeated...]` + break); (3) при явной переданной модели планировщик (planner-retry) больше не вмешивается. Live-проверено: 1 вопрос + ответ модели. Тесты: test_question_stops_loop, test_repeated_tool_blocked
 - [ ] **deepseek-r1:7b нестабилен в tool-формате**: иногда выдаёт фриформат (`tool block\n define add function`) вместо JSON → лучше рекомендовать qwen2.5-coder:7b как основную модель для кодинга (проверено: стабильные блоки), либо расширить yaml-парсер
 
 ## Тесты — сделать
@@ -81,7 +82,10 @@
 - [x] `test_agent_loop_model_param`: model из запроса доходит до call_ollama, planner пропущен (сделан)
 - [x] `test_agent_loop_yaml_style_tool`: yaml-блоки парсятся и выполняются (сделан)
 - [x] `test_agent_loop_planner_fallback`: planner без tool-блоков → retry с основной моделью (сделан)
+- [x] `test_question_stops_loop`: question завершает итерацию после 1-го вызова (сделан)
+- [x] `test_repeated_tool_blocked`: одинаковый вызов дважды → блокировка (сделан)
 - [x] Live-проверка полного цикла: задача → write (CONFIRM) → "yes" → файл создан → verify (пройдена)
+- [x] Live-проверка «Кто ты?»: 1 вопрос, цикл не зацикливается (пройдена)
 
 ## По оценкам Kimi (7.8) — что осталось
 

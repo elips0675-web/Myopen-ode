@@ -304,7 +304,7 @@ def test_agent_loop_model_param():
         agent_mod.call_ollama = original
     assert calls and all(m == "qwen2.5-coder:7b" for m in calls), \
         f"model param not honored: {calls}"
-    assert len(calls) == 2, f"planner should be skipped entirely, got {len(calls)} calls"
+    assert len(calls) == 1, f"planner should be skipped entirely, got {len(calls)} calls"
     print("  [OK] agent loop: model param overrides planner")
 
 def test_validate_tool_types():
@@ -382,6 +382,45 @@ def test_main_model_freeform_retry():
     assert calls["n"] == 3, f"expected free-form retry + tool + final, got {calls['n']}"
     assert "list" in out, f"tool result missing: {out[:300]}"
     print("  [OK] agent loop: free-form retry with strict hint")
+
+def test_question_stops_loop():
+    """Question tool ends the iteration (waits for user answer) instead of looping."""
+    import agent as agent_mod
+    calls = {"n": 0}
+    def mock_ollama(msgs, model):
+        calls["n"] += 1
+        return '```tool\n{"tool": "question", "text": "Which approach?", "options": ["A", "B"]}\n```', 10
+    original = agent_mod.call_ollama
+    agent_mod.call_ollama = mock_ollama
+    try:
+        out = agent_mod.run_agent_loop(
+            [{"role": "user", "content": "who are you"}], None)
+    finally:
+        agent_mod.call_ollama = original
+    assert "[QUESTION]" in out, f"question not shown: {out[:200]}"
+    assert calls["n"] == 1, f"loop must stop after question, got {calls['n']} calls"
+    print("  [OK] agent loop: question stops iteration")
+
+def test_repeated_tool_blocked():
+    """Identical tool call repeated twice in a row must be blocked (anti-loop)."""
+    import agent as agent_mod
+    f = WORK_DIR / "repeat_target.txt"
+    f.write_text("content here", "utf-8")
+    calls = {"n": 0}
+    def mock_ollama(msgs, model):
+        calls["n"] += 1
+        return '```tool\n{"tool": "read", "path": "repeat_target.txt"}\n```', 10
+    original = agent_mod.call_ollama
+    agent_mod.call_ollama = mock_ollama
+    try:
+        out = agent_mod.run_agent_loop(
+            [{"role": "user", "content": "read it"}], None)
+    finally:
+        agent_mod.call_ollama = original
+        f.unlink(missing_ok=True)
+    assert "identical call repeated" in out, f"repeat not blocked: {out[:300]}"
+    assert calls["n"] == 2, f"expected 2 iterations then block, got {calls['n']}"
+    print("  [OK] agent loop: identical repeat blocked")
 
 def test_agent_loop_shell_alias():
     """Integration: 'shell' alias maps to bash and executes."""
@@ -526,6 +565,7 @@ if __name__ == "__main__":
              test_agent_loop_yaml_style_tool, test_agent_loop_planner_fallback,
              test_confirm_yes_autoexec, test_agent_loop_model_param,
              test_validate_tool_types, test_symlink_safe_path, test_main_model_freeform_retry,
+             test_question_stops_loop, test_repeated_tool_blocked,
              test_sessions_sqlite, test_session_json_migration,
              test_patch_line_aware, test_bash_filter, test_todo_thread_safety]
     passed = 0
