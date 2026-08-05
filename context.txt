@@ -131,7 +131,7 @@ RUNNING
 -------
 python agent.py        ->  http://localhost:8765/
 python desktop.py      ->  native pywebview window
-python test_agent.py   ->  38/38 smoke tests pass
+python test_agent.py   ->  39/39 smoke tests pass
 python mcp_server.py   ->  MCP stdio server for IDEs
 pip install -r requirements.txt
 AI Desktop.bat         ->  desktop app launcher (python desktop.py)
@@ -167,8 +167,8 @@ main model (1.5b ignores tool format), yaml-style tool blocks parsed. Tests: 29/
 Recommended coding model: qwen2.5-coder:7b (deepseek-r1:7b sometimes emits free-form tool blocks).
 UPDATE (2026-07-31 evening): confirm flow FIXED — _PENDING_CONFIRM stores deferred tool per session,
 "yes" auto-executes it without a model call. Live-verified full loop: write → CONFIRM → yes → file
-created → verify. Tests: 31/31. Note: server WORK_DIR defaults to E:\My OpenCode; set WORK_DIR env
-when running from another folder.
+created → verify. Tests: 31/31. Note: server WORK_DIR now defaults to the repo folder (Path(__file__).parent);
+set WORK_DIR env to override.
 UPDATE (2026-07-31 late): arg validation hardened (types, ranges, enums for task/todo/lsp/mcp/search),
 free-form main-model answers get one strict retry hint (deepseek-r1:7b workaround), symlink escape
 already blocked (resolve-then-check). Tests: 34/34. Kimi P1 items done: pydantic-style validation,
@@ -190,6 +190,12 @@ none". Start with WORK_DIR=E:\My OpenCode1 (context of this project). (4) System
 NEVER invent tools / give tutorials on tool errors, answer in user's language. Live-verified full coding
 loop: write → CONFIRM → yes → file created in correct folder. Tests: 38/38 (test_timeout_env,
 test_missing_tool_key_stops_loop added). Fast model for chat: qwen2.5-coder:3b (125 tok/s vs 7b's 50-60).
+UPDATE (2026-08-05 evening): security + UX pass. (1) Bash sandbox upgraded from blacklist-only to
+whitelist (BASH_ALLOWED commands; project-local scripts allowed if they exist in WORK_DIR) + recursive
+inspection of python -c/-m and node -e bodies + ".." path-escape ban for destructive commands
+(rm/del/cp/mv/...). (2) Graceful cancellation: per-session cancel flag checked between agent iterations,
+POST /api/chat/cancel → loop stops and client gets "[cancelled]" (UI Cancel button now actually stops
+the agent, not just the fetch). Tests: 39/39 (test_cancel_flag; test_bash_filter extended).
 
 COMPARISON
 ----------

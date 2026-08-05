@@ -40,6 +40,19 @@ def _pending_get(session_id):
     with _PENDING_LOCK:
         return _PENDING_CONFIRM.pop(session_id or "", None)
 
+# graceful cancellation: session_id -> cancelled flag (checked between iterations)
+_CANCEL_FLAGS = set()
+_CANCEL_LOCK = threading.Lock()
+def _cancel_set(session_id):
+    with _CANCEL_LOCK:
+        _CANCEL_FLAGS.add(session_id or "")
+def _cancel_clear(session_id):
+    with _CANCEL_LOCK:
+        _CANCEL_FLAGS.discard(session_id or "")
+def _cancel_pending(session_id):
+    with _CANCEL_LOCK:
+        return (session_id or "") in _CANCEL_FLAGS
+
 # ─── import tools & rag ───────────────────────────────────
 from tools import (init_config, execute_tool, validate_tool, call_ollama,
     extract_pending_tool, SYSTEM_PROMPT, init_backup)
@@ -304,6 +317,10 @@ def run_agent_loop(msgs, session_id, events=None, model=None):
         if time.time() - start_time > max_time:
             full += f"\n[tool: TIMEOUT — agent loop exceeded {int(max_time)}s]\n"
             break
+        if session_id and _cancel_pending(session_id):
+            full += "\n[cancelled]\n"
+            _cancel_clear(session_id)
+            break
 
         _emit({"type": "status", "msg": f"iteration {it+1}/{max_iter}"})
 
@@ -507,6 +524,7 @@ def run_agent_loop(msgs, session_id, events=None, model=None):
 
 # ─── API models ──────────────────────────────────────────
 class ChatReq(BaseModel): messages: list; model: str = ""; session_id: str = ""
+class CancelReq(BaseModel): session_id: str = ""
 class SessionReq(BaseModel): title: str = ""
 class FileUploadReq(BaseModel): path: str = ""; content: str = ""
 class ProjectReq(BaseModel): name: str = ""; path: str = ""
@@ -771,6 +789,8 @@ async def chat(req: ChatReq):
     def emit(ev):
         loop.call_soon_threadsafe(q.put_nowait, ev)
     task = asyncio.create_task(asyncio.to_thread(run_agent_loop, msgs, req.session_id, emit, req.model or None))
+    if req.session_id:
+        _cancel_clear(req.session_id)
     async def gen():
         # 1) live tool progress while the agent loop runs
         while True:
@@ -796,6 +816,13 @@ async def chat(req: ChatReq):
                 yield f"data: {json.dumps({'text':chunk})}\n\n"
         yield "data: [DONE]\n\n"
     return StreamingResponse(gen(), media_type="text/event-stream")
+
+@app.post("/api/chat/cancel")
+async def cancel_chat(req: CancelReq):
+    """Graceful cancel: sets the session's cancel flag; the agent loop stops
+    between iterations and the client gets '[cancelled]'."""
+    _cancel_set(req.session_id)
+    return {"ok": True}
 
 # ─── wait ollama ─────────────────────────────────────────
 def wait_ollama():

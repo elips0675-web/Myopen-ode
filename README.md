@@ -69,7 +69,7 @@
 ## Тесты
 
 ```bash
-python test_agent.py   # 38/38 smoke-тестов
+python test_agent.py   # 39/39 smoke-тестов
 ```
 
 Интеграционные тесты с мок-моделью (agent loop + tool calls + live events), SQLite-сессии (CRUD + миграция из JSON), patch line-aware (мульти-хунки, mismatch → None), bash-фильтр (вложенные `bash -c` / `cmd /c`), thread-safety todo, RAG инкрементальный кеш, аудит, терминал, deps, anti-loop (question останавливает итерацию, повтор вызова блокируется).
@@ -200,7 +200,8 @@ Local AI coding agent powered by Ollama. Free, private, offline alternative to C
 
 ### Security
 - ✅ **Directory traversal protection** — read/write/edit outside WORK_DIR blocked
-- ✅ **Bash sandbox** — blacklist of dangerous commands (rm -rf, mkfs, dd, curl | sh, etc.) with whitespace/quote normalization and recursive check of nested interpreters (`bash -c`, `cmd /c`, `powershell -c`)
+- ✅ **Bash sandbox** — whitelist разрешённых команд + blacklist опасных паттернов (rm -rf, mkfs, dd, curl | sh), нормализация пробелов/кавычек, рекурсивная проверка вложенных интерпретаторов (`bash -c`, `cmd /c`, `powershell -c`, `python -c`, `node -e`), запрет `..`-обхода для деструктивных команд
+- ✅ **Graceful cancellation** — POST /api/chat/cancel: агентный цикл останавливается между итерациями, клиент получает `[cancelled]`
 - ✅ **Exponential backoff retry** on Ollama failure (3 attempts)
 
 ### Performance
@@ -236,7 +237,7 @@ Local AI coding agent powered by Ollama. Free, private, offline alternative to C
 ### Tests
 
 ```bash
-python test_agent.py   # 38/38 smoke tests
+python test_agent.py   # 39/39 smoke tests
 ```
 
 Integration tests with mock model (agent loop + tool calls + live SSE events), SQLite sessions (CRUD + JSON migration), line-aware patch (multi-hunk, mismatch → None), bash filter (nested `bash -c` / `cmd /c`), todo thread-safety, incremental RAG cache, audit, terminal, deps.

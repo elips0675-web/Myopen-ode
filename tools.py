@@ -469,18 +469,62 @@ BASH_BLACKLIST = [
     "sudo ", "su ", "passwd", "del /f /s", "rmdir /s", "rd /s", "del /q /s",
     "shutdown", "taskkill /f", "net user",
 ]
+# Whitelist of allowed bare commands (first token). Everything else is rejected
+# unless it is a path to an existing file inside WORK_DIR (e.g. .\build.py).
+BASH_ALLOWED = {
+    "python", "python3", "py", "pythonw", "pip", "pip3", "pipenv", "poetry", "uv", "uvx",
+    "npm", "npx", "node", "yarn", "pnpm",
+    "git", "gh",
+    "cd", "pwd", "echo", "type", "cat", "dir", "ls", "where", "findstr", "find", "cls", "clear",
+    "mkdir", "rmdir", "del", "copy", "xcopy", "move", "ren", "cp", "mv", "rm",
+    "date", "time", "tasklist", "tree", "fc", "comp",
+}
+# Destructive commands whose args must not contain ".." (path escape / obfuscation)
+BASH_NO_DOTDOT = {"rm", "del", "rd", "rmdir", "move", "mv", "copy", "xcopy", "cp", "ren"}
+
+def _segment_token(segment):
+    seg = segment.strip().strip('"').strip("'")
+    if not seg:
+        return None, ""
+    tok = seg.split()[0].strip('"').strip("'")
+    base = tok.split("\\")[-1].replace(".exe", "").replace(".bat", "").replace(".cmd", "")
+    return tok, base.lower()
+
 def check_bash(cmd):
-    """Block dangerous shell commands. Normalizes whitespace/quotes and
-    recursively checks nested interpreters (bash -c, cmd /c, powershell -c)."""
+    """Block dangerous shell commands. Whitelist for bare commands + blacklist
+    patterns + recursive check of nested interpreters (bash -c, cmd /c,
+    powershell -c, python -c, node -e)."""
     norm = " ".join(cmd.lower().split())
     stripped = norm.replace('"', "").replace("'", "").replace("`", "").replace("\\", "")
     checks = [norm, stripped]
+    # recursive interpreter bodies: bash/sh/cmd/powershell AND python/node inline scripts
     for m in re.finditer(r"(?:bash|sh|cmd|powershell|pwsh)\s+(?:-c|-command)\s+[\"']?([^\"']+)", norm):
+        checks.append(" ".join(m.group(1).split()))
+    for m in re.finditer(r"(?:python|py|node)\s+(?:-c|-e|-m)\s+[\"']?([^\"']+)", norm):
         checks.append(" ".join(m.group(1).split()))
     for c in checks:
         for dangerous in BASH_BLACKLIST:
             if dangerous in c:
                 return f"Blocked: command matching blacklist pattern '{dangerous}' is not allowed"
+    # whitelist: every pipeline/; /&& segment must start with an allowed command
+    for segment in re.split(r"[\|;&]|(?:^| )(?:and|or) ", norm):
+        tok, base = _segment_token(segment)
+        if not tok:
+            continue
+        if base in BASH_ALLOWED:
+            continue
+        # allow project-local scripts: .\x.py, ./x.py, or relative paths that exist in WORK_DIR
+        p = Path(tok.replace("/", os.sep))
+        if not os.path.isabs(str(p)) and not tok.startswith(".."):
+            pp = (WORK_DIR / p).resolve()
+            if WORK_DIR.resolve() in pp.parents and pp.exists():
+                continue
+        return f"Blocked: '{tok}' is not in the command whitelist"
+    # destructive commands must not reference parent dirs (rm -rf /tmp/.. bypass)
+    for seg in re.split(r"[\|;&]", norm):
+        tok, base = _segment_token(seg)
+        if base in BASH_NO_DOTDOT and re.search(r"\.\.[\\/]| \.\.$", seg):
+            return f"Blocked: '{base}' with '..' path escape is not allowed"
     return None
 
 # ─── unified diff parser ──────────────────────────────────

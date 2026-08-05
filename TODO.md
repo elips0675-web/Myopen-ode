@@ -25,7 +25,7 @@
 - [x] WebSearch (DuckDuckGo)
 - [x] Async rewrite (все blocking-вызовы через asyncio.to_thread)
 - [x] CI/CD
-- [x] 38 smoke-тестов (включая интеграционные с мок-моделью, SQLite-сессии, patch line-aware, bash-фильтр, thread-safety, anti-loop)
+- [x] 39 smoke-тестов (включая интеграционные с мок-моделью, SQLite-сессии, patch line-aware, bash-фильтр, thread-safety, anti-loop)
 - [x] Mobile-responsive sidebar
 - [x] Desktop App (pywebview)
 - [x] Плагины (.agent_plugins/)
@@ -87,6 +87,7 @@
 - [x] `test_repeated_tool_blocked`: одинаковый вызов дважды → блокировка (сделан)
 - [x] `test_missing_tool_key_stops_loop`: битые блоки дважды → блокировка (сделан)
 - [x] `test_timeout_env`: AGENT_TIMEOUT ограничивает цикл (сделан)
+- [x] `test_cancel_flag`: флаг отмены останавливает цикл между итерациями (сделан)
 - [x] Live-проверка полного цикла: задача → write (CONFIRM) → "yes" → файл создан → verify (пройдена)
 - [x] Live-проверка «Кто ты?»: 1 вопрос, цикл не зацикливается (пройдена)
 
@@ -101,11 +102,11 @@
 - [ ] stream=True в call_ollama — парсинг tool blocks «на лету» (сейчас агент ждёт полный ответ модели, десятки секунд тишины в UI)
 - [ ] RAG-индексация в фоновом потоке (сейчас запрос к /api/embed блокирует поток запроса)
 - [x] Pydantic-модели для аргументов каждого инструмента — сделано расширение validate_tool: типы (str/int), диапазоны (top_k 1-50, max_results 1-20), enum-ы (task.agent, todo.action, lsp.operation, mcp.server/_list)
-- [ ] Bash whitelist или shlex.split + валидация аргументов (чёрный список обходится: `rm -rf /tmp/..`, обфускация)
+- [x] Bash whitelist вместо чёрного списка — сделано: whitelist команд (BASH_ALLOWED), рекурсивная проверка вложенных интерпретаторов (добавлены python -c/-m, node -e), запрет `..`-обхода для деструктивных команд (rm/del/cp/mv), разрешены только локальные скрипты проекта (test_bash_filter)
 - [x] ensure_safe_path: проверка симлинков до resolve() — уже заблокировано: resolve() раскрывает симлинк, итог проверяется в пределах WORK_DIR (test_symlink_safe_path)
 
 ### P2 (улучшение)
-- [ ] Graceful cancellation: проверка флага отмены внутри agent loop (сейчас abort ловит только следующий fetch)
+- [x] Graceful cancellation: флаг отмены по session_id (`_cancel_set/_cancel_clear/_cancel_pending`), проверка между итерациями цикла, POST /api/chat/cancel — клиент получает `[cancelled]` (test_cancel_flag)
 - [ ] CodeMirror 6 / Monaco (если готов пожертвовать zero-dep)
 - [ ] AST-based multi-file edit (parso для Python, tree-sitter для остального)
 - [ ] xterm.js терминал (сейчас свой SSE-терминал — работает, но xterm.js даст полный эмулятор)
