@@ -41,7 +41,7 @@ def init_config(**kw):
     bash_timeout = os.environ.get("AGENT_TIMEOUT", "")
     if bash_timeout:
         try: globals()["BASH_TIMEOUT"] = int(float(bash_timeout))
-        except: pass
+        except ValueError: pass
 
 # ─── path resolver with security ──────────────────────────
 def resolve(path):
@@ -146,7 +146,8 @@ def git(*args):
     try:
         r = subprocess.run(["git"] + list(args), cwd=str(WORK_DIR), capture_output=True, text=True, timeout=10)
         return r.stdout.strip() or r.stderr.strip()
-    except: return "(git not available)"
+    except (OSError, subprocess.SubprocessError, ValueError):
+        return "(git not available)"
 
 # ─── tool schemas ─────────────────────────────────────────
 TOOL_SCHEMAS = {
@@ -528,9 +529,9 @@ def extract_pending_tool(msgs):
         for match in tp.finditer(c):
             raw = match.group(1).strip()
             try: j = json.loads(raw)
-            except:
+            except json.JSONDecodeError:
                 try: j = json.loads(raw.replace("'", '"'))
-                except: continue
+                except json.JSONDecodeError: continue
             n = j.get("tool", "")
             if n in bad:
                 tc = dict(j); tc.pop("tool", None); return n, tc
@@ -540,7 +541,7 @@ def extract_pending_tool(msgs):
                 n = j.get("tool", "")
                 if n in bad:
                     tc = dict(j); tc.pop("tool", None); return n, tc
-            except: pass
+            except json.JSONDecodeError: pass
     return None, None
 
 # ─── bash sandbox ─────────────────────────────────────────

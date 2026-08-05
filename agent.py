@@ -125,7 +125,7 @@ def _db_ok():
         with _db() as conn:
             conn.execute("SELECT 1 FROM sessions LIMIT 1")
         return True
-    except Exception:
+    except sqlite3.Error:
         return False
 
 def save_session(sid, title, messages, updated=None):
@@ -137,12 +137,12 @@ def save_session(sid, title, messages, updated=None):
                 "ON CONFLICT(id) DO UPDATE SET title=excluded.title, messages=excluded.messages, updated=excluded.updated",
                 (sid, title, json.dumps(messages, ensure_ascii=False), updated, updated))
         return True
-    except Exception:
+    except (sqlite3.Error, OSError):
         try:
             (SESSIONS_DIR / f"{sid}.json").write_text(
                 json.dumps({"title": title, "messages": messages, "updated": updated}, ensure_ascii=False), "utf-8")
             return True
-        except Exception:
+        except OSError:
             return False
 
 def load_session(sid):
@@ -151,18 +151,21 @@ def load_session(sid):
             row = conn.execute("SELECT title, messages, updated FROM sessions WHERE id=?", (sid,)).fetchone()
         if row:
             return {"id": sid, "title": row[0], "messages": json.loads(row[1]), "updated": row[2]}
-    except Exception:
+    except (sqlite3.Error, json.JSONDecodeError):
         pass
     f = SESSIONS_DIR / f"{sid}.json"
     if f.exists():
-        return {"id": sid, **json.loads(f.read_text())}
+        try:
+            return {"id": sid, **json.loads(f.read_text())}
+        except json.JSONDecodeError:
+            return None
     return None
 
 def delete_session_db(sid):
     try:
         with _db() as conn:
             conn.execute("DELETE FROM sessions WHERE id=?", (sid,))
-    except Exception:
+    except sqlite3.Error:
         pass
     f = SESSIONS_DIR / f"{sid}.json"
     if f.exists(): f.unlink()
@@ -173,7 +176,7 @@ def list_sessions_db():
         with _db() as conn:
             rows = conn.execute("SELECT id, title, updated FROM sessions ORDER BY updated DESC").fetchall()
         sessions = [{"id": r[0], "title": r[1], "updated": r[2], "messages": []} for r in rows]
-    except Exception:
+    except sqlite3.Error:
         pass
     json_ids = {s["id"] for s in sessions}
     for f in sorted(SESSIONS_DIR.glob("*.json"), key=lambda x: x.stat().st_mtime, reverse=True):
@@ -182,7 +185,7 @@ def list_sessions_db():
             data = json.loads(f.read_text())
             sessions.append({"id": f.stem, "title": data.get("title", f.stem),
                 "updated": data.get("updated", ""), "messages": data.get("messages", [])})
-        except Exception as e:
+        except (json.JSONDecodeError, OSError) as e:
             log.warning("Bad session file %s: %s", f.name, e)
     sessions.sort(key=lambda s: s.get("updated", ""), reverse=True)
     return sessions
@@ -194,7 +197,7 @@ def migrate_json_sessions():
     try:
         with _db() as conn:
             existing = {r[0] for r in conn.execute("SELECT id FROM sessions").fetchall()}
-    except Exception:
+    except sqlite3.Error:
         return 0
     for f in sorted(SESSIONS_DIR.glob("*.json")):
         if f.stem in existing: continue
@@ -204,7 +207,7 @@ def migrate_json_sessions():
             updated = data.get("updated", datetime.now().isoformat())
             if save_session(f.stem, data.get("title", f.stem), messages, updated):
                 count += 1
-        except Exception:
+        except (json.JSONDecodeError, OSError):
             continue
     return count
 
@@ -392,9 +395,9 @@ def run_agent_loop(msgs, session_id, events=None, model=None):
         for m in tool_pat.finditer(content):
             raw = m.group(1).strip()
             try: j = json.loads(raw); tool_blocks.append((m, raw, j))
-            except:
+            except json.JSONDecodeError:
                 try: j = json.loads(raw.replace("'", '"')); tool_blocks.append((m, raw, j))
-                except:
+                except json.JSONDecodeError:
                     log.debug("Failed to parse tool block: %.60s", raw)
 
         if not tool_blocks:
