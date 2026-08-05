@@ -25,7 +25,7 @@
 - [x] WebSearch (DuckDuckGo)
 - [x] Async rewrite (все blocking-вызовы через asyncio.to_thread)
 - [x] CI/CD
-- [x] 51 smoke-тест (включая интеграционные с мок-моделью, SQLite-сессии, patch line-aware, bash-фильтр, thread-safety, anti-loop, RAG-чанкинг, поиск по сессиям, гарды против тул-спама, tool-error nudge, invented-пути, live-сценарии)
+- [x] 52 smoke-теста (включая интеграционные с мок-моделью, SQLite-сессии, patch line-aware, bash-фильтр, thread-safety, anti-loop, RAG-чанкинг, поиск по сессиям, гарды против тул-спама, tool-error nudge, invented-пути, FAISS fast path, live-сценарии)
 - [x] Mobile-responsive sidebar
 - [x] Desktop App (pywebview)
 - [x] Плагины (.agent_plugins/)
@@ -127,6 +127,11 @@
 
 ### P2 (улучшение)
 - [x] Graceful cancellation: флаг отмены по session_id (`_cancel_set/_cancel_clear/_cancel_pending`), проверка между итерациями цикла, POST /api/chat/cancel — клиент получает `[cancelled]` (test_cancel_flag)
+- [x] Конкретные типы исключений вместо широких except Exception — сделано: json.JSONDecodeError / sqlite3.Error / OSError / ValueError / subprocess-ошибки в критичных местах (парсинг тул-блоков, сессии, git, confirm-сканер) + тайп-хинты в 6 ключевых сигнатурах (execute_tool, call_ollama, stream_ollama, run_agent_loop, rag_search, validate_tool); остальные ~70 мест — намеренно оставлены как фоллбэки с log (тотальная замена рискованна)
+- [x] Вынести JS из ui.py в отдельный файл — сделано: static/app.js (30KB), GET /static/app.js (FileResponse), ui.py тоньше на 30KB
+- [ ] Разбить длинные функции в agent.py/tools.py, добавить docstring (частично: тайп-хинты сделаны, монолиты run_agent_loop/_execute_tool_inner остались)
+- [x] LSP: поддержка большего числа языков (Rust, C++) — сделано: добавлены clangd (.c/.h/.cpp/.cc/.cxx/.hpp), bash-language-server (.sh), vscode-css/html-language-server (.css/.scss/.html) + KEYWORDS для всех новых; исправлена опечатка CREATE_NO_WINDOW (окно cmd при старте серверов)
+- [ ] Docker-изоляция bash (строгая песочница)
 - [ ] CodeMirror 6 / Monaco (если готов пожертвовать zero-dep)
 - [ ] AST-based multi-file edit (parso для Python, tree-sitter для остального)
 - [ ] xterm.js терминал (сейчас свой SSE-терминал — работает, но xterm.js даст полный эмулятор)
@@ -138,9 +143,9 @@
 - [x] Чанкинг RAG: по размеру (~500 симв.) с перекрытием вместо только def/class-границ — сделано: _split_chunk (500 симв., overlap 80) + def/class-границы (rag.py)
 
 ### P2 (улучшение)
-- [ ] Конкретные типы исключений вместо широких except Exception + лучше логирование
-- [ ] Разбить длинные функции в agent.py/tools.py, добавить docstring и тайп-хинты
-- [ ] Вынести JS из ui.py в отдельный модуль/файл
+- [ ] Конкретные типы исключений вместо широких except Exception + лучше логирование — ЧАСТИЧНО: сделано, см. выше
+- [ ] Разбить длинные функции в agent.py/tools.py, добавить docstring и тайп-хинты — ЧАСТИЧНО: тайп-хинты в ключевых сигнатурах сделаны
+- [ ] Вынести JS из ui.py в отдельный модуль/файл — СДЕЛАНО, см. выше
 - [x] LSP: поддержка большего числа языков (Rust, C++) — сделано: добавлены clangd (.c/.h/.cpp/.cc/.cxx/.hpp), bash-language-server (.sh), vscode-css/html-language-server (.css/.scss/.html) + KEYWORDS для всех новых; исправлена опечатка CREATE_NO_WINDOW (окно cmd при старте серверов)
 - [ ] Docker-изоляция bash (строгая песочница)
 

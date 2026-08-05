@@ -160,6 +160,11 @@ Remaining (see TODO.md, priorities from evaluations): Kimi P1 — stream=True to
 RAG indexing in background thread, pydantic arg validation, bash whitelist/shlex, symlink-safe paths;
 DeepSeek P1 — FAISS/optimize RAG, size-based chunking. Own ideas: native tool calling (needs Ollama),
 Docker bash isolation, Tauri desktop, deepseek-coder-v2:16b pull.
+ALL P1s ARE DONE (2026-08-05): stream=True (live streaming), RAG background index, pydantic-style
+validation, bash whitelist, symlink safety, FAISS/numpy fast search, size-based chunking.
+Open: P2 only — split long functions, CodeMirror 6/Monaco, AST multi-file edit, xterm.js,
+Docker bash isolation, native tool calling (needs Ollama support), Tauri desktop,
+deepseek-coder-v2:16b pull (12GB VRAM coding), more LSP/refactor polish.
 CRITICAL OPEN BUG (2026-07-31, live check): confirm flow broken — user "yes" after [CONFIRM] does NOT
 re-execute the tool (extract_pending_tool can't find the block in msgs), so agent can't write files
 interactively. Fixed same day: model selection now honored (req.model), planner-iteration retries with
@@ -196,6 +201,24 @@ inspection of python -c/-m and node -e bodies + ".." path-escape ban for destruc
 (rm/del/cp/mv/...). (2) Graceful cancellation: per-session cancel flag checked between agent iterations,
 POST /api/chat/cancel → loop stops and client gets "[cancelled]" (UI Cancel button now actually stops
 the agent, not just the fetch). Tests: 52/52 (test_cancel_flag; test_bash_filter extended).
+UPDATE (2026-08-05 final): agent-hardening + performance session (commits 2480a59..c2aea27):
+(1) outside-workspace error now hints relative paths + list/glob + "no tutorials";
+invented-absurd paths blocked in ensure_safe_path (/path/to, /tmp, /var, /usr, /home, /etc,
+C:\Windows, C:\Program); prompt rule 16 "never invent paths".
+(2) tool-error nudge: after a tool error + prose reply, a system reminder forces the model
+back to a corrected ```tool block (max 2 nudges, err_markers: Error:/not found/invalid/
+looks invented/outside workspace/missing).
+(3) LIVE STREAMING: stream_ollama() (tools.py) streams model output; run_agent_loop emits
+{type:"text"} events; /api/chat forwards them to the UI immediately (first text in ~2.6s
+instead of silence until the full 9s+ generation; final full-dump skipped if streamed live).
+(4) RAG OPTIMIZED: FAISS IndexFlatIP if faiss-cpu present, else numpy matmul, else pure
+python; hard memory cap RAG_MAX_CHUNKS=6000 (env); installed numpy 2.5.1 + faiss-cpu 1.15.0.
+(5) ERROR HANDLING: json.JSONDecodeError/sqlite3.Error/OSError/ValueError replace bare
+excepts in tool-block parsing, session storage, git, confirm scanner; type hints on core
+signatures. (6) JS EXTRACTED from ui.py → static/app.js served at GET /static/app.js.
+(7) LSP: added clangd (.c/.h/.cpp/.cc/.cxx/.hpp), bash-language-server, css/scss/html
+servers + keywords; fixed CREATE_NO_WINDOW typo (cmd window popup on server start).
+Tests: 52/52. All Kimi P1 + DeepSeek P1 are DONE.
 
 COMPARISON
 ----------
