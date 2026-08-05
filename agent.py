@@ -17,7 +17,7 @@ log.setLevel(logging.DEBUG if os.environ.get("DEBUG") else logging.INFO)
 
 # ─── config ───────────────────────────────────────────────
 OLLAMA_URL = os.environ.get("OLLAMA_URL", "http://localhost:11434")
-MODEL = os.environ.get("AI_MODEL", "deepseek-r1:7b")
+MODEL = os.environ.get("AI_MODEL", "qwen2.5-coder:7b")
 PLANNER_MODEL = os.environ.get("PLANNER_MODEL", "deepseek-r1:1.5b")
 WORK_DIR = Path(os.environ.get("WORK_DIR") or Path(__file__).resolve().parent)
 NO_CONFIRM = os.environ.get("NO_CONFIRM", "0") == "1"
@@ -498,9 +498,11 @@ def run_agent_loop(msgs, session_id, events=None, model=None):
                 steps = tc.get("steps", [])
                 if isinstance(steps, str):
                     steps = [s.strip() for s in re.split(r'[.,;\n]+', steps) if s.strip()]
-                steps = [s for s in steps if len(str(s).strip()) > 2]
+                steps = [s for s in steps if len(str(s).strip()) > 2
+                         and not re.fullmatch(r"step\s*\d+", str(s).strip(), re.IGNORECASE)
+                         and not re.fullmatch(r"шаг\s*\d+", str(s).strip(), re.IGNORECASE)]
                 if not steps:
-                    all_results.append("[tool:plan] plan is empty (no real steps) — answer directly, do NOT call plan for questions or chat.")
+                    all_results.append("[tool:plan] plan is empty or trivial (no real steps) — answer directly, do NOT call plan for questions or chat.")
                     calls_made.append(name)
                     continue
                 plan_text = "\n".join(f"  {i+1}. {s}" for i,s in enumerate(steps))
@@ -879,6 +881,13 @@ async def chat(req: ChatReq):
                 yield f"data: {json.dumps({'tool': ev})}\n\n"
             except asyncio.TimeoutError:
                 if task.done():
+                    # loop ended: drain remaining events with a small grace
+                    # period so events emitted right before completion arrive
+                    for _ in range(20):
+                        if not q.empty():
+                            yield f"data: {json.dumps({'tool': q.get_nowait()})}\n\n"
+                        else:
+                            await asyncio.sleep(0.1)
                     while not q.empty():
                         yield f"data: {json.dumps({'tool': q.get_nowait()})}\n\n"
                     break

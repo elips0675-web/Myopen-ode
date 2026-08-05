@@ -25,7 +25,7 @@
 - [x] WebSearch (DuckDuckGo)
 - [x] Async rewrite (все blocking-вызовы через asyncio.to_thread)
 - [x] CI/CD
-- [x] 45 smoke-тестов (включая интеграционные с мок-моделью, SQLite-сессии, patch line-aware, bash-фильтр, thread-safety, anti-loop, RAG-чанкинг, поиск по сессиям, гарды против тул-спама)
+- [x] 49 smoke-тестов (включая интеграционные с мок-моделью, SQLite-сессии, patch line-aware, bash-фильтр, thread-safety, anti-loop, RAG-чанкинг, поиск по сессиям, гарды против тул-спама, live-сценарии)
 - [x] Mobile-responsive sidebar
 - [x] Desktop App (pywebview)
 - [x] Плагины (.agent_plugins/)
@@ -93,6 +93,23 @@
 - [x] Live-проверка «Кто ты?»: 1 вопрос, цикл не зацикливается (пройдена)
 - [x] Live-проверка /api/sessions/search: сессия найдена со сниппетом (пройдена)
 - [x] Live-проверка «Кто ты?» после гардов: прямой ответ за 3.6s, без тул-спама и фейковых маркеров (пройдена)
+
+## Live-тесты агента-программиста на Ollama (2026-08-05)
+
+### Найдено и исправлено
+- [x] **RAG search падал всегда: `from .rag import rag_search` (относительный импорт в tools.py:746)** — «Error: attempted relative import with no known parent package» на КАЖДЫЙ вызов search. Исправлены ВСЕ 3 относительных импорта (rag, lsp, mcp_client) на абсолютные. Тест: test_rag_search_via_execute
+- [x] **Дефолтная модель deepseek-r1:7b не следует tool-формату** (выдумывала тулы «fix», не читала файлы, галлюцинировала пути) — дефолт AI_MODEL сменён на qwen2.5-coder:7b (стабильный tool-формат, проверено live: 1-й же тул-вызов с правильным путём)
+- [x] **read/edit «not found» без подсказки** — модель не знала похожие пути → добавлен `_similar_files` (read+edit): «Error: ... not found. Similar files in workspace: ...» (glob не заходит в dot-папки — переписано на rglob). Тест: test_read_notfound_similar_files
+- [x] **Модель edit'ит не прочитав файл** (галлюцинирует old-текст) — правило 15 промпта: read перед edit/write, old копировать ТОЧНО из read
+- [x] **Модель описывает bash в тексте вместо тула** — правило 14 усилено: bash ТОЛЬКО через ```tool bash блок
+- [x] **Потеря tool-событий в SSE при завершении** — drain после task.done() без grace-периода терял последние события → добавлен 2s grace-drain (agent.py /api/chat gen)
+- [x] **Unknown tool без списка** — «Unknown tool 'fix'. Available tools: ...» (tools.py validate_tool + _execute_tool_inner)
+- [x] **Тривиальные планы («step1/step2»)** — отклоняются как пустые (agent.py plan-ветка, regex step\s*\d+ / шаг\s*\d+). Тест: test_plan_trivial_steps_guard
+- [x] **qwen2.5-coder:7b** live: write→файл создан; edit→замена применена; read→правильный путь с 1-го вызова; тривиальный plan отклонён; «Кто ты?» — 3.6s без тул-спама
+
+### Пределы (поведение модели, не кода)
+- Полный цикл «исправь баг + прогони тесты» требует follow-up «yes» на CONFIRM (bash) — модель останавливается на подтверждении по дизайну
+- Модель иногда пишет JSON-тулы в тексте без ```tool блока — bare-парсер ловит часть, но не гарантированно
 
 ## По оценкам Kimi (7.8) — что осталось
 

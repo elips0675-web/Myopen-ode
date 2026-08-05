@@ -10,7 +10,7 @@ log = logging.getLogger('tools')
 
 # ─── config (set by agent.py) ───────────────────────────
 OLLAMA_URL = "http://localhost:11434"
-MODEL = "deepseek-r1:7b"
+MODEL = "qwen2.5-coder:7b"
 PLANNER_MODEL = "deepseek-r1:1.5b"
 WORK_DIR = Path(".")
 EMBED_MODEL = "nomic-embed-text"
@@ -56,6 +56,30 @@ def ensure_safe_path(path):
     if wk not in p.parents and p != wk:
         return f"Error: path '{path}' is outside workspace '{WORK_DIR}'"
     return None
+
+def _similar_files(path, limit=5):
+    """Suggest nearby files when a path was not found — helps the model fix paths."""
+    try:
+        name = Path(path).name.lower()
+        candidates = []
+        exts = (".py", ".js", ".ts", ".json", ".md", ".html", ".css", ".txt", ".yaml", ".yml")
+        for p in list(WORK_DIR.rglob("*"))[:4000]:
+            if not p.is_file() or not p.suffix.lower() in exts:
+                continue
+            if any(x in p.parts for x in (".git", "__pycache__", ".agent_sessions",
+                                          ".rag_cache", ".agent_backups", ".agent_memory", "node_modules")):
+                continue
+            fn = p.name.lower()
+            if fn == name or fn.startswith(name[:6]) or name.startswith(fn[:6]):
+                try:
+                    candidates.append(str(p.relative_to(WORK_DIR)))
+                except Exception:
+                    pass
+        if candidates:
+            return f". Similar files in workspace: {', '.join(sorted(set(candidates))[:limit])}"
+    except Exception:
+        pass
+    return ""
 
 # ─── file versioning ──────────────────────────────────────
 BACKUP_DIR = None
@@ -147,7 +171,8 @@ TOOL_SCHEMAS = {
 def validate_tool(tc):
     name = tc.get("tool", "")
     schema = TOOL_SCHEMAS.get(name)
-    if schema is None: return f"Unknown tool '{name}'"
+    if schema is None:
+        return f"Unknown tool '{name}'. Available tools: {', '.join(sorted(TOOL_SCHEMAS))}"
     missing = [k for k in schema.get("required", []) if k not in tc]
     if missing: return f"Missing required fields: {', '.join(missing)} in {name}"
     def need_str(key, label):
@@ -204,6 +229,8 @@ RULES:
 11. Simple questions ("who are you", "what can you do", greetings, thanks, small talk) — answer DIRECTLY with ONE short sentence, NEVER call any tool, NEVER use code blocks. Never call `skill` with an invented name; if a tool result says "not found" — do NOT call that tool again. Never copy tool results or history into your text reply.
 12. NEVER write the markers [PLAN], [CONFIRM], [tool:...] or "Reply 'yes'" inside your text — those are system markers, you must not produce them.
 13. Call `plan` ONLY for real multi-step coding tasks. Never call plan for questions or chat.
+14. After every write/edit: run a check with the `bash` TOOL (e.g. `python -m py_compile <file>` or run the tests) and report the result. NEVER describe a bash command inside your text — if you want to run something, you MUST emit a ```tool bash block. Never echo empty code blocks; reply with the actual result.
+15. ALWAYS read a file with the `read` tool BEFORE calling `edit` or `write` on it (except brand-new files). The `old` text of an edit must be copied EXACTLY from the read output.
 
 TOOLS (required fields in bold):
 ```tool
@@ -638,7 +665,8 @@ def _execute_tool_inner(name, args):
             err = ensure_safe_path(p)
             if err: return err
             pp = resolve(p)
-            if not pp.exists(): return f"Error: {p} not found"
+            if not pp.exists():
+                return f"Error: {p} not found" + _similar_files(p)
             if pp.is_dir(): return f"'{p}' is a directory. Use list tool to see contents."
             return pp.read_text("utf-8")
         elif name == "web":
@@ -663,7 +691,7 @@ def _execute_tool_inner(name, args):
             err = ensure_safe_path(args["path"])
             if err: return err
             p = resolve(args["path"])
-            if not p.exists(): return f"Error: {p} not found"
+            if not p.exists(): return f"Error: {p} not found" + _similar_files(args["path"])
             old = args.get("old", ""); new = args.get("new", "")
             content = p.read_text("utf-8")
             if old not in content:
@@ -743,8 +771,8 @@ def _execute_tool_inner(name, args):
                 if err: return err
             return verify_file(path) if path else "No path specified"
         elif name == "search":
-            from .rag import rag_search
-            return rag_search(args.get("query", ""), args.get("top_k", 5))
+            import rag as _rag
+            return _rag.rag_search(args.get("query", ""), args.get("top_k", 5))
         elif name == "websearch":
             query = args.get("query", "")
             max_results = int(args.get("max_results", 5))
@@ -831,7 +859,8 @@ def _execute_tool_inner(name, args):
             try:
                 from lsp import LSPClient
             except ImportError:
-                from .lsp import LSPClient
+                import lsp
+                LSPClient = lsp.LSPClient
             op = args.get("operation", "")
             path = args.get("path", "")
             line = int(args.get("line", 0))
@@ -948,7 +977,8 @@ def _execute_tool_inner(name, args):
             try:
                 from mcp_client import mcp_call, mcp_tools_list
             except ImportError:
-                from .mcp_client import mcp_call, mcp_tools_list
+                import mcp_client
+                mcp_call, mcp_tools_list = mcp_client.mcp_call, mcp_client.mcp_tools_list
             server = args.get("server", "")
             if server == "_list":
                 pairs = mcp_tools_list()
@@ -959,6 +989,6 @@ def _execute_tool_inner(name, args):
         else:
             result = call_plugin(name, args)
             if result is not None: return result
-            return f"Unknown tool: {name}"
+            return f"Unknown tool: {name}. Available tools: {', '.join(sorted(TOOL_SCHEMAS))}"
     except Exception as e:
         return f"Error: {e}"

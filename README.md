@@ -69,7 +69,7 @@
 ## Тесты
 
 ```bash
-python test_agent.py   # 45/45 smoke-тестов
+python test_agent.py   # 49/49 smoke-тестов
 ```
 
 Интеграционные тесты с мок-моделью (agent loop + tool calls + live events), SQLite-сессии (CRUD + миграция из JSON), patch line-aware (мульти-хунки, mismatch → None), bash-фильтр (вложенные `bash -c` / `cmd /c`), thread-safety todo, RAG инкрементальный кеш, аудит, терминал, deps, anti-loop (question останавливает итерацию, повтор вызова блокируется).
@@ -86,7 +86,7 @@ python agent.py
 
 | Переменная | По умолчанию | Описание |
 |---|---|---|
-| `AI_MODEL` | `deepseek-r1:7b` | Основная модель |
+| `AI_MODEL` | `qwen2.5-coder:7b` | Основная модель |
 | `PLANNER_MODEL` | `deepseek-r1:1.5b` | Модель для планирования |
 | `EMBED_MODEL` | `nomic-embed-text` | Модель для RAG |
 | `WORK_DIR` | папка репозитория | Рабочая директория (проект) |
@@ -237,7 +237,7 @@ Local AI coding agent powered by Ollama. Free, private, offline alternative to C
 ### Tests
 
 ```bash
-python test_agent.py   # 45/45 smoke tests
+python test_agent.py   # 49/49 smoke tests
 ```
 
 Integration tests with mock model (agent loop + tool calls + live SSE events), SQLite sessions (CRUD + JSON migration), line-aware patch (multi-hunk, mismatch → None), bash filter (nested `bash -c` / `cmd /c`), todo thread-safety, incremental RAG cache, audit, terminal, deps.
@@ -254,7 +254,7 @@ python agent.py
 
 | Variable | Default | Description |
 |---|---|---|
-| `AI_MODEL` | `deepseek-r1:7b` | Main model |
+| `AI_MODEL` | `qwen2.5-coder:7b` | Main model |
 | `PLANNER_MODEL` | `deepseek-r1:1.5b` | Planning model |
 | `EMBED_MODEL` | `nomic-embed-text` | Embedding model for RAG |
 | `WORK_DIR` | repo folder | Workspace directory |

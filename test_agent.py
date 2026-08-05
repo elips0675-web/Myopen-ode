@@ -489,6 +489,64 @@ def test_short_question_skips_planner():
     assert long_model == agent_mod.PLANNER_MODEL, f"long task must use planner, got {long_model}"
     print("  [OK] agent loop: short question skips planner")
 
+def test_plan_trivial_steps_guard():
+    """Plan with only 'step1/step2' placeholders must be rejected as trivial."""
+    import agent as agent_mod
+    calls = {"n": 0}
+    def mock_ollama(msgs, model):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            return '```tool\n{"tool": "plan", "steps": ["step1", "step 2"]}\n```', 10
+        return "plain answer", 10
+    original = agent_mod.call_ollama
+    agent_mod.call_ollama = mock_ollama
+    try:
+        out = agent_mod.run_agent_loop(
+            [{"role": "user", "content": "who are you"}], None)
+    finally:
+        agent_mod.call_ollama = original
+    assert "trivial" in out, f"trivial plan not rejected: {out[:300]}"
+    assert "plain answer" in out
+    print("  [OK] agent loop: trivial plan guard")
+
+def test_unknown_tool_hint():
+    """Unknown tool must return the list of available tools."""
+    from tools import execute_tool
+    r = execute_tool("fix", {"file": "x.py"})
+    assert "Unknown tool" in r and "fix" in r, f"bad error: {r[:120]}"
+    assert "Available tools:" in r, f"no tool list in error: {r[:200]}"
+    assert "edit" in r and "write" in r
+    print("  [OK] tools: unknown tool hint with available list")
+
+def test_rag_search_via_execute():
+    """Bug: execute_tool('search') crashed with 'attempted relative import'.
+    Must work through the public API after init."""
+    import tools
+    import rag
+    rag.RAG_INDEX = None
+    rag.RAG_CHUNKS = []
+    rag.RAG_DIRTY = True
+    rag.RAG_CACHE_DIR = None
+    rag.init_rag(OLLAMA_URL="http://localhost:11434", WORK_DIR=WORK_DIR, EMBED_MODEL="nomic-embed-text")
+    r = tools.execute_tool("search", {"query": "how are sessions saved", "top_k": 2})
+    assert "Error: attempted relative" not in r, f"relative import bug back: {r[:200]}"
+    assert not r.startswith("Error"), f"search error: {r[:200]}"
+    assert "agent.py" in r or "sqlite" in r or "sessions" in r, f"unexpected result: {r[:200]}"
+    print("  [OK] tools: search via execute_tool (no relative import crash)")
+
+def test_read_notfound_similar_files():
+    """read of a missing path must suggest nearby files so the model can fix the path."""
+    from tools import execute_tool
+    f = WORK_DIR / ".test_tmp" / "similar_probe.py"
+    f.write_text("x = 1", "utf-8")
+    try:
+        r = execute_tool("read", {"path": ".test_tmp/similar_prob.py"})
+        assert "not found" in r, f"bad error: {r[:150]}"
+        assert "similar_probe.py" in r, f"no similar-file hint: {r[:250]}"
+    finally:
+        f.unlink(missing_ok=True)
+    print("  [OK] tools: read not-found suggests similar files")
+
 def test_repeated_tool_blocked():
     """Identical tool call repeated twice in a row must be blocked (anti-loop)."""
     import agent as agent_mod
@@ -766,7 +824,9 @@ if __name__ == "__main__":
              test_patch_line_aware, test_bash_filter, test_todo_thread_safety,
              test_rag_split_chunk, test_session_search,
              test_plan_empty_guard, test_skill_notfound_repeat_blocked,
-             test_model_marker_text_stripped, test_short_question_skips_planner]
+             test_model_marker_text_stripped, test_short_question_skips_planner,
+             test_plan_trivial_steps_guard, test_unknown_tool_hint,
+             test_rag_search_via_execute, test_read_notfound_similar_files]
     passed = 0
     for t in tests:
         try:

@@ -131,7 +131,7 @@ RUNNING
 -------
 python agent.py        ->  http://localhost:8765/
 python desktop.py      ->  native pywebview window
-python test_agent.py   ->  45/45 smoke tests pass
+python test_agent.py   ->  49/49 smoke tests pass
 python mcp_server.py   ->  MCP stdio server for IDEs
 pip install -r requirements.txt
 AI Desktop.bat         ->  desktop app launcher (python desktop.py)
@@ -195,7 +195,7 @@ whitelist (BASH_ALLOWED commands; project-local scripts allowed if they exist in
 inspection of python -c/-m and node -e bodies + ".." path-escape ban for destructive commands
 (rm/del/cp/mv/...). (2) Graceful cancellation: per-session cancel flag checked between agent iterations,
 POST /api/chat/cancel → loop stops and client gets "[cancelled]" (UI Cancel button now actually stops
-the agent, not just the fetch). Tests: 45/45 (test_cancel_flag; test_bash_filter extended).
+the agent, not just the fetch). Tests: 49/49 (test_cancel_flag; test_bash_filter extended).
 
 COMPARISON
 ----------
