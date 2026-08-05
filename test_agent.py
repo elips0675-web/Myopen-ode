@@ -52,7 +52,34 @@ def test_edit():
     assert test_file.read_text() == "new text", "edit content wrong"
     print("  [OK] edit")
 
+def test_system_prompt_rules():
+    """Regression guard: the system prompt must keep the hard-won rules —
+    anti-hallucination (16), one-tool-per-reply + [DONE] finish (17-18),
+    code-only-via-write (19) and the few-shot EXAMPLES section."""
+    from tools import SYSTEM_PROMPT
+    checks = [
+        ("rule16 never invent paths", "NEVER invent file paths"),
+        ("rule17 one tool per reply", "ONE tool block per reply"),
+        ("rule18 [DONE] finish", "[DONE]"),
+        ("rule19 no code in text", "code goes INTO files via `write`/`edit`"),
+        ("EXAMPLES section", "EXAMPLES — study these"),
+        ("example 1 header", "Example 1 (read, then answer)"),
+        ("example 2 header", "Example 2 (edit workflow)"),
+        ("tool block fence", "```tool"),
+        ("never invent tools", "NEVER invent tools"),
+        ("read before edit", "ALWAYS read a file with the `read` tool BEFORE calling `edit`"),
+        ("confirm repeat rule", "you MUST repeat the exact same ```tool block"),
+    ]
+    for label, needle in checks:
+        assert needle in SYSTEM_PROMPT, f"SYSTEM_PROMPT missing: {label} ({needle!r})"
+    print("  [OK] system prompt: rules 16-19 + EXAMPLES present")
+
 def test_bash():
+    r = execute_tool("bash", {"cmd": "echo hello"})
+    assert "hello" in r, "bash failed"
+    print("  [OK] bash")
+
+
     r = execute_tool("bash", {"cmd": "echo hello"})
     assert "hello" in r, "bash failed"
     print("  [OK] bash")
@@ -1033,7 +1060,8 @@ if __name__ == "__main__":
              test_agent_loop_error_nudge, test_ensure_safe_path_invented,
              test_rag_fast_search, test_code_detector_nudge,
              test_bash_docker_mode, test_bash_docker_fallback,
-             test_parse_tool_json_lenient, test_tool_stats]
+             test_parse_tool_json_lenient, test_tool_stats,
+             test_system_prompt_rules]
     passed = 0
     for t in tests:
         try:
