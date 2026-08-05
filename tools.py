@@ -51,6 +51,13 @@ def resolve(path):
 
 def ensure_safe_path(path):
     """Resolve path and verify it stays within WORK_DIR to prevent directory traversal."""
+    if not path or not isinstance(path, str):
+        return "Error: path must be a non-empty string"
+    if path.startswith(("/path/to", "/tmp", "/var", "/usr", "/home",
+                        "/etc", "/bin", "/dev", "C:\\Windows", "C:\\Program")):
+        return (f"Error: path '{path}' looks invented. Use RELATIVE paths or paths "
+                f"inside the workspace (use list/glob to see files). "
+                f"Do NOT give tutorials — retry with a correct path.")
     p = resolve(path).resolve()
     wk = WORK_DIR.resolve()
     if wk not in p.parents and p != wk:
@@ -233,6 +240,7 @@ RULES:
 13. Call `plan` ONLY for real multi-step coding tasks. Never call plan for questions or chat.
 14. After every write/edit: run a check with the `bash` TOOL (e.g. `python -m py_compile <file>` or run the tests) and report the result. NEVER describe a bash command inside your text — if you want to run something, you MUST emit a ```tool bash block. Never echo empty code blocks; reply with the actual result.
 15. ALWAYS read a file with the `read` tool BEFORE calling `edit` or `write` on it (except brand-new files). The `old` text of an edit must be copied EXACTLY from the read output.
+16. NEVER invent file paths. Only use paths returned by `list`/`glob`/`grep` or confirmed by the user. Paths are RELATIVE to the workspace.
 
 TOOLS (required fields in bold):
 ```tool

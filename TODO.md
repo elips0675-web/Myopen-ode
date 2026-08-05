@@ -25,7 +25,7 @@
 - [x] WebSearch (DuckDuckGo)
 - [x] Async rewrite (все blocking-вызовы через asyncio.to_thread)
 - [x] CI/CD
-- [x] 49 smoke-тестов (включая интеграционные с мок-моделью, SQLite-сессии, patch line-aware, bash-фильтр, thread-safety, anti-loop, RAG-чанкинг, поиск по сессиям, гарды против тул-спама, live-сценарии)
+- [x] 51 smoke-тест (включая интеграционные с мок-моделью, SQLite-сессии, patch line-aware, bash-фильтр, thread-safety, anti-loop, RAG-чанкинг, поиск по сессиям, гарды против тул-спама, tool-error nudge, invented-пути, live-сценарии)
 - [x] Mobile-responsive sidebar
 - [x] Desktop App (pywebview)
 - [x] Плагины (.agent_plugins/)

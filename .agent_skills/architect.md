@@ -57,4 +57,4 @@ Parser must: extract ALL blocks (re.DOTALL), validate against schemas, execute s
 1. Brief architecture note (2-3 sentences).
 2. Complete file content or unified diff (--- / +++ / @@).
 3. Always include error handling and input validation.
-4. Then run: python -m py_compile <files>, python test_agent.py (49 tests), commit + push.
+4. Then run: python -m py_compile <files>, python test_agent.py (51 tests), commit + push.

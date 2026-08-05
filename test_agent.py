@@ -681,6 +681,42 @@ def test_agent_loop_shell_alias():
     assert "alias_ok" in out, f"alias result missing: {out[:300]}"
     print("  [OK] agent loop: shell alias -> bash")
 
+def test_agent_loop_error_nudge():
+    """After a tool error the model got prose: a system nudge must force it back to tool format."""
+    import agent as agent_mod
+    calls = {"n": 0}
+    def mock_ollama(msgs, model):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            return ('```tool\n{"tool": "read", "path": "/path/to/agents.json"}\n```', 10)
+        if calls["n"] == 2:
+            assert any(m.get("role") == "system" and "corrected" in m.get("content", "")
+                       for m in msgs), "missing system nudge after tool error"
+            return "Let me give you a tutorial about JSON storage...", 10
+        if calls["n"] == 3:
+            return '```tool\n{"tool": "list", "path": "."}\n```', 10
+        return "The files are listed above.", 5
+    original = agent_mod.call_ollama
+    agent_mod.call_ollama = mock_ollama
+    try:
+        out = agent_mod.run_agent_loop(
+            [{"role": "user", "content": "read agents.json and list"}], None)
+    finally:
+        agent_mod.call_ollama = original
+    assert "The files are listed above." in out, f"final missing: {out[:300]}"
+    assert "tutorial" not in out.lower(), f"tutorial leaked into output: {out[:300]}"
+    print("  [OK] agent loop: tool-error nudge back to tool format")
+
+def test_ensure_safe_path_invented():
+    """Absurd/invented absolute paths are rejected with an explicit hint."""
+    from tools import execute_tool
+    for p in ("/path/to/agents.json", "/tmp/x.py", "/home/u/f.py",
+              "C:\\Windows\\System32\\drivers\\etc\\hosts"):
+        r = execute_tool("read", {"path": p})
+        assert "looks invented" in r, f"path {p} not blocked: {r[:150]}"
+        assert "list/glob" in r, f"hint missing for {p}: {r[:150]}"
+    print("  [OK] ensure_safe_path: invented paths blocked with hints")
+
 def test_sessions_sqlite():
     """CRUD on sessions via SQLite storage (with JSON fallback)."""
     from fastapi.testclient import TestClient

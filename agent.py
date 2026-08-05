@@ -324,6 +324,7 @@ def run_agent_loop(msgs, session_id, events=None, model=None):
     start_time = time.time()
     total_tokens = sum(len(m.get("content", "")) / 4 for m in msgs)
     format_retried = 0
+    err_hint_retried = 0
     last_call_key = None
     repeats = 0
     last_result_name = None
@@ -435,6 +436,19 @@ def run_agent_loop(msgs, session_id, events=None, model=None):
                 # planner model (1.5b) often ignores tool format — retry with main model
                 log.info("Planner iteration produced no tool blocks; retrying with %s", MODEL)
                 full += _strip_system_markers(content) + "\n"
+                continue
+            last_content = (msgs[-1].get("content", "") if msgs else "") or ""
+            err_markers = ("Error:", "not found", "not installed", "invalid",
+                           "looks invented", "outside workspace", "missing")
+            if (err_hint_retried < 2 and last_content.startswith("[tool:")
+                    and any(m in last_content[:300] for m in err_markers)):
+                # previous tool call failed but the model replied with prose —
+                # nudge it back into tool format instead of accepting the text
+                err_hint_retried += 1
+                msgs.append({"role": "system", "content":
+                             "The previous tool call failed. You MUST respond with a "
+                             "corrected ```tool JSON block. Do NOT write explanations or plans."})
+                log.info("Tool error, nudging model back to tool format (retry %d)", err_hint_retried)
                 continue
             if format_retried < 1 and len(content.strip()) > 20:
                 # main model ignored tool format (free-form answer) — one strict retry
