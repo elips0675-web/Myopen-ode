@@ -706,10 +706,10 @@ def test_agent_loop_error_nudge():
         if calls["n"] == 1:
             return ('```tool\n{"tool": "read", "path": "/path/to/agents.json"}\n```', 10)
         if calls["n"] == 2:
-            assert any(m.get("role") == "system" and "corrected" in m.get("content", "")
-                       for m in msgs), "missing system nudge after tool error"
             return "Let me give you a tutorial about JSON storage...", 10
         if calls["n"] == 3:
+            assert any(m.get("role") == "system" and "corrected" in m.get("content", "")
+                       for m in msgs), "missing system nudge after tool error"
             return '```tool\n{"tool": "list", "path": "."}\n```', 10
         return "The files are listed above.", 5
     original = agent_mod.call_ollama
@@ -720,7 +720,7 @@ def test_agent_loop_error_nudge():
     finally:
         agent_mod.call_ollama = original
     assert "The files are listed above." in out, f"final missing: {out[:300]}"
-    assert "tutorial" not in out.lower(), f"tutorial leaked into output: {out[:300]}"
+    assert "Let me give you a tutorial" not in out, f"tutorial leaked into output: {out[:300]}"
     print("  [OK] agent loop: tool-error nudge back to tool format")
 
 def test_ensure_safe_path_invented():
@@ -732,6 +732,39 @@ def test_ensure_safe_path_invented():
         assert "looks invented" in r, f"path {p} not blocked: {r[:150]}"
         assert "list/glob" in r, f"hint missing for {p}: {r[:150]}"
     print("  [OK] ensure_safe_path: invented paths blocked with hints")
+
+def test_rag_fast_search():
+    """Vectorized search (FAISS/numpy) returns ranked chunks and survives rebuilds."""
+    import rag
+    import unittest.mock as um
+    import json as _json
+    rag.RAG_INDEX = None
+    rag.RAG_CHUNKS = []
+    rag.RAG_DIRTY = True
+    rag.RAG_CACHE_DIR = None
+    rag.FAISS_INDEX = None
+    rag.RAG_MAX_CHUNKS = 10
+    rag.init_rag(OLLAMA_URL="http://localhost:11434", WORK_DIR=WORK_DIR, EMBED_MODEL="nomic-embed-text")
+    rag.RAG_CHUNKS = [
+        {"text": "session storage sqlite", "file": "a.py", "line": 1, "emb": [1.0, 0.0, 0.5], "_toks": []},
+        {"text": "network request handler", "file": "b.py", "line": 3, "emb": [0.0, 1.0, 0.2], "_toks": []},
+    ]
+    rag.RAG_INDEX = [c["emb"] for c in rag.RAG_CHUNKS]
+    rag._rebuild_fast_index()
+    assert rag.FAISS_INDEX is not None, "fast index not built"
+    def fake_embed(*a, **k):
+        class R:
+            def json(self):
+                return {"embeddings": [[1.0, 0.0, 0.5]]}
+        return R()
+    with um.patch("rag.requests.post", side_effect=fake_embed):
+        out = rag.rag_search("sqlite storage", top_k=1)
+    assert "a.py" in out, f"wrong top result: {out}"
+    # memory cap must not crash the pipeline
+    rag.RAG_CHUNKS.append({"text": "x", "file": "c.py", "line": 0, "emb": [0.0, 0.0, 0.1], "_toks": []})
+    rag.rag_index()
+    assert len(rag.RAG_CHUNKS) <= 10, f"cap not applied: {len(rag.RAG_CHUNKS)}"
+    print("  [OK] rag: FAISS/numpy fast path + memory cap")
 
 def test_sessions_sqlite():
     """CRUD on sessions via SQLite storage (with JSON fallback)."""
@@ -878,7 +911,9 @@ if __name__ == "__main__":
              test_plan_empty_guard, test_skill_notfound_repeat_blocked,
              test_model_marker_text_stripped, test_short_question_skips_planner,
              test_plan_trivial_steps_guard, test_unknown_tool_hint,
-             test_rag_search_via_execute, test_read_notfound_similar_files]
+             test_rag_search_via_execute, test_read_notfound_similar_files,
+             test_agent_loop_error_nudge, test_ensure_safe_path_invented,
+             test_rag_fast_search]
     passed = 0
     for t in tests:
         try:

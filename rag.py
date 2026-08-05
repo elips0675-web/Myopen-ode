@@ -4,6 +4,15 @@ import json, os, glob, logging, hashlib, math, re, threading
 from pathlib import Path
 import requests
 
+try:
+    import numpy as _np
+except ImportError:
+    _np = None
+try:
+    import faiss as _faiss
+except ImportError:
+    _faiss = None
+
 log = logging.getLogger('rag')
 
 OLLAMA_URL = "http://localhost:11434"
@@ -13,6 +22,8 @@ RAG_INDEX = None
 RAG_CHUNKS = []
 RAG_DIRTY = True
 RAG_CACHE_DIR = None
+FAISS_INDEX = None
+RAG_MAX_CHUNKS = int(os.environ.get("RAG_MAX_CHUNKS", "6000"))
 _FILE_STATS = {}   # rel path -> (mtime, size) from last index
 BM25_DF = {}       # term -> doc frequency
 BM25_N = 0         # doc count
@@ -145,9 +156,33 @@ def rag_index():
         if not RAG_CHUNKS: return
         if not changed and not removed and RAG_INDEX and not RAG_DIRTY:
             return  # nothing changed since last index
+        if RAG_MAX_CHUNKS and len(RAG_CHUNKS) > RAG_MAX_CHUNKS:
+            # hard memory cap: drop oldest chunks (newest files were appended last)
+            log.warning("RAG: memory cap %d, truncating %d chunks",
+                        RAG_MAX_CHUNKS, len(RAG_CHUNKS) - RAG_MAX_CHUNKS)
+            RAG_CHUNKS = RAG_CHUNKS[-RAG_MAX_CHUNKS:]
         _build_bm25()
         RAG_INDEX = [c["emb"] for c in RAG_CHUNKS]
+        _rebuild_fast_index()
         RAG_DIRTY = False
+
+def _rebuild_fast_index():
+    """Build a FAISS (or numpy) index for fast vector search; falls back to
+    pure-Python cosine in rag_search when neither is available."""
+    global FAISS_INDEX
+    FAISS_INDEX = None
+    if not RAG_INDEX or _np is None:
+        return
+    mat = _np.asarray(RAG_INDEX, dtype="float32")
+    if _faiss is not None:
+        try:
+            idx = _faiss.IndexFlatIP(mat.shape[1])
+            idx.add(mat)
+            FAISS_INDEX = idx
+            return
+        except Exception as e:
+            log.warning("FAISS build failed, numpy fallback: %s", e)
+    FAISS_INDEX = "numpy"  # marker: vectorized matmul search below
 
 def _split_chunk(text, size=500, overlap=80):
     """Split long chunks into ~size-char pieces with overlap so context at
@@ -251,7 +286,18 @@ def rag_search(query, top_k=5, hybrid=True):
             }, timeout=30)
             q_emb = r.json().get("embeddings", [[]])[0]
             if not q_emb: return "No embedding for query"
-            sem = [(_cos_sim(q_emb, emb), i) for i, emb in enumerate(RAG_INDEX)]
+            if FAISS_INDEX and _faiss is not None and FAISS_INDEX != "numpy":
+                D, I = FAISS_INDEX.search(_np.asarray([q_emb], dtype="float32"),
+                                          min(top_k, max(1, len(RAG_CHUNKS))))
+                sem = [(float(D[0][j]), int(I[0][j])) for j in range(len(D[0]))]
+            elif FAISS_INDEX == "numpy":
+                mat = _np.asarray(RAG_INDEX, dtype="float32")
+                q = _np.asarray(q_emb, dtype="float32")
+                dots = mat @ q
+                cos = dots / (_np.linalg.norm(mat, axis=1) * _np.linalg.norm(q) + 1e-10)
+                sem = [(float(cos[i]), i) for i in range(len(RAG_CHUNKS))]
+            else:
+                sem = [(_cos_sim(q_emb, emb), i) for i, emb in enumerate(RAG_INDEX)]
             if hybrid:
                 bm = [bm25_score(query, i) for i in range(len(RAG_CHUNKS))]
                 bmax = max(bm) if bm and max(bm) > 0 else 1.0
