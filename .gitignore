@@ -9,3 +9,7 @@ __pycache__/
 *.err
 AI Desktop.exe
 projects.json
+.test_tmp/
+.test_sess/
+.test_migr/
+.test_rag/
