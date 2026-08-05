@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """AI Coding Agent v2 — OpenCode Desktop alternative with DeepSeek support."""
 
-import json, os, glob, webbrowser, re, time, logging, asyncio, subprocess
+import json, os, glob, webbrowser, re, time, logging, asyncio, subprocess, threading
 from pathlib import Path
 from datetime import datetime
 import requests, uvicorn
@@ -29,6 +29,16 @@ FALLBACK_MODEL = os.environ.get("FALLBACK_MODEL", "")
 FLASH_PROVIDER = os.environ.get("FLASH_PROVIDER", "")
 FLASH_API_KEY = os.environ.get("FLASH_API_KEY", "")
 FLASH_MODEL = os.environ.get("FLASH_MODEL", "deepseek-v4-flash")
+
+# pending confirmations: session_id -> (tool_name, args) awaiting user "yes"
+_PENDING_CONFIRM = {}
+_PENDING_LOCK = threading.Lock()
+def _pending_set(session_id, name, tc):
+    with _PENDING_LOCK:
+        _PENDING_CONFIRM[session_id or ""] = (name, dict(tc))
+def _pending_get(session_id):
+    with _PENDING_LOCK:
+        return _PENDING_CONFIRM.pop(session_id or "", None)
 
 # ─── import tools & rag ───────────────────────────────────
 from tools import (init_config, execute_tool, validate_tool, call_ollama,
@@ -298,8 +308,22 @@ def run_agent_loop(msgs, session_id, events=None, model=None):
         if it > 0 and it % 3 == 0:
             msgs = summarize_context(msgs)
 
+        # pending confirmation: user said "yes" — execute the deferred tool without calling the model
+        pending = _pending_get(session_id)
+        if pending:
+            name, tc = pending
+            last = (msgs[-1]["content"].strip().lower() if msgs else "")[:5]
+            if last in ("yes","y","go a","да","ok","cont","proc","do i"):
+                r = execute_tool(name, tc)
+                _emit({"type": "tool", "name": name, "args": tc, "result": r[:200]})
+                full += f"\n[tool:{name}] {r[:2000]}\n"
+                msgs.append({"role":"assistant","content":f"(confirmed: {name})"})
+                msgs.append({"role":"user","content":r[:2000]})
+                continue
+            _pending_set(session_id, name, tc)  # not confirmed yet, keep waiting
+
         current_model = model or (PLANNER_MODEL if it == 0 else MODEL)
-        if it == 0 and PLANNER_MODEL not in _available_models:
+        if not model and it == 0 and PLANNER_MODEL not in _available_models:
             log.info("PLANNER_MODEL %s not installed, using %s", PLANNER_MODEL, MODEL)
             current_model = MODEL
         result = call_ollama(msgs, current_model)
@@ -421,6 +445,7 @@ def run_agent_loop(msgs, session_id, events=None, model=None):
                     hint = f"User must reply 'yes' to execute {name}."
                     msgs.append({"role":"system","content":hint})
                     msgs.append({"role":"user","content":ask})
+                    _pending_set(session_id, name, tc)
                     needs_break=True; break
                 continue
             r = execute_tool(name,tc)

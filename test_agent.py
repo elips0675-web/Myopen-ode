@@ -251,6 +251,62 @@ def test_agent_loop_planner_fallback():
     assert "list" in out, f"tool result missing: {out[:300]}"
     print("  [OK] agent loop: planner fallback to main model")
 
+def test_confirm_yes_autoexec():
+    """Bug: 'yes' after [CONFIRM] must re-execute the tool without a model call."""
+    import agent as agent_mod
+    calls = {"n": 0}
+    def mock_ollama(msgs, model):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            return '```tool\n{"tool": "write", "path": "confirm_demo.txt", "content": "hello"}\n```', 10
+        return "Done.", 5
+    original = agent_mod.call_ollama
+    old_confirm = agent_mod.NO_CONFIRM
+    agent_mod.call_ollama = mock_ollama
+    agent_mod.NO_CONFIRM = False
+    sid = "test-confirm"
+    agent_mod._PENDING_CONFIRM.clear()
+    try:
+        out1 = agent_mod.run_agent_loop(
+            [{"role": "user", "content": "write a file"}], sid)
+        assert "[CONFIRM]" in out1, f"expected CONFIRM prompt: {out1[:200]}"
+        assert not (WORK_DIR / "confirm_demo.txt").exists(), "file written before confirmation!"
+        assert calls["n"] == 1, f"model should be called once before confirm, got {calls['n']}"
+        p = agent_mod._PENDING_CONFIRM.get(sid)
+        assert p and p[0] == "write", f"pending not stored: {agent_mod._PENDING_CONFIRM}"
+        out2 = agent_mod.run_agent_loop(
+            [{"role": "user", "content": "write a file"},
+             {"role": "user", "content": "yes"}], sid)
+        assert (WORK_DIR / "confirm_demo.txt").exists(), "tool not executed after 'yes'"
+        assert "hello" in (WORK_DIR / "confirm_demo.txt").read_text("utf-8")
+        assert calls["n"] == 2, f"model calls: 1st request + final answer expected, got {calls['n']}"
+        assert "confirm_demo.txt" in out2, f"result missing from output: {out2[:300]}"
+    finally:
+        agent_mod.call_ollama = original
+        agent_mod.NO_CONFIRM = old_confirm
+        agent_mod._PENDING_CONFIRM.clear()
+        (WORK_DIR / "confirm_demo.txt").unlink(missing_ok=True)
+    print("  [OK] confirm flow: 'yes' auto-executes tool")
+
+def test_agent_loop_model_param():
+    """User-selected model must reach call_ollama (and skip the planner)."""
+    import agent as agent_mod
+    calls = []
+    def mock_ollama(msgs, model):
+        calls.append(model)
+        return "Just text.", 5
+    original = agent_mod.call_ollama
+    agent_mod.call_ollama = mock_ollama
+    try:
+        agent_mod.run_agent_loop(
+            [{"role": "user", "content": "hi"}], None, None, "qwen2.5-coder:7b")
+    finally:
+        agent_mod.call_ollama = original
+    assert calls and all(m == "qwen2.5-coder:7b" for m in calls), \
+        f"model param not honored: {calls}"
+    assert len(calls) == 2, f"planner should be skipped entirely, got {len(calls)} calls"
+    print("  [OK] agent loop: model param overrides planner")
+
 def test_agent_loop_shell_alias():
     """Integration: 'shell' alias maps to bash and executes."""
     import agent as agent_mod
@@ -392,6 +448,7 @@ if __name__ == "__main__":
              test_terminal_api, test_deps_tool, test_audit, test_rag_cache_incremental,
              test_agent_loop_tool_call, test_agent_loop_plain_text, test_agent_loop_shell_alias,
              test_agent_loop_yaml_style_tool, test_agent_loop_planner_fallback,
+             test_confirm_yes_autoexec, test_agent_loop_model_param,
              test_sessions_sqlite, test_session_json_migration,
              test_patch_line_aware, test_bash_filter, test_todo_thread_safety]
     passed = 0

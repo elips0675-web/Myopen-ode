@@ -73,15 +73,15 @@
 - [x] Модели иногда выдают tool-блоки в yaml-стиле (`tool write\npath "demo.py"\ncontent "..."`), парсер JSON их игнорировал. Добавлен `yaml_tool_pat` fallback-парсер (agent.py:321)
 
 ### Не исправлены (критично для кодинга)
-- [ ] **Подтверждение "yes" не завершает цикл**: после `[CONFIRM] Allow write?` ответ пользователя "yes" НЕ приводит к повторному выполнению инструмента — файл не создаётся. `extract_pending_tool` ищет ```tool блок в msgs, а он остаётся только в ответе модели → pending не находится. Нужно: при запросе подтверждения сохранять tool-вызов в состоянии цикла и при "yes" авто-выполнять его (без повторного вызова модели)
+- [x] **Подтверждение "yes" не завершало цикл** — ИСПРАВЛЕНО: отложенный tool хранится в `_PENDING_CONFIRM` (session_id → name/args), при "yes" авто-выполняется БЕЗ вызова модели (agent.py:311). Live-проверено: write → CONFIRM → yes → файл создан → verify
 - [ ] **deepseek-r1:7b нестабилен в tool-формате**: иногда выдаёт фриформат (`tool block\n define add function`) вместо JSON → лучше рекомендовать qwen2.5-coder:7b как основную модель для кодинга (проверено: стабильные блоки), либо расширить yaml-парсер
 
 ## Тесты — сделать
-- [ ] `test_confirm_yes_autoexec`: mock: write → результат `[CONFIRM]...`, затем пользователь "yes" → tool выполняется повторно → файл создан
-- [ ] `test_agent_loop_model_param`: проверка, что `model` из запроса попадает в `call_ollama` (planner НЕ используется при явной модели)
+- [x] `test_confirm_yes_autoexec`: write → [CONFIRM] → "yes" → tool выполнен без вызова модели (сделан)
+- [x] `test_agent_loop_model_param`: model из запроса доходит до call_ollama, planner пропущен (сделан)
 - [x] `test_agent_loop_yaml_style_tool`: yaml-блоки парсятся и выполняются (сделан)
 - [x] `test_agent_loop_planner_fallback`: planner без tool-блоков → retry с основной моделью (сделан)
-- [ ] Live-проверка полного цикла: задача → write (CONFIRM) → "yes" → файл создан → verify (сейчас файл НЕ создаётся — падает на подтверждении)
+- [x] Live-проверка полного цикла: задача → write (CONFIRM) → "yes" → файл создан → verify (пройдена)
 
 ## По оценкам Kimi (7.8) — что осталось
 
