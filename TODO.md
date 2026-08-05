@@ -147,16 +147,16 @@
 - [ ] Разбить длинные функции в agent.py/tools.py, добавить docstring и тайп-хинты — ЧАСТИЧНО: тайп-хинты в ключевых сигнатурах сделаны
 - [ ] Вынести JS из ui.py в отдельный модуль/файл — СДЕЛАНО, см. выше
 - [x] LSP: поддержка большего числа языков (Rust, C++) — сделано: добавлены clangd (.c/.h/.cpp/.cc/.cxx/.hpp), bash-language-server (.sh), vscode-css/html-language-server (.css/.scss/.html) + KEYWORDS для всех новых; исправлена опечатка CREATE_NO_WINDOW (окно cmd при старте серверов)
-- [ ] Docker-изоляция bash (строгая песочница)
+- [x] Docker-изоляция bash (строгая песочница) — сделано: env BASH_DOCKER=1 → docker run --rm -i -v WORK_DIR:/workspace -w /workspace -e PYTHONUTF8=1 <image> sh -lc "<cmd>" (image из BASH_DOCKER_IMAGE, default python:3.12-slim); whitelist check_bash применяется до запуска; при недоступности docker — fallback на локальный shell с warning. Тесты: test_bash_docker_mode, test_bash_docker_fallback
 
 ## По оценке DeepSeek 2 (8.5/10, 2026-08-05) — рекомендации
 ### Промпт (быстрые победы)
-- [ ] Few-shot примеры в system prompt (edit с многострочным old/new, patch с диффом) — дублирует Kimi
-- [ ] Маркер завершения: [DONE] или просто текст без ```tool (формализовать в промпте)
-- [ ] Напоминание «один тул за раз» в промпте
+- [x] Few-shot примеры в system prompt (read→answer, edit-воркфлоу, исправление неверного пути) + правила 17-19 (один тул за раз; финальный ответ — plain text/[DONE]; код ТОЛЬКО через write/edit)
+- [x] Маркер завершения: [DONE] или просто текст без ```tool (правило 18)
+- [x] Напоминание «один тул за раз» (правило 17)
 - [ ] Few-shot в момент ошибки тула — вставлять корректный пример вместо голого nudge
-- [ ] Статистика ошибок по тулам (счётчики fail per tool в логе) для точечного улучшения промпта
-- [ ] Пост-обработка JSON: эвристики на опечатки (запятые/кавычки) перед парсингом
+- [x] Статистика ошибок по тулам — TOOL_STATS (calls/errors per tool) в tools.py + GET /api/stats; warning в логе при 3+ ошибках подряд (test_tool_stats)
+- [x] Пост-обработка JSON: _parse_tool_json (эвристики: одинарные кавычки → двойные, unquoted keys, trailing comma перед }, мусор после блока → truncation at last '}') (test_parse_tool_json_lenient)
 - [ ] Динамический контекст в промпте: «ты в проекте X, последнее действие Y»
 ### Инфраструктура
 - [ ] xterm.js + WebSocket для долгих процессов (серверы, отладчики) — приоритет №2
@@ -168,7 +168,7 @@
 - [ ] Документация для конечного пользователя (установка/настройка/использование)
 - [ ] Автопроверка новых версий (update check)
 - [ ] Мульти-агентное иерархическое планирование (исследование → реализация → тестирование)
-- [ ] Cache-Control: public, max-age=31536000, immutable для /static/app.js + version-hash в имени
+- [x] Cache-Control для static: public, max-age=604800 (без version-hash пока)
 
 ## Собственные идеи (низкий приоритет)
 - [ ] Native tool calling (когда Ollama поддержит)
@@ -182,9 +182,10 @@
 - [ ] Git pre-backup перед batch-операциями + «restore all» (сейчас .agent_backups есть, restore — частично через undo)
 ### Надёжность модели
 - [ ] Few-shot examples в system prompt (2-3 примера диалога user → tool → result → assistant) — Kimi обещает -30-40% галлюцинаций на 7B
-- [ ] Code detector: если ответ содержит def/class/import БЕЗ ```tool → system-nudge «Не пиши код, используй write tool»
+- [x] Cache-Control для /static/app.js — public, max-age=604800 (верш. хэш-версионирование: /static/app.js?v=hash при CDN-развёртывании)
+- [x] Code detector: если ответ содержит def/class/import БЕЗ ```tool → system-nudge «Не пиши код, используй write tool» (макс 2 раза, затем цикл продолжается; test_code_detector_nudge)
+- [x] Таймаут после [CONFIRM] — НЕ НУЖЕН: после [CONFIRM] цикл завершается break по дизайну (юзер отвечает yes → auto-exec pending); мёртвый код убран
 - [ ] JSON Schema constrained output через Ollama format:"json" (экспериментально, {"thought": "...", "tool": {...}})
-- [ ] Таймаут после [CONFIRM]: 3 раза без tool подряд → прервать цикл
 - [ ] RAG source attribution: модель должна цитировать [file:line] в ответах
 - [ ] Модель-роутер: авто-переключение на qwen2.5-coder при галлюцинациях deepseek-r1 (метрика: % tool-blocks)
 ### UX / инфраструктура

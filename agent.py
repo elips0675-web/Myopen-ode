@@ -59,7 +59,7 @@ def _cancel_pending(session_id):
 # ─── import tools & rag ───────────────────────────────────
 from tools import (init_config, execute_tool, validate_tool, call_ollama,
                    stream_ollama,
-    extract_pending_tool, SYSTEM_PROMPT, init_backup)
+    extract_pending_tool, SYSTEM_PROMPT, init_backup, TOOL_STATS)
 from rag import init_rag, rag_search
 
 init_config(OLLAMA_URL=OLLAMA_URL, MODEL=MODEL, PLANNER_MODEL=PLANNER_MODEL,
@@ -313,6 +313,27 @@ def _strip_system_markers(text):
         out.append(ln)
     return "\n".join(out)
 
+def _parse_tool_json(raw):
+    """Parse a ```tool block body with lenient heuristics:
+    plain JSON -> single quotes -> unquoted keys -> trailing-comma / garbage
+    trimming (models often append prose after the closing brace)."""
+    attempts = [raw, raw.replace("'", '"')]
+    attempts.append(re.sub(r'([{,]\s*)([A-Za-z_]\w*)\s*:', r'\1"\2":', attempts[-1]))
+    attempts.append(re.sub(r':\s*([A-Za-z_][A-Za-z0-9_]*)([\s,}])', r': "\1"\2', attempts[-1]))
+    for a in attempts:
+        try: return json.loads(a)
+        except json.JSONDecodeError: pass
+    # trailing garbage / unterminated last value: try truncating at last '}'
+    for i in range(len(raw) - 1, -1, -1):
+        if raw[i] == "}":
+            head = re.sub(r",\s*}", "}", raw[: i + 1])
+            try: return json.loads(head)
+            except json.JSONDecodeError:
+                try:
+                    return json.loads(head.replace("'", '"'))
+                except json.JSONDecodeError:
+                    break
+    raise json.JSONDecodeError("unparseable tool JSON", raw, 0)
 def run_agent_loop(msgs, session_id, events=None, model=None):
     """Run agent loop. events: optional callback(ev: dict) for live tool progress.
     model: user-selected model overrides MODEL (empty = default)."""
@@ -398,16 +419,16 @@ def run_agent_loop(msgs, session_id, events=None, model=None):
         tool_blocks = []
         for m in tool_pat.finditer(content):
             raw = m.group(1).strip()
-            try: j = json.loads(raw); tool_blocks.append((m, raw, j))
+            try:
+                j = _parse_tool_json(raw)
+                tool_blocks.append((m, raw, j))
             except json.JSONDecodeError:
-                try: j = json.loads(raw.replace("'", '"')); tool_blocks.append((m, raw, j))
-                except json.JSONDecodeError:
-                    log.debug("Failed to parse tool block: %.60s", raw)
+                log.debug("Failed to parse tool block: %.60s", raw)
 
         if not tool_blocks:
             for match in bare_tool_pat.finditer(content):
                 try:
-                    j = json.loads(match.group())
+                    j = _parse_tool_json(match.group())
                     if "tool" in j and j["tool"] in VALID_TOOLS:
                         tool_blocks.append((match, match.group(), j))
                         break
@@ -436,17 +457,6 @@ def run_agent_loop(msgs, session_id, events=None, model=None):
                     tool_blocks.append((m, m.group(0), {"tool": name, **args}))
                     log.info("YAML-style tool block parsed: %s %s", name, list(args))
 
-        last_msg = msgs[-1]["content"].strip().lower() if msgs else ""
-        if not tool_blocks and last_msg[:5] in ("yes","y","go a","да","ok","cont","proc","do i"):
-            pn, pa = extract_pending_tool(msgs)
-            if pn:
-                log.info("Auto-exec pending %s after '%s'", pn, last_msg[:10])
-                r = execute_tool(pn, pa)
-                _emit({"type": "tool", "name": pn, "args": pa, "result": r[:200]})
-                full += f"\n[tool:{pn}] {r[:2000]}\n"
-                msgs.append({"role":"assistant","content":f"(auto-executed {pn})"})
-                msgs.append({"role":"user","content":r[:2000]})
-                continue
 
         if not tool_blocks:
             if not model and it == 0 and current_model != MODEL:
@@ -616,9 +626,17 @@ def index(): return HTMLResponse(HTML)
 def app_js():
     """Serve the extracted UI script (kept out of ui.py for maintainability)."""
     try:
-        return FileResponse(WORK_DIR / "static" / "app.js", media_type="text/javascript")
+        path = WORK_DIR / "static" / "app.js"
+        resp = FileResponse(path, media_type="text/javascript")
+        resp.headers["Cache-Control"] = "public, max-age=604800"
+        return resp
     except OSError as e:
         return JSONResponse({"error": f"static/app.js unavailable: {e}"}, status_code=404)
+
+@app.get("/api/stats")
+def tool_stats():
+    """Per-tool call/error counters (diagnostics; shows repeated model failures)."""
+    return TOOL_STATS
 
 @app.get("/api/models")
 def list_models():

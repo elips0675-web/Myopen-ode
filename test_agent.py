@@ -57,6 +57,97 @@ def test_bash():
     assert "hello" in r, "bash failed"
     print("  [OK] bash")
 
+def test_parse_tool_json_lenient():
+    """Lenient tool-JSON parsing: single quotes, unquoted keys, trailing
+    comma/garbage after the block must all still yield a valid tool dict."""
+    import agent as agent_mod
+    cases = [
+        ('{"tool": "list", "path": "."}', {"tool": "list", "path": "."}),
+        ("{'tool': 'list', 'path': '.'}", {"tool": "list", "path": "."}),
+        ('{tool: "write", path: "x.py"}', {"tool": "write", "path": "x.py"}),
+        ('{"tool": "read", "path": "x"} trailing prose', {"tool": "read", "path": "x"}),
+        ('{"tool": "bash", "cmd": "ls",}', {"tool": "bash", "cmd": "ls"}),
+    ]
+    for raw, want in cases:
+        got = agent_mod._parse_tool_json(raw)
+        assert got == want, f"{raw!r} -> {got} != {want}"
+    try:
+        agent_mod._parse_tool_json("total garbage")
+        assert False, "garbage must raise"
+    except json.JSONDecodeError:
+        pass
+    print("  [OK] lenient tool-JSON parsing (quotes/keys/comma/garbage)")
+
+def test_tool_stats():
+    """TOOL_STATS tracks calls and errors per tool; /api/stats returns them."""
+    import tools as tools_mod
+    before = tools_mod.TOOL_STATS.get("bash", {}).get("calls", 0)
+    r = tools_mod.execute_tool("bash", {"cmd": "echo stats_probe"})
+    assert "stats_probe" in r, "probe failed"
+    cur = tools_mod.TOOL_STATS["bash"]
+    assert cur["calls"] == before + 1, f"calls not counted: {cur}"
+    assert cur["errors"] == 0, f"echo should not count as error: {cur}"
+    r = tools_mod.execute_tool("read", {"path": "definitely_missing_12345.txt"})
+    assert r.startswith("Error:"), "missing file should error"
+    assert tools_mod.TOOL_STATS["read"]["errors"] >= 1, "errors not counted"
+    print("  [OK] tool stats: calls/errors tracked")
+
+
+
+def test_bash_docker_mode():
+    """With BASH_DOCKER=1 and docker present, bash runs inside a container
+    mounting WORK_DIR at /workspace; whitelist still applies."""
+    import tools as tools_mod
+    called = {"dcmd": None, "shell": 0}
+    def fake_run(dcmd, **kw):
+        if isinstance(dcmd, list) and dcmd and dcmd[0] == "docker":
+            called["dcmd"] = dcmd
+            return type("R", (), {"stdout": "hi from docker\n", "stderr": "", "returncode": 0})()
+        called["shell"] += 1
+        return type("R", (), {"stdout": "hi from local\n", "stderr": "", "returncode": 0})()
+    old_env = os.environ.get("BASH_DOCKER")
+    old_which = tools_mod.shutil.which
+    old_run = tools_mod.subprocess.run
+    os.environ["BASH_DOCKER"] = "1"
+    tools_mod.shutil.which = lambda name: "docker" if name == "docker" else None
+    tools_mod.subprocess.run = fake_run
+    try:
+        r = execute_tool("bash", {"cmd": "echo hi"})
+    finally:
+        if old_env is None: os.environ.pop("BASH_DOCKER", None)
+        else: os.environ["BASH_DOCKER"] = old_env
+        tools_mod.shutil.which = old_which
+        tools_mod.subprocess.run = old_run
+    assert "hi from docker" in r, f"docker output missing: {r[:200]}"
+    assert called["dcmd"] and "-v" in called["dcmd"] and "/workspace" in called["dcmd"], f"bad docker cmd: {called['dcmd']}"
+    print("  [OK] bash: docker sandbox mode")
+
+def test_bash_docker_fallback():
+    """If docker is configured but unavailable, fall back to the local shell."""
+    import tools as tools_mod
+    called = {"shell": 0}
+    def fake_run(dcmd, **kw):
+        if isinstance(dcmd, list) and dcmd and dcmd[0] == "docker":
+            raise RuntimeError("no docker daemon")
+        called["shell"] += 1
+        return type("R", (), {"stdout": "local ok\n", "stderr": "", "returncode": 0})()
+    old_env = os.environ.get("BASH_DOCKER")
+    old_which = tools_mod.shutil.which
+    old_run = tools_mod.subprocess.run
+    os.environ["BASH_DOCKER"] = "1"
+    tools_mod.shutil.which = lambda name: "docker" if name == "docker" else None
+    tools_mod.subprocess.run = fake_run
+    try:
+        r = execute_tool("bash", {"cmd": "echo hi"})
+    finally:
+        if old_env is None: os.environ.pop("BASH_DOCKER", None)
+        else: os.environ["BASH_DOCKER"] = old_env
+        tools_mod.shutil.which = old_which
+        tools_mod.subprocess.run = old_run
+    assert "local ok" in r, f"fallback failed: {r[:200]}"
+    assert called["shell"] == 1, f"expected 1 local shell call, got {called['shell']}"
+    print("  [OK] bash: docker fallback to local shell")
+
 def test_verify_py():
     r = verify_file(str(Path(WORK_DIR) / "agent.py"))
     print(f"  [OK] verify .py (result: {'OK' if not r else r[:50]})")
@@ -940,7 +1031,9 @@ if __name__ == "__main__":
              test_plan_trivial_steps_guard, test_unknown_tool_hint,
              test_rag_search_via_execute, test_read_notfound_similar_files,
              test_agent_loop_error_nudge, test_ensure_safe_path_invented,
-             test_rag_fast_search, test_code_detector_nudge]
+             test_rag_fast_search, test_code_detector_nudge,
+             test_bash_docker_mode, test_bash_docker_fallback,
+             test_parse_tool_json_lenient, test_tool_stats]
     passed = 0
     for t in tests:
         try:

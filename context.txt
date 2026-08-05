@@ -219,6 +219,24 @@ signatures. (6) JS EXTRACTED from ui.py → static/app.js served at GET /static/
 (7) LSP: added clangd (.c/.h/.cpp/.cc/.cxx/.hpp), bash-language-server, css/scss/html
 servers + keywords; fixed CREATE_NO_WINDOW typo (cmd window popup on server start).
 Tests: 52/52. All Kimi P1 + DeepSeek P1 are DONE.
+UPDATE (2026-08-06): stage-1..3 hardening (commit 33833c3 + current):
+(8) FEW-SHOT PROMPT: rules 17-19 (one tool per reply; finish with plain text or
+[ DONE ] (no ```tool); NEVER write code in text — only via write/edit tools) +
+EXAMPLES section (read→answer, edit workflow, bad-path fix). Code detector: prose
+containing def/class/import/etc. without a tool → system nudge "use write tool"
+(max 2). [CONFIRM]-timeout NOT needed: loop breaks after CONFIRM by design.
+(9) RAG CRASH FIX: _rebuild_fast_index skipped malformed/uneven embeddings
+(inhomogeneous shape array crash in background indexing).
+(10) DOCKER BASH SANDBOX: BASH_DOCKER=1 → docker run --rm -i -v WORK_DIR:/workspace
+-w /workspace <BASH_DOCKER_IMAGE default python:3.12-slim> sh -lc "<cmd>"; check_bash
+whitelist still enforced; falls back to local shell if docker unavailable.
+(11) TOOL STATS: TOOL_STATS per-tool calls/errors in tools.py; GET /api/stats;
+warning log at 3+ consecutive errors of one tool.
+(12) LENIENT TOOL-JSON: _parse_tool_json() — single quotes, unquoted keys, trailing
+comma before }, garbage after block (truncate at last }).
+(13) Cache-Control: public, max-age=604800 on /static/app.js.
+Tests: 57/57 (test_bash_docker_mode/fallback, test_parse_tool_json_lenient,
+test_tool_stats added; docker tests use mocks — no Docker needed in CI).
 
 COMPARISON
 ----------

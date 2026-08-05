@@ -746,12 +746,25 @@ def _audit(name, args, result):
             f.write(f"[{ts}] {name} {arg_preview}\n")
     except: pass
 
+TOOL_STATS = {}  # name -> {"calls": int, "errors": int}
+
+def _stats_record(name, result):
+    s = TOOL_STATS.setdefault(name, {"calls": 0, "errors": 0})
+    s["calls"] += 1
+    if isinstance(result, str) and (result.startswith("Error:") or result.startswith("Blocked:")):
+        s["errors"] += 1
+        if s["errors"] >= 3 and s["errors"] % 3 == 0:
+            log.warning("Tool '%s' is failing repeatedly (%d errors of %d calls) — model may be passing bad arguments",
+                        name, s["errors"], s["calls"])
+
 def execute_tool(name, args):
     try:
         result = _execute_tool_inner(name, args)
         _audit(name, args, result)
+        _stats_record(name, result)
         return result
     except Exception as e:
+        _stats_record(name, f"Error: {e}")
         return f"Error: {e}"
 
 def _execute_tool_inner(name, args):
@@ -811,6 +824,20 @@ def _execute_tool_inner(name, args):
             if blocked: return blocked
             cwd = resolve(args.get("cwd", ".")) if args.get("cwd") else WORK_DIR
             bt = globals().get("BASH_TIMEOUT", 60)
+            if os.environ.get("BASH_DOCKER") and shutil.which("docker"):
+                image = os.environ.get("BASH_DOCKER_IMAGE", "python:3.12-slim")
+                dcmd = ["docker", "run", "--rm", "-i",
+                        "-v", f"{WORK_DIR.resolve()}:/workspace",
+                        "-w", "/workspace", "-e", "PYTHONUTF8=1",
+                        image, "sh", "-lc", cmd]
+                try:
+                    r = subprocess.run(
+                        dcmd, capture_output=True, text=True, timeout=bt,
+                        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+                    return ((r.stdout or "")[-3000:]
+                            + ("\nSTDERR:\n" + (r.stderr or "")[-1000:] if r.stderr else ""))
+                except Exception as e:
+                    log.warning("Docker bash failed (%s), falling back to local shell", e)
             r = subprocess.run(cmd, shell=True, cwd=str(cwd) if cwd else str(WORK_DIR), capture_output=True, text=True, timeout=bt)
             return ((r.stdout or "")[-3000:] + ("\nSTDERR:\n" + (r.stderr or "")[-1000:] if r.stderr else ""))
         elif name == "glob":
