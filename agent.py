@@ -292,6 +292,20 @@ def _get_available_models():
 
 _available_models = _get_available_models()
 
+def _strip_system_markers(text):
+    """Remove fake system markers a model may echo inside its prose
+    ([PLAN], [CONFIRM], [tool:...], "Reply 'yes'..."). Real markers are
+    appended by the loop itself, so stripping them from model text is safe."""
+    out = []
+    for ln in text.splitlines():
+        s = ln.strip()
+        if (s.startswith(("[PLAN]", "[CONFIRM]", "[tool:", "[tool]", "[Format error"))
+                or s.lower().startswith("reply 'yes'")
+                or "```tool" in s):
+            continue
+        out.append(ln)
+    return "\n".join(out)
+
 def run_agent_loop(msgs, session_id, events=None, model=None):
     """Run agent loop. events: optional callback(ev: dict) for live tool progress.
     model: user-selected model overrides MODEL (empty = default)."""
@@ -312,6 +326,8 @@ def run_agent_loop(msgs, session_id, events=None, model=None):
     format_retried = 0
     last_call_key = None
     repeats = 0
+    last_result_name = None
+    last_result_text = ""
 
     for it in range(max_iter):
         if time.time() - start_time > max_time:
@@ -346,6 +362,12 @@ def run_agent_loop(msgs, session_id, events=None, model=None):
         if not model and it == 0 and PLANNER_MODEL not in _available_models:
             log.info("PLANNER_MODEL %s not installed, using %s", PLANNER_MODEL, MODEL)
             current_model = MODEL
+        if not model and it == 0 and current_model != MODEL:
+            first_user = next((m.get("content", "") for m in msgs if m.get("role") == "user"), "")
+            if len(first_user.strip()) < 80:
+                # short first message = simple question/chat, planner is a waste
+                log.info("Short first message — skipping planner, using %s", MODEL)
+                current_model = MODEL
         result = call_ollama(msgs, current_model)
         if isinstance(result, tuple):
             content, tokens_used = result
@@ -412,20 +434,20 @@ def run_agent_loop(msgs, session_id, events=None, model=None):
             if not model and it == 0 and current_model != MODEL:
                 # planner model (1.5b) often ignores tool format — retry with main model
                 log.info("Planner iteration produced no tool blocks; retrying with %s", MODEL)
-                full += content + "\n"
+                full += _strip_system_markers(content) + "\n"
                 continue
             if format_retried < 1 and len(content.strip()) > 20:
                 # main model ignored tool format (free-form answer) — one strict retry
                 hint = "[Format error: reply ONLY with ```tool JSON blocks. No prose, no code blocks.]"
                 msgs.append({"role": "assistant", "content": content})
                 msgs.append({"role": "user", "content": hint})
-                full += content + "\n"
+                full += _strip_system_markers(content) + "\n"
                 format_retried += 1
                 continue
-            full += content
+            full += _strip_system_markers(content)
             break
 
-        before = content[:tool_blocks[0][0].start()].strip()
+        before = _strip_system_markers(content[:tool_blocks[0][0].start()].strip())
         if before:
             full += before + "\n"
             msgs.append({"role": "assistant", "content": before})
@@ -441,7 +463,9 @@ def run_agent_loop(msgs, session_id, events=None, model=None):
             # anti-repeat: identical tool call twice in a row = model loop, stop it.
             # Must run BEFORE the name check so broken/empty blocks are caught too.
             call_key = (name, json.dumps(tc, ensure_ascii=False, sort_keys=True))
-            if call_key == last_call_key:
+            err_repeat = (name == last_result_name and last_result_text and
+                          any(w in last_result_text for w in ("not found", "not installed", "invalid", "не найден")))
+            if call_key == last_call_key or err_repeat:
                 repeats += 1
                 if repeats >= 2:
                     full += "[tool: identical call repeated — stop repeating, answer directly]\n"
@@ -474,6 +498,11 @@ def run_agent_loop(msgs, session_id, events=None, model=None):
                 steps = tc.get("steps", [])
                 if isinstance(steps, str):
                     steps = [s.strip() for s in re.split(r'[.,;\n]+', steps) if s.strip()]
+                steps = [s for s in steps if len(str(s).strip()) > 2]
+                if not steps:
+                    all_results.append("[tool:plan] plan is empty (no real steps) — answer directly, do NOT call plan for questions or chat.")
+                    calls_made.append(name)
+                    continue
                 plan_text = "\n".join(f"  {i+1}. {s}" for i,s in enumerate(steps))
                 full += f"\n[PLAN]\n{plan_text}\n\nReply 'yes' to execute plan.\n"
                 msgs.append({"role":"assistant","content":content})
@@ -486,6 +515,7 @@ def run_agent_loop(msgs, session_id, events=None, model=None):
                     _emit({"type": "tool", "name": name, "args": tc, "result": r[:200]})
                     all_results.append(f"[tool:{name}] {r[:2000]}")
                     calls_made.append(name)
+                    last_result_name, last_result_text = name, r[:2000]
                 else:
                     ask = f"Allow {name}?\nArgs: {json.dumps(tc, ensure_ascii=False)[:300]}"
                     full += f"\n[CONFIRM] {ask}\nReply 'yes' to proceed.\n"
@@ -500,6 +530,7 @@ def run_agent_loop(msgs, session_id, events=None, model=None):
             _emit({"type": "tool", "name": name, "args": tc, "result": r[:200]})
             all_results.append(f"[tool:{name}] {r[:2000]}")
             calls_made.append(name)
+            last_result_name, last_result_text = name, r[:2000]
 
         if needs_break: break
         if all_results:

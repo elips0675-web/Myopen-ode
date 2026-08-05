@@ -184,7 +184,7 @@ def test_agent_loop_tool_call():
     print("  [OK] agent loop: tool execution + live events")
 
 def test_agent_loop_plain_text():
-    """Integration: loop returns plain text without tools (planner pass + main model)."""
+    """Integration: loop returns plain text without tools (short question skips planner)."""
     import agent as agent_mod
     calls = {"n": 0}
     def mock_ollama(msgs, model):
@@ -198,7 +198,7 @@ def test_agent_loop_plain_text():
     finally:
         agent_mod.call_ollama = original
     assert "Just a plain answer." in out, f"plain loop failed: {out[:200]}"
-    assert calls["n"] == 2, f"expected planner+main calls, got {calls['n']}"
+    assert calls["n"] == 1, f"short question must not hit planner, got {calls['n']}"
     print("  [OK] agent loop: plain text")
 
 def test_agent_loop_yaml_style_tool():
@@ -244,10 +244,12 @@ def test_agent_loop_planner_fallback():
     agent_mod.call_ollama = mock_ollama
     try:
         out = agent_mod.run_agent_loop(
-            [{"role": "user", "content": "list"}], None)
+            [{"role": "user", "content": "Please implement a robust file parser with unit tests, error handling and docs for this project"}], None)
     finally:
         agent_mod.call_ollama = original
-    assert len(calls) == 3, f"expected planner+main+final calls, got {len(calls)}"
+    assert len(calls) == 3, f"expected planner+main+final calls, got {len(calls)}: {calls}"
+    assert calls[0] == agent_mod.PLANNER_MODEL, f"first call must be planner, got {calls[0]}"
+    assert calls[1] == agent_mod.MODEL, f"fallback must use main model, got {calls[1]}"
     assert "list" in out, f"tool result missing: {out[:300]}"
     print("  [OK] agent loop: planner fallback to main model")
 
@@ -400,6 +402,92 @@ def test_question_stops_loop():
     assert "[QUESTION]" in out, f"question not shown: {out[:200]}"
     assert calls["n"] == 1, f"loop must stop after question, got {calls['n']} calls"
     print("  [OK] agent loop: question stops iteration")
+
+def test_plan_empty_guard():
+    """Empty plan must not break the loop — agent gets a hint and continues."""
+    import agent as agent_mod
+    calls = {"n": 0}
+    def mock_ollama(msgs, model):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            return '```tool\n{"tool": "plan", "steps": []}\n```', 10
+        return "plain answer, no plan needed", 10
+    original = agent_mod.call_ollama
+    agent_mod.call_ollama = mock_ollama
+    try:
+        out = agent_mod.run_agent_loop(
+            [{"role": "user", "content": "who are you"}], None)
+    finally:
+        agent_mod.call_ollama = original
+    assert "plan is empty" in out, f"hint missing: {out[:300]}"
+    assert "plain answer" in out, f"loop must continue after empty plan: {out[:300]}"
+    assert calls["n"] == 3, f"expected 2 calls + strict retry, got {calls['n']}"
+    print("  [OK] agent loop: empty plan guard")
+
+def test_skill_notfound_repeat_blocked():
+    """Re-calling the same tool after a 'not found' result must be blocked
+    even when args differ (model invented a skill name)."""
+    import agent as agent_mod
+    calls = {"n": 0}
+    def mock_ollama(msgs, model):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            return '```tool\n{"tool": "skill", "name": "DeepSeek-R1", "description": "AI assistant"}\n```', 10
+        return '```tool\n{"tool": "skill", "name": "DeepSeek-R1"}\n```', 10
+    original = agent_mod.call_ollama
+    agent_mod.call_ollama = mock_ollama
+    try:
+        out = agent_mod.run_agent_loop(
+            [{"role": "user", "content": "who are you"}], None)
+    finally:
+        agent_mod.call_ollama = original
+    assert "identical call repeated" in out, f"not-found repeat not blocked: {out[:400]}"
+    assert calls["n"] == 2, f"expected 2 calls then block, got {calls['n']}"
+    print("  [OK] agent loop: not-found repeat blocked")
+
+def test_model_marker_text_stripped():
+    """Model prose containing fake [PLAN]/[CONFIRM] markers must be cleaned."""
+    import agent as agent_mod
+    calls = {"n": 0}
+    def mock_ollama(msgs, model):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            return ("I am an AI.\n[PLAN]\n1. step1\n\nReply 'yes' to execute plan.\n[CONFIRM] allow?\n", 10)
+        return "final plain answer", 10
+    original = agent_mod.call_ollama
+    agent_mod.call_ollama = mock_ollama
+    try:
+        out = agent_mod.run_agent_loop(
+            [{"role": "user", "content": "who are you"}], None)
+    finally:
+        agent_mod.call_ollama = original
+    assert "[PLAN]" not in out, f"fake marker leaked: {out[:400]}"
+    assert "Reply 'yes'" not in out, f"fake confirm leaked: {out[:400]}"
+    assert "final plain answer" in out
+    print("  [OK] agent loop: fake markers stripped from model text")
+
+def test_short_question_skips_planner():
+    """Short first message (simple question) must go straight to the main
+    model — the planner wastes iterations on chat."""
+    import agent as agent_mod
+    calls = []
+    def mock_ollama(msgs, model):
+        calls.append(model)
+        return "plain answer", 5
+    original = agent_mod.call_ollama
+    agent_mod.call_ollama = mock_ollama
+    try:
+        agent_mod.run_agent_loop([{"role": "user", "content": "hi"}], None)
+        short_model = calls[0]
+        calls.clear()
+        long_q = "Please implement a bubble sort function in python with unit tests " + ("x" * 200)
+        agent_mod.run_agent_loop([{"role": "user", "content": long_q}], None)
+        long_model = calls[0]
+    finally:
+        agent_mod.call_ollama = original
+    assert short_model == agent_mod.MODEL, f"short question must use main model, got {short_model}"
+    assert long_model == agent_mod.PLANNER_MODEL, f"long task must use planner, got {long_model}"
+    print("  [OK] agent loop: short question skips planner")
 
 def test_repeated_tool_blocked():
     """Identical tool call repeated twice in a row must be blocked (anti-loop)."""
@@ -676,7 +764,9 @@ if __name__ == "__main__":
              test_missing_tool_key_stops_loop, test_timeout_env, test_cancel_flag,
              test_sessions_sqlite, test_session_json_migration,
              test_patch_line_aware, test_bash_filter, test_todo_thread_safety,
-             test_rag_split_chunk, test_session_search]
+             test_rag_split_chunk, test_session_search,
+             test_plan_empty_guard, test_skill_notfound_repeat_blocked,
+             test_model_marker_text_stripped, test_short_question_skips_planner]
     passed = 0
     for t in tests:
         try:
