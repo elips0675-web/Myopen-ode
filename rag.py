@@ -173,7 +173,15 @@ def _rebuild_fast_index():
     FAISS_INDEX = None
     if not RAG_INDEX or _np is None:
         return
-    mat = _np.asarray(RAG_INDEX, dtype="float32")
+    dim = len(RAG_INDEX[0]) if isinstance(RAG_INDEX[0], (list, tuple)) else 0
+    rows = [e for e in RAG_INDEX
+            if isinstance(e, (list, tuple)) and len(e) == dim and dim > 0]
+    if len(rows) != len(RAG_INDEX):
+        log.warning("RAG: skipping %d malformed embeddings (expected dim %d)",
+                    len(RAG_INDEX) - len(rows), dim)
+    if not rows:
+        return
+    mat = _np.asarray(rows, dtype="float32")
     if _faiss is not None:
         try:
             idx = _faiss.IndexFlatIP(mat.shape[1])

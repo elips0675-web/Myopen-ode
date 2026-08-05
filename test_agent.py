@@ -733,6 +733,33 @@ def test_ensure_safe_path_invented():
         assert "list/glob" in r, f"hint missing for {p}: {r[:150]}"
     print("  [OK] ensure_safe_path: invented paths blocked with hints")
 
+def test_code_detector_nudge():
+    """Prose containing code (def/class/import) without a tool block must trigger
+    a 'use the write tool' system nudge, then the model writes the file."""
+    import agent as agent_mod
+    calls = {"n": 0}
+    def mock_ollama(msgs, model):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            return "Here is the code:\ndef add(a, b):\n    return a + b", 10
+        if calls["n"] == 2:
+            assert any(m.get("role") == "system" and "write" in m.get("content", "")
+                       for m in msgs), "missing code->write nudge"
+            return '```tool\n{"tool": "write", "path": "code_detect_demo.py", "content": "def add(a, b):\\n    return a + b"}\n```', 10
+        return "File written and verified.", 5
+    original = agent_mod.call_ollama
+    old_confirm = agent_mod.NO_CONFIRM
+    agent_mod.call_ollama = mock_ollama
+    agent_mod.NO_CONFIRM = True  # auto-execute write so the loop reaches the final answer
+    try:
+        out = agent_mod.run_agent_loop(
+            [{"role": "user", "content": "write a function add"}], None)
+    finally:
+        agent_mod.call_ollama = original
+        agent_mod.NO_CONFIRM = old_confirm
+    assert "File written and verified." in out, f"final missing: {out[:200]}"
+    print("  [OK] agent loop: code detector nudge -> write tool")
+
 def test_rag_fast_search():
     """Vectorized search (FAISS/numpy) returns ranked chunks and survives rebuilds."""
     import rag
@@ -913,7 +940,7 @@ if __name__ == "__main__":
              test_plan_trivial_steps_guard, test_unknown_tool_hint,
              test_rag_search_via_execute, test_read_notfound_similar_files,
              test_agent_loop_error_nudge, test_ensure_safe_path_invented,
-             test_rag_fast_search]
+             test_rag_fast_search, test_code_detector_nudge]
     passed = 0
     for t in tests:
         try:

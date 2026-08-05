@@ -39,6 +39,9 @@ def _pending_set(session_id, name, tc):
 def _pending_get(session_id):
     with _PENDING_LOCK:
         return _PENDING_CONFIRM.pop(session_id or "", None)
+def _pending_clear(session_id):
+    with _PENDING_LOCK:
+        _PENDING_CONFIRM.pop(session_id or "", None)
 
 # graceful cancellation: session_id -> cancelled flag (checked between iterations)
 _CANCEL_FLAGS = set()
@@ -329,6 +332,7 @@ def run_agent_loop(msgs, session_id, events=None, model=None):
     total_tokens = sum(len(m.get("content", "")) / 4 for m in msgs)
     format_retried = 0
     err_hint_retried = 0
+    code_hint_retried = 0
     last_call_key = None
     repeats = 0
     last_result_name = None
@@ -462,6 +466,16 @@ def run_agent_loop(msgs, session_id, events=None, model=None):
                              "The previous tool call failed. You MUST respond with a "
                              "corrected ```tool JSON block. Do NOT write explanations or plans."})
                 log.info("Tool error, nudging model back to tool format (retry %d)", err_hint_retried)
+                continue
+            if (code_hint_retried < 2 and len(content.strip()) > 40
+                    and re.search(r'^\s*(def |class |import |from |function |const |let |var |if |for |while )',
+                                  content, re.M)):
+                # model wrote code/prose instead of a tool — nudge it to write the file
+                code_hint_retried += 1
+                msgs.append({"role": "system", "content":
+                             "Do NOT write code in your reply. Put code into a file with the "
+                             "`write` or `edit` tool, then verify it with `bash`."})
+                log.info("Code detected in reply, nudging to write tool (retry %d)", code_hint_retried)
                 continue
             if format_retried < 1 and len(content.strip()) > 20:
                 # main model ignored tool format (free-form answer) — one strict retry
