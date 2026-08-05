@@ -598,6 +598,14 @@ app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], all
 @app.get("/")
 def index(): return HTMLResponse(HTML)
 
+@app.get("/static/app.js")
+def app_js():
+    """Serve the extracted UI script (kept out of ui.py for maintainability)."""
+    try:
+        return FileResponse(WORK_DIR / "static" / "app.js", media_type="text/javascript")
+    except OSError as e:
+        return JSONResponse({"error": f"static/app.js unavailable: {e}"}, status_code=404)
+
 @app.get("/api/models")
 def list_models():
     try: return [m["name"] for m in requests.get(f"{OLLAMA_URL}/api/tags",timeout=5).json().get("models",[])]
