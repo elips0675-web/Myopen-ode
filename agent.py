@@ -7,7 +7,7 @@ from datetime import datetime
 import requests, uvicorn
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse, HTMLResponse, JSONResponse
+from fastapi.responses import StreamingResponse, HTMLResponse, JSONResponse, FileResponse
 from pydantic import BaseModel
 from ui import HTML
 
