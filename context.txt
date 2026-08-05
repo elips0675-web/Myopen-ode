@@ -169,6 +169,13 @@ deepseek-coder-v2:16b pull (12GB VRAM coding), more LSP/refactor polish.
 Open (from eval 2, 2026-08-05): few-shot at tool-error moment, dynamic context line in prompt,
 xterm.js+WS (priority 2), integration tests with real model, RAG folder segmentation,
 CLI mode, crash recovery, cross-platform tests, user docs, update check, JSON Schema format:"json".
+EVAL 3 (2026-08-06, DeepSeek): 8.6/10 — priorities: 1) dynamic context in prompt, 2) integration tests
+with real qwen2.5-coder:7b (5-10 e2e scenarios), 3) xterm.js+WS, 4) split monoliths, 5) few-shot at
+tool-error. Also: strengthen bare-parser ({"tool":"...} anywhere), VALID/INVALID prompt examples,
+first-turn must-read rule, retry with temp 0.1, TOOL_STATS in prompt (careful), Docker readonly/mem/user
+flags, /health endpoint, session crash recovery, thinking indicator, RAG progress bar, audit in UI,
+troubleshooting guide. Prompt regression guard added: test_system_prompt_rules (rules 16-19 + EXAMPLES).
+Tests: 58/58.
 DONE from eval 2: few-shot examples + rules 17-19 (one tool per reply, [DONE] finish, code only via
 write/edit), code detector nudge (max 2), TOOL_STATS + /api/stats (warn at 3+ fails),
 lenient _parse_tool_json (single quotes/unquoted keys/trailing comma/garbage truncation),
