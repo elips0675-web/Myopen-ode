@@ -245,6 +245,8 @@ RULES:
 17. Emit ONE tool block per reply — several blocks in one reply break execution. Always wait for the tool result before emitting the next tool.
 18. To finish the turn WITHOUT tools: reply with plain text (you may end with [DONE]). Never call a tool "just to check".
 19. NEVER write code directly in your text reply — code goes INTO files via `write`/`edit`. If you catch yourself producing code in text, stop and use the write tool instead.
+20. Tools outside ```tool blocks are IGNORED — always output tools ONLY inside ```tool blocks like the examples below.
+21. On the first turn, READ at least one file before writing/editing it (unless the file is brand-new and the user explicitly described its content). Never guess file contents — read first.
 
 EXAMPLES — study these, imitate the exact format:
 
@@ -379,7 +381,18 @@ Patch: apply unified diff to a file.
 Multi-agent: planning uses a smaller model; execution uses the main model.
 Task: delegate to subagent. Agents: explore (read-only research), scout (web/external research), general (complex multi-step).
 Todo: manage task list within session — add, complete, list items.
-LSP: code intelligence — definition, references, hover, symbols per file."""
+LSP: code intelligence — definition, references, hover, symbols per file.
+
+VALID tool block (always use this exact format):
+```tool
+{"tool": "read", "path": "utils.py"}
+```
+
+INVALID (will be IGNORED — do not do this):
+- {"tool": "read", "path": "utils.py"}     ← tool JSON without ```tool fence
+- ```json {"tool": "read", "path": "utils.py"} ```  ← wrong fence
+- Tool calls inside plain prose text
+"""
 
 # ─── plugins system ───────────────────────────────────────
 PLUGINS = {}
@@ -454,10 +467,11 @@ def stream_ollama(messages, model=None, on_chunk=None):
     last_err = None
     for attempt in range(2):
         try:
+            temp = 0.1 if attempt > 0 else 0.2
             with requests.post(f"{OLLAMA_URL}/api/chat", json={
                 "model": m, "messages": [msg for msg in messages if msg.get("content")],
                 "stream": True, "keep_alive": -1,
-                "options": {"temperature": 0.2, "num_predict": 2048, "num_ctx": num_ctx}
+                "options": {"temperature": temp, "num_predict": 2048, "num_ctx": num_ctx}
             }, stream=True, timeout=180) as r:
                 r.raise_for_status()
                 for line in r.iter_lines(decode_unicode=True):
@@ -502,10 +516,13 @@ def call_ollama(messages, model=None):
     num_ctx = int(os.environ.get("OLLAMA_NUM_CTX", "16384"))
     for attempt in range(max_retries):
         try:
+            # retries are more deterministic (temp 0.1) — after a failure the
+            # model should retry the exact same reasoning, not invent new ones
+            temp = 0.1 if attempt > 0 else 0.2
             r = requests.post(f"{OLLAMA_URL}/api/chat", json={
                 "model": m, "messages": [msg for msg in messages if msg.get("content")],
                 "stream": False, "keep_alive": -1,
-                "options": {"temperature": 0.2, "num_predict": 2048, "num_ctx": num_ctx}
+                "options": {"temperature": temp, "num_predict": 2048, "num_ctx": num_ctx}
             }, timeout=180)
             r.raise_for_status()
             data = r.json()
@@ -826,10 +843,19 @@ def _execute_tool_inner(name, args):
             bt = globals().get("BASH_TIMEOUT", 60)
             if os.environ.get("BASH_DOCKER") and shutil.which("docker"):
                 image = os.environ.get("BASH_DOCKER_IMAGE", "python:3.12-slim")
+                mount = f"{WORK_DIR.resolve()}:/workspace"
+                if os.environ.get("BASH_DOCKER_READONLY"):
+                    mount += ":ro"
                 dcmd = ["docker", "run", "--rm", "-i",
-                        "-v", f"{WORK_DIR.resolve()}:/workspace",
-                        "-w", "/workspace", "-e", "PYTHONUTF8=1",
-                        image, "sh", "-lc", cmd]
+                        "-v", mount,
+                        "-w", "/workspace", "-e", "PYTHONUTF8=1"]
+                if os.environ.get("BASH_DOCKER_MEM"):
+                    dcmd += ["--memory", os.environ["BASH_DOCKER_MEM"]]
+                if os.environ.get("BASH_DOCKER_SWAP"):
+                    dcmd += ["--memory-swap", os.environ["BASH_DOCKER_SWAP"]]
+                if os.environ.get("BASH_DOCKER_USER"):
+                    dcmd += ["--user", os.environ["BASH_DOCKER_USER"]]
+                dcmd += [image, "sh", "-lc", cmd]
                 try:
                     r = subprocess.run(
                         dcmd, capture_output=True, text=True, timeout=bt,

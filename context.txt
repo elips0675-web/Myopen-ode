@@ -176,6 +176,24 @@ first-turn must-read rule, retry with temp 0.1, TOOL_STATS in prompt (careful), 
 flags, /health endpoint, session crash recovery, thinking indicator, RAG progress bar, audit in UI,
 troubleshooting guide. Prompt regression guard added: test_system_prompt_rules (rules 16-19 + EXAMPLES).
 Tests: 58/58.
+UPDATE (2026-08-06b) — eval-3 sprint (63/63 tests + 2/2 live):
+(14) DYNAMIC CONTEXT: _dynamic_context() injects "You are working in project: X
+(iteration N) / Last action: {tool} (result: ok|error)" into every model call
+(7B models lose context after 3-4 iterations). Tests: test_dynamic_context(+error_status).
+(15) PROMPT: rule 20 "tools ONLY inside ```tool blocks, else IGNORED" + VALID/INVALID
+negative examples; rule 21 "first turn: read at least one file before write/edit".
+(16) RETRY temp: Ollama retries (attempt>0) now use temperature 0.1 (deterministic
+re-try) in stream_ollama + call_ollama.
+(17) TOOL-ERROR FEW-SHOT: nudge now includes concrete fix example
+(tried edit/old/new -> error -> corrected glob -> read -> edit).
+(18) /health endpoint (status/model/planner/workspace/sessions/rag_chunks/uptime).
+(19) DOCKER FLAGS: BASH_DOCKER_READONLY (":ro" mount), BASH_DOCKER_MEM,
+BASH_DOCKER_SWAP, BASH_DOCKER_USER.
+(20) LIVE INTEGRATION TESTS: test_live.py — real qwen2.5-coder:7b scenarios
+(create hello.py/greet 10.8s OK; simple question 0.2s OK), skip if Ollama down.
+(21) USER_GUIDE.md (install, first run, tasks, env table, troubleshooting,
+skills/plugins how-to).
+Tests: 63/63 unit + 2/2 live.
 KIMI EVAL 3 (2026-08-06): 8.7/10 — "most mature open-source coding agent seen on 7B". For 9/10:
 split monoliths (agent.py/tools.py -> core/agent_loop.py, core/tool_parser.py,
 core/tool_executor.py, core/safety/bash_guard.py, core/safety/path_guard.py),

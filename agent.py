@@ -334,6 +334,17 @@ def _parse_tool_json(raw):
                 except json.JSONDecodeError:
                     break
     raise json.JSONDecodeError("unparseable tool JSON", raw, 0)
+
+def _dynamic_context(tool_name, tool_text, it):
+    """Short orientation block for the model: which project, what was the
+    last tool action and whether it succeeded. 7B models lose track of
+    context after 3-4 iterations — this anchors them."""
+    project = WORK_DIR.name or str(WORK_DIR)
+    parts = [f"You are working in project: {project} (iteration {it + 1})"]
+    if tool_name:
+        status = "error" if tool_text.startswith(("Error:", "Blocked:")) else "ok"
+        parts.append(f"Last action: {tool_name} (result: {status})")
+    return "\n".join(parts) + "\n"
 def run_agent_loop(msgs, session_id, events=None, model=None):
     """Run agent loop. events: optional callback(ev: dict) for live tool progress.
     model: user-selected model overrides MODEL (empty = default)."""
@@ -398,19 +409,20 @@ def run_agent_loop(msgs, session_id, events=None, model=None):
                 # short first message = simple question/chat, planner is a waste
                 log.info("Short first message — skipping planner, using %s", MODEL)
                 current_model = MODEL
+        dyn = {"role": "system", "content": _dynamic_context(last_result_name, last_result_text, it)}
         if events:
             try:
                 content = stream_ollama(
-                    msgs, current_model,
+                    msgs + [dyn], current_model,
                     on_chunk=lambda f: _emit({"type": "text", "text": f}))
                 tokens_used = 0
             except Exception as e:
                 log.warning("stream failed (%s), falling back to call_ollama", e)
-                result = call_ollama(msgs, current_model)
+                result = call_ollama(msgs + [dyn], current_model)
                 content, tokens_used = (result if isinstance(result, tuple)
                                         else (result, 0))
         else:
-            result = call_ollama(msgs, current_model)
+            result = call_ollama(msgs + [dyn], current_model)
             content, tokens_used = (result if isinstance(result, tuple)
                                     else (result, 0))
         if not content: break
@@ -470,11 +482,16 @@ def run_agent_loop(msgs, session_id, events=None, model=None):
             if (err_hint_retried < 2 and last_content.startswith("[tool:")
                     and any(m in last_content[:300] for m in err_markers)):
                 # previous tool call failed but the model replied with prose —
-                # nudge it back into tool format instead of accepting the text
+                # nudge it back into tool format (with a concrete fix example)
                 err_hint_retried += 1
                 msgs.append({"role": "system", "content":
                              "The previous tool call failed. You MUST respond with a "
-                             "corrected ```tool JSON block. Do NOT write explanations or plans."})
+                             "corrected ```tool JSON block. Do NOT write explanations or plans.\n"
+                             "Example of fixing a tool error:\n"
+                             'Model tried: {"tool": "edit", "path": "app.py", "old": "def foo()", "new": "def bar()"}\n'
+                             'Error: file not found\n'
+                             'Corrected: {"tool": "glob", "pattern": "**/*.py"} — locate the real path, '
+                             'then read it and retry the edit with the EXACT text from the read output.'})
                 log.info("Tool error, nudging model back to tool format (retry %d)", err_hint_retried)
                 continue
             if (code_hint_retried < 2 and len(content.strip()) > 40
@@ -637,6 +654,25 @@ def app_js():
 def tool_stats():
     """Per-tool call/error counters (diagnostics; shows repeated model failures)."""
     return TOOL_STATS
+
+@app.get("/health")
+def health():
+    """Liveness + basic diagnostics for monitoring (uptime, model, session count)."""
+    try:
+        sessions = len(list_sessions_db())
+    except Exception:
+        sessions = 0
+    from rag import RAG_CHUNKS, RAG_INDEX
+    return {
+        "status": "ok",
+        "model": MODEL,
+        "planner": PLANNER_MODEL,
+        "workspace": str(WORK_DIR),
+        "sessions": sessions,
+        "rag_chunks": len(RAG_CHUNKS or []),
+        "rag_embeddings": len(RAG_INDEX or []),
+        "uptime_s": round(time.time() - _SERVER_START, 1),
+    }
 
 @app.get("/api/models")
 def list_models():
@@ -1031,6 +1067,8 @@ def main():
     print(f"  Ctrl+C to exit\n")
     webbrowser.open(url)
     uvicorn.run(app, host="127.0.0.1", port=port, log_level="warning")
+
+_SERVER_START = time.time()
 
 if __name__ == "__main__":
     main()

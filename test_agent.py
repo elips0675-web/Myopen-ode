@@ -74,7 +74,70 @@ def test_system_prompt_rules():
         assert needle in SYSTEM_PROMPT, f"SYSTEM_PROMPT missing: {label} ({needle!r})"
     print("  [OK] system prompt: rules 16-19 + EXAMPLES present")
 
+def test_dynamic_context():
+    """Each model call gets a dynamic orientation block (project + last action
+    + result status); first call has no last action yet."""
+    import agent as agent_mod
+    calls = []
+    def mock_ollama(msgs, model):
+        calls.append(msgs)
+        return '```tool\n{"tool": "list", "path": "."}\n```', 10
+    original = agent_mod.call_ollama
+    agent_mod.call_ollama = mock_ollama
+    try:
+        agent_mod.run_agent_loop([{"role": "user", "content": "list files"}], None)
+    finally:
+        agent_mod.call_ollama = original
+    assert calls, "model never called"
+    dyn = [m for m in calls[-1] if m.get("role") == "system"
+           and "You are working in project" in m.get("content", "")]
+    assert dyn, "dynamic context block missing in last call"
+    assert "Last action: list (result: ok)" in dyn[-1]["content"], dyn[-1]["content"]
+    print("  [OK] dynamic context injected into model calls")
+
+def test_dynamic_context_error_status():
+    """Failed tool result must be reported as 'error' in the next call."""
+    import agent as agent_mod
+    calls = []
+    def mock_ollama(msgs, model):
+        calls.append(msgs)
+        return '```tool\n{"tool": "read", "path": "missing_xyz.txt"}\n```', 10
+    original = agent_mod.call_ollama
+    agent_mod.call_ollama = mock_ollama
+    try:
+        agent_mod.run_agent_loop([{"role": "user", "content": "read missing file"}], None)
+    finally:
+        agent_mod.call_ollama = original
+    assert len(calls) >= 2, f"expected >=2 calls, got {len(calls)}"
+    dyn = [m for m in calls[-1] if m.get("role") == "system"
+           and "Last action" in m.get("content", "")]
+    assert dyn and "result: error" in dyn[-1]["content"], f"error status missing: {dyn}"
+    print("  [OK] dynamic context reports error status")
+
+def test_tool_error_fewshot():
+    """After a tool error + prose reply, the nudge must include a concrete
+    fix example (tried -> error -> corrected tool), not just 'fix the JSON'."""
+    import agent as agent_mod
+    def mock_ollama(msgs, model):
+        if msgs[-1].get("role") == "system" and "Example of fixing a tool error" in msgs[-1]["content"]:
+            return '```tool\n{"tool": "glob", "pattern": "**/*.py"}\n```', 10
+        return 'I will check the file. Actually let me help you.\n```tool\n{"tool": "read", "path": "bad_path.py"}\n```', 10
+    original = agent_mod.call_ollama
+    agent_mod.call_ollama = mock_ollama
+    try:
+        out = agent_mod.run_agent_loop([{"role": "user", "content": "check bad_path.py"}], None)
+    finally:
+        agent_mod.call_ollama = original
+    assert "Example of fixing a tool error" in out or "glob" in out, \
+        f"few-shot fix example not applied: {out[:300]}"
+    print("  [OK] tool-error nudge includes fix example")
+
 def test_bash():
+    r = execute_tool("bash", {"cmd": "echo hello"})
+    assert "hello" in r, "bash failed"
+    print("  [OK] bash")
+
+
     r = execute_tool("bash", {"cmd": "echo hello"})
     assert "hello" in r, "bash failed"
     print("  [OK] bash")
@@ -149,6 +212,41 @@ def test_bash_docker_mode():
     assert called["dcmd"] and "-v" in called["dcmd"] and "/workspace" in called["dcmd"], f"bad docker cmd: {called['dcmd']}"
     print("  [OK] bash: docker sandbox mode")
 
+def test_bash_docker_flags():
+    """BASH_DOCKER_READONLY / _MEM / _USER must add :ro mount, --memory, --user."""
+    import tools as tools_mod
+    called = {"dcmd": None}
+    def fake_run(dcmd, **kw):
+        if isinstance(dcmd, list) and dcmd and dcmd[0] == "docker":
+            called["dcmd"] = dcmd
+            return type("R", (), {"stdout": "ok\n", "stderr": "", "returncode": 0})()
+        raise AssertionError("should not reach local shell")
+    old = {k: os.environ.get(k) for k in ("BASH_DOCKER", "BASH_DOCKER_READONLY", "BASH_DOCKER_MEM", "BASH_DOCKER_SWAP", "BASH_DOCKER_USER")}
+    old_which = tools_mod.shutil.which
+    old_run = tools_mod.subprocess.run
+    os.environ["BASH_DOCKER"] = "1"
+    os.environ["BASH_DOCKER_READONLY"] = "1"
+    os.environ["BASH_DOCKER_MEM"] = "512m"
+    os.environ["BASH_DOCKER_SWAP"] = "1g"
+    os.environ["BASH_DOCKER_USER"] = "1000:1000"
+    tools_mod.shutil.which = lambda name: "docker" if name == "docker" else None
+    tools_mod.subprocess.run = fake_run
+    try:
+        r = execute_tool("bash", {"cmd": "echo hi"})
+    finally:
+        for k, v in old.items():
+            if v is None: os.environ.pop(k, None)
+            else: os.environ[k] = v
+        tools_mod.shutil.which = old_which
+        tools_mod.subprocess.run = old_run
+    dcmd = called["dcmd"]
+    assert dcmd, "docker never called"
+    assert any(":/workspace:ro" in a for a in dcmd), f":ro mount missing: {dcmd}"
+    assert "--memory" in dcmd and "512m" in dcmd, f"--memory missing: {dcmd}"
+    assert "--memory-swap" in dcmd and "1g" in dcmd, f"--memory-swap missing: {dcmd}"
+    assert "--user" in dcmd and "1000:1000" in dcmd, f"--user missing: {dcmd}"
+    print("  [OK] bash: docker readonly/memory/user flags")
+
 def test_bash_docker_fallback():
     """If docker is configured but unavailable, fall back to the local shell."""
     import tools as tools_mod
@@ -174,6 +272,16 @@ def test_bash_docker_fallback():
     assert "local ok" in r, f"fallback failed: {r[:200]}"
     assert called["shell"] == 1, f"expected 1 local shell call, got {called['shell']}"
     print("  [OK] bash: docker fallback to local shell")
+
+def test_health_endpoint():
+    """GET /health returns status/model/sessions/rag_chunks without crashing."""
+    import agent as agent_mod
+    h = agent_mod.health()
+    assert h["status"] == "ok", h
+    assert h["model"] and h["workspace"], h
+    assert isinstance(h["rag_chunks"], int), h
+    assert h["uptime_s"] >= 0, h
+    print("  [OK] /health endpoint payload")
 
 def test_verify_py():
     r = verify_file(str(Path(WORK_DIR) / "agent.py"))
@@ -1061,7 +1169,9 @@ if __name__ == "__main__":
              test_rag_fast_search, test_code_detector_nudge,
              test_bash_docker_mode, test_bash_docker_fallback,
              test_parse_tool_json_lenient, test_tool_stats,
-             test_system_prompt_rules]
+             test_system_prompt_rules, test_dynamic_context,
+             test_dynamic_context_error_status, test_tool_error_fewshot,
+             test_bash_docker_flags, test_health_endpoint]
     passed = 0
     for t in tests:
         try:

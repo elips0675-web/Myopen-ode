@@ -1,6 +1,6 @@
 # My OpenCode v2 — Сводка для внешнего анализа (Kimi)
 
-Дата: 2026-08-06 · Тесты: **57/57 passed** · Сервер: `python agent.py` → http://localhost:8765
+Дата: 2026-08-06 · Тесты: **63/63 unit + 2/2 live (реальная qwen2.5-coder:7b)** · Сервер: `python agent.py` → http://localhost:8765
 Репозиторий: github.com/elips0675-web/Myopen-ode (master, работает локально, Windows, Python 3.14)
 
 ## Что это
@@ -36,7 +36,7 @@ call_ollama + bash-песочница, ~1110 стр.), `rag.py` (гибридн�
 6. **LSP**: добавлены clangd (C/C++), bash-language-server, css/scss/html + keywords;
    исправлена опечатка CREATE_NO_WINDOW (всплывало окно cmd).
 
-## Сессия 2026-08-06 (коммиты 33833c3, fc10cfb — запушены)
+## Сессия 2026-08-06 (коммиты 33833c3, fc10cfb, c80f55d — запушены)
 7. **Few-shot промпт**: правила 17–19 (один тул за ответ; финиш — plain text или `[DONE]`, без ```tool;
    код ТОЛЬКО через write/edit) + секция EXAMPLES (read→answer; edit-воркфлоу с многострочным old/new;
    исправление неверного пути). Code detector: проза с `def/class/import/...` без тула → system-nudge
@@ -54,6 +54,25 @@ call_ollama + bash-песочница, ~1110 стр.), `rag.py` (гибридн�
     truncation по последней `}` (мусор после блока) + trailing comma перед `}`. Подключён к
     tool-block и bare-парсеру.
 12. **Cache-Control**: `public, max-age=604800` на /static/app.js (version-hash — при CDN-развёртывании).
+13. **Регрессионный гард промпта**: test_system_prompt_rules проверяет правила 16-21 + EXAMPLES + VALID/INVALID.
+
+## Сессия 2026-08-06b — спринт по оценкам 3 (63/63 + 2/2 live)
+14. **Динамический контекст** (DS3 №1, Kimi3 P1): перед каждым вызовом модели —
+    «You are working in project: X (iteration N) / Last action: {tool} (result: ok|error)»
+    (_dynamic_context). 7B теряют контекст через 3-4 итерации.
+15. **Промпт**: правило 20 (tools ONLY в ```tool блоках, иначе IGNORED) + примеры VALID/INVALID
+    (negative examples); правило 21 (first turn — read перед write/edit).
+16. **Retry temp 0.1**: при повторной попытке Ollama-запроса после сбоя (attempt>0) — температура 0.1
+    (детерминированный ретрай), stream + non-stream.
+17. **Few-shot при ошибке тула** (вместо голого nudge): пример tried → error → corrected
+    (glob → read → edit с EXACT-текстом).
+18. **/health** эндпоинт (status/model/planner/workspace/sessions/rag_chunks/uptime).
+19. **Docker флаги**: BASH_DOCKER_READONLY (`:ro` mount), BASH_DOCKER_MEM/SWAP (лимиты RAM),
+    BASH_DOCKER_USER (не-root). 
+20. **test_live.py** — интеграционные тесты с реальной qwen2.5-coder:7b: «создай hello.py с greet»
+    (10.8s, прошёл) + простой вопрос (0.2s); auto-skip если Ollama выключен. Ловит регрессии
+    prompt-формата, которые моки не ловят.
+21. **USER_GUIDE.md** — установка, первый запуск, задачи, env-таблица, troubleshooting, скиллы/плагины.
 
 Из рекомендаций оценок 2 реализовано: few-shot, [DONE]-маркер, один тул за раз, статистика тулов,
 пост-обработка JSON, Docker-песочница, code detector, Cache-Control. «Таймаут после [CONFIRM]» — НЕ нужен:
@@ -61,12 +80,11 @@ call_ollama + bash-песочница, ~1110 стр.), `rag.py` (гибридн�
 
 ## Что осталось (P2)
 - xterm.js + WebSocket для долгих процессов (серверы, отладчики) — приоритет №2
-- Few-shot в момент ошибки тула (корректный пример вместо голого nudge)
-- Динамический контекст в промпте: «ты в проекте X, последнее действие Y»
-- Интеграционные тесты с реальной моделью (не только мок)
+- TOOL_STATS в промпт (нужен per-session stats)
+- Динамические элементы UI: индикатор «модель думает», прогресс-бар RAG, просмотр audit-лога
+- Рефакторинг монолитов: core/agent_loop.py, core/tool_parser.py, core/tool_executor.py, core/safety/*
 - RAG: сегментирование по папкам (6000 чанков ≈ 3 млн символов)
-- CLI-режим без UI; восстановление сессии после сбоя; кроссплатформенные тесты; user docs; update check
-- Разбить монолиты run_agent_loop / _execute_tool_inner (1000+ строк)
+- CLI-режим без UI; восстановление сессии после сбоя; кроссплатформенные тесты; update check
 - CodeMirror 6 / Monaco; AST multi-file edit (parso/tree-sitter)
 - JSON Schema constrained output (Ollama format:"json" — экспериментально)
 - Native tool calling — когда Ollama поддержит; Tauri desktop; deepseek-coder-v2:16b (12GB VRAM)
