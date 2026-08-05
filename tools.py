@@ -223,7 +223,7 @@ RULES:
 5. Every tool call MUST include ALL required fields. Missing fields will be rejected.
 6. When user confirms with "yes" or "да" — you MUST repeat the exact same ```tool block. No explanations.
 7. NEVER invent tools and NEVER explain how to create a tool. All tools already exist and are listed below.
-8. If a tool returns an error (file not found, bad args) — fix the arguments or report the error to the user. Never give tutorials.
+8. If a tool returns an error (file not found, bad args) — fix the arguments and retry the tool (or use glob to locate the file). NEVER give tutorials, multi-step advice, or checklists. Report the final result only.
 9. If no tool is needed to answer — reply with plain text, no tool block.
 10. Answer in the user's language (same language as the last user message).
 11. Simple questions ("who are you", "what can you do", greetings, thanks, small talk) — answer DIRECTLY with ONE short sentence, NEVER call any tool, NEVER use code blocks. Never call `skill` with an invented name; if a tool result says "not found" — do NOT call that tool again. Never copy tool results or history into your text reply.
@@ -666,7 +666,7 @@ def _execute_tool_inner(name, args):
             if err: return err
             pp = resolve(p)
             if not pp.exists():
-                return f"Error: {p} not found" + _similar_files(p)
+                return f"Error: {p} not found" + (_similar_files(p) or ". Use the glob tool to find files. Do NOT give tutorials — retry with a correct path.")
             if pp.is_dir(): return f"'{p}' is a directory. Use list tool to see contents."
             return pp.read_text("utf-8")
         elif name == "web":
@@ -691,7 +691,8 @@ def _execute_tool_inner(name, args):
             err = ensure_safe_path(args["path"])
             if err: return err
             p = resolve(args["path"])
-            if not p.exists(): return f"Error: {p} not found" + _similar_files(args["path"])
+            if not p.exists():
+                return f"Error: {p} not found" + (_similar_files(args["path"]) or ". Use the glob tool to find files. Do NOT give tutorials — retry with a correct path.")
             old = args.get("old", ""); new = args.get("new", "")
             content = p.read_text("utf-8")
             if old not in content:
