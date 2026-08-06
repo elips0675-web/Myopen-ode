@@ -1,11 +1,12 @@
 # My OpenCode — Status
 
-## Что сделано (Core) — 58/58 тестов
+## Что сделано (Core) — 69/69 тестов
 - [x] FastAPI + SSE, agent loop (12 итераций, таймаут, cancel), prompt-based tool calling, стриминг тулов в UI
 - [x] 28 инструментов (read/write/edit/bash/glob/grep/list/web/websearch/diff/commit/undo/verify/plan/search/question/skill/patch/task/todo/lsp/testgen/db_query/deps/mcp + плагины)
 - [x] Сессии SQLite (+миграция из JSON), multi-project, RAG (BM25+эмбеддинги, FAISS/numpy, RAG_MAX_CHUNKS, фоновая индексация), LLM кеш TTL, memory, skills, subagents, slash-команды, MCP сервер+клиенты, LSP (18 серверов), CodeMirror + терминал SSE, pywebview desktop, плагины, audit log
 - [x] Безопасность: whitelist bash (не blacklist) + рекурсивная проверка python -c/node -e + запрет `..`-обхода; Docker-песочница (BASH_DOCKER=1, opt-in, fallback); path jail через resolve() (symlink-safe); подтверждение деструктивных операций; блок абсурдных путей; anti-loop; graceful cancellation
-- [x] Промпт: правила 1-19 + EXAMPLES (few-shot), code detector, tool-error nudge, lenient JSON (_parse_tool_json), live streaming (первый токен ~2.6s), статистика тулов (TOOL_STATS + /api/stats), Cache-Control static, регрессионный гард промпта (test_system_prompt_rules)
+- [x] Промпт: правила 1-21 + EXAMPLES + VALID/INVALID (few-shot), code detector, tool-error nudge, lenient JSON (_parse_tool_json), live streaming (первый токен ~2.6s), статистика тулов (TOOL_STATS + /api/stats), Cache-Control static, регрессионный гард промпта (test_system_prompt_rules)
+- [x] Спринт (2026-08-07): per-session tool-errors → advice в динамический контекст; модель-роутер (2+ пустые итерации → fallback на основную); RAG_STATUS + /api/rag/status + индикатор в UI; /api/audit + просмотр лога в UI; CLI python -m myopencode; crash recovery (checkpoint каждые 2 итерации + interrupted-маркер)
 
 ## Оценки внешних ревьюверов (2026-08)
 Kimi 2: 8.3/10 → DeepSeek 2: 8.5/10 → DeepSeek 3: 8.6/10 → Kimi 3: 8.7/10
@@ -22,7 +23,7 @@ Kimi 2: 8.3/10 → DeepSeek 2: 8.5/10 → DeepSeek 3: 8.6/10 → Kimi 3: 8.7/10
 - [x] Правило 21: «On the first turn, READ at least one file before writing/editing»
 - [x] Retry с температурой 0.1 после сбоя Ollama (attempt>0 → temp 0.1, stream+non-stream)
 - [x] Bare-парсер: регулярка {"tool":"..."} в любом контексте уже была (bare_tool_pat) — покрыта; @tool/`// tool:` маркеры — не требуются (модель пишет JSON)
-- [ ] TOOL_STATS в промпт осторожно (нужен per-session stats: «TOOL STATS (last 5 calls)» + advice; НЕ сырые цифры, НЕ чужие сессии)
+- [x] Per-session TOOL_STATS: «Tool errors this session» (до 3 тулов) + advice «use glob or list to find the real path» в _dynamic_context (test_sess_stats_advice)
 
 ### Этап 3. Few-shot при ошибке тула (DS2, DS3 №5, Kimi3 P1) — СДЕЛАНО
 - [x] Вместо голого nudge — конкретный пример исправления (tried → error → corrected tool: glob → read → edit); test_tool_error_fewshot; live-подтверждение в test_live.py
@@ -30,7 +31,7 @@ Kimi 2: 8.3/10 → DeepSeek 2: 8.5/10 → DeepSeek 3: 8.6/10 → Kimi 3: 8.7/10
 ### Этап 4. Инфраструктура (быстрые победы) — СДЕЛАНО
 - [x] /health эндпоинт (status, model, planner, workspace, sessions, rag_chunks, uptime); test_health_endpoint
 - [x] Docker: BASH_DOCKER_READONLY=1 (read-only mount), BASH_DOCKER_MEM/--memory-swap/--user; test_bash_docker_flags
-- [ ] UI: индикатор «модель думает» до первого токена; прогресс-бар RAG-индексации; просмотр .agent_audit.log в UI
+- [x] UI: индикатор «модель думает» до первого токена (уже был); RAG-статус (chunks / индекс-прогресс, poll 5s); кнопка 📋 просмотра .agent_audit.log (/api/audit)
 
 ### Этап 5. Интеграционные тесты с реальной моделью (DS3 №2, Kimi3 P2) — СДЕЛАНО
 - [x] test_live.py: «создай hello.py с функцией greet» (10.8s, прошёл live 2/2) + простой вопрос; skip без Ollama; python test_live.py [--full]
@@ -46,11 +47,11 @@ Kimi 2: 8.3/10 → DeepSeek 2: 8.5/10 → DeepSeek 3: 8.6/10 → Kimi 3: 8.7/10
 - [ ] Полноценный PTY для долгих процессов (npm start, python server.py) — сейчас SSE-терминал
 
 ### Этап 9. Средние фичи (P2, по оценкам)
+- [x] CLI-режим без UI (python -m myopencode "задача"; NO_CONFIRM=1; test_cli_main; live: «what is 2+2?» → «4»)
+- [x] Восстановление сессии после падения сервера: state-файл на время цикла, checkpoint каждые 2 итерации, «⚠ interrupted» в списке сессий, маркер-резюме при возобновлении (test_session_checkpoint)
+- [x] Модель-роутер: при 2+ итерациях без tool-блоков авто-переключение на основную модель (метрика: % tool-blocks; test_model_router)
 - [ ] RAG-сегментация по папкам (>100k строк, 6000 чанков ≈ 3 млн символов)
-- [ ] CLI-режим без UI (python -m myopencode "задача"; mcp_server.py уже есть)
-- [ ] Восстановление сессии после падения сервера (storage есть, но не для восстановления)
 - [ ] Восстановление после сбоев: перезапуск без потери контекста
-- [ ] Модель-роутер: авто-переключение на qwen2.5-coder при галлюцинациях deepseek-r1 (метрика: % tool-blocks)
 - [ ] RAG source attribution: цитирование [file:line]
 - [ ] JSON Schema constrained output (Ollama format:"json" — экспериментально)
 - [ ] Тесты кроссплатформенности (Windows/Linux/macOS)

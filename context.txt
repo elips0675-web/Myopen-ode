@@ -194,6 +194,29 @@ BASH_DOCKER_SWAP, BASH_DOCKER_USER.
 (21) USER_GUIDE.md (install, first run, tasks, env table, troubleshooting,
 skills/plugins how-to).
 Tests: 63/63 unit + 2/2 live.
+UPDATE (2026-08-07) — sprint 2 (69/69 tests, live CLI OK):
+(22) PER-SESSION TOOL ERRORS: _sess_record() counts calls/errors per tool per
+session; _dynamic_context appends "Tool errors this session" (max 3 tools) +
+"Advice: use glob or list to find the real path before read/edit/write".
+Test: test_sess_stats_advice.
+(23) MODEL ROUTER: if the active model produces no tool blocks for 2 iterations
+(it>0), route to the default MODEL (user_model=None; active_model persists
+between iterations; planner is never cached beyond it==0). Fixed the
+recompute-each-iteration dead code. Test: test_model_router.
+(24) RAG STATUS: RAG_STATUS {phase, files_done, files_total, chunks, updated}
+updated in rag_index(); GET /api/rag/status; UI polls every 5s and shows
+indexing progress or chunk count. (rag.py needed "import time" - added).
+Test: test_rag_status_api.
+(25) AUDIT IN UI: GET /api/audit?limit=N (lenient int parse, max 500);
+topbar button opens the .agent_audit.log in a popup. Test: test_audit_api.
+(26) CLI MODE: python -m myopencode "<task>" (myopencode.py, NO_CONFIRM=1,
+prints final output; exit 2 on no args). Live: "what is 2+2?" -> "4".
+Test: test_cli_main.
+(27) CRASH RECOVERY: .agent_sessions/<sid>.state created on loop start,
+touched on checkpoints (save every 2nd iteration), removed on clean finish;
+session_interrupted() = stale state (>90s) -> "interrupted": true in
+/api/sessions (+"/{sid}"), "⚠ interrupted" badge in UI, resume marker in
+history. Test: test_session_checkpoint.
 KIMI EVAL 3 (2026-08-06): 8.7/10 — "most mature open-source coding agent seen on 7B". For 9/10:
 split monoliths (agent.py/tools.py -> core/agent_loop.py, core/tool_parser.py,
 core/tool_executor.py, core/safety/bash_guard.py, core/safety/path_guard.py),

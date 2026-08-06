@@ -172,6 +172,25 @@ def delete_session_db(sid):
         pass
     f = SESSIONS_DIR / f"{sid}.json"
     if f.exists(): f.unlink()
+    try:
+        _state_path(sid).unlink(missing_ok=True)
+    except OSError:
+        pass
+
+def _state_path(sid):
+    return SESSIONS_DIR / f"{sid}.state"
+
+def session_interrupted(sid):
+    """True if the last run of this session crashed mid-loop (stale runtime
+    state file: created when the loop starts, touched on checkpoints, removed
+    on clean finish; anything still there after >90s is a crashed run)."""
+    try:
+        p = _state_path(sid)
+        if p.exists() and time.time() - p.stat().st_mtime > 90:
+            return True
+    except OSError:
+        pass
+    return False
 
 def list_sessions_db():
     sessions = []
@@ -335,16 +354,34 @@ def _parse_tool_json(raw):
                     break
     raise json.JSONDecodeError("unparseable tool JSON", raw, 0)
 
-def _dynamic_context(tool_name, tool_text, it):
+def _dynamic_context(tool_name, tool_text, it, sess_stats=None):
     """Short orientation block for the model: which project, what was the
-    last tool action and whether it succeeded. 7B models lose track of
-    context after 3-4 iterations — this anchors them."""
+    last tool action and whether it succeeded, plus per-session tool errors.
+    7B models lose track of context after 3-4 iterations — this anchors them."""
     project = WORK_DIR.name or str(WORK_DIR)
     parts = [f"You are working in project: {project} (iteration {it + 1})"]
     if tool_name:
         status = "error" if tool_text.startswith(("Error:", "Blocked:")) else "ok"
         parts.append(f"Last action: {tool_name} (result: {status})")
+    if sess_stats:
+        errs = {n: s for n, s in sess_stats.items() if s.get("errors", 0) > 0}
+        if errs:
+            lines = []
+            for name, s in sorted(errs.items())[:3]:
+                lines.append(f"- {name}: {s['errors']} error(s) of {s['calls']} call(s)")
+            parts.append("Tool errors this session:\n" + "\n".join(lines)
+                         + "\nAdvice: fix the arguments — use glob or list to find the real path "
+                           "before read/edit/write.")
     return "\n".join(parts) + "\n"
+
+def _sess_record(stats, name, result):
+    """Per-session tool stats (calls/errors) used for the dynamic context advice."""
+    if stats is None:
+        return
+    s = stats.setdefault(name, {"calls": 0, "errors": 0})
+    s["calls"] += 1
+    if isinstance(result, str) and (result.startswith("Error:") or result.startswith("Blocked:")):
+        s["errors"] += 1
 def run_agent_loop(msgs, session_id, events=None, model=None):
     """Run agent loop. events: optional callback(ev: dict) for live tool progress.
     model: user-selected model overrides MODEL (empty = default)."""
@@ -353,6 +390,16 @@ def run_agent_loop(msgs, session_id, events=None, model=None):
             try: events(ev)
             except: pass
     msgs = summarize_context(msgs)
+    if session_id:
+        was_interrupted = session_interrupted(session_id)
+        try:
+            _state_path(session_id).write_text(
+                json.dumps({"running": True, "started_at": datetime.now().isoformat()}))
+        except OSError:
+            pass
+        if was_interrupted:
+            msgs.append({"role": "system",
+                         "content": "[session was interrupted mid-run earlier — continuing from the last checkpoint]"})
     full = ""
     tool_pat = re.compile('```(?:tool|json)\n(.*?)\n```', re.DOTALL)
     bare_tool_pat = re.compile(r'\{\s*"tool"\s*:\s*"[^"]+"\s*.*?\}', re.DOTALL)
@@ -369,6 +416,10 @@ def run_agent_loop(msgs, session_id, events=None, model=None):
     repeats = 0
     last_result_name = None
     last_result_text = ""
+    sess_stats = {}
+    no_tool_iterations = 0
+    active_model = None
+    user_model = model
 
     for it in range(max_iter):
         if time.time() - start_time > max_time:
@@ -399,7 +450,9 @@ def run_agent_loop(msgs, session_id, events=None, model=None):
                 continue
             _pending_set(session_id, name, tc)  # not confirmed yet, keep waiting
 
-        current_model = model or (PLANNER_MODEL if it == 0 else MODEL)
+        if active_model is None or it > 0:
+            active_model = user_model or (MODEL if it > 0 else PLANNER_MODEL)
+        current_model = active_model
         if not model and it == 0 and PLANNER_MODEL not in _available_models:
             log.info("PLANNER_MODEL %s not installed, using %s", PLANNER_MODEL, MODEL)
             current_model = MODEL
@@ -409,7 +462,9 @@ def run_agent_loop(msgs, session_id, events=None, model=None):
                 # short first message = simple question/chat, planner is a waste
                 log.info("Short first message — skipping planner, using %s", MODEL)
                 current_model = MODEL
-        dyn = {"role": "system", "content": _dynamic_context(last_result_name, last_result_text, it)}
+        if it > 0:
+            active_model = current_model
+        dyn = {"role": "system", "content": _dynamic_context(last_result_name, last_result_text, it, sess_stats)}
         if events:
             try:
                 content = stream_ollama(
@@ -471,6 +526,15 @@ def run_agent_loop(msgs, session_id, events=None, model=None):
 
 
         if not tool_blocks:
+            no_tool_iterations += 1
+            if no_tool_iterations >= 2 and it > 0 and current_model != MODEL:
+                # model keeps ignoring tool format — route to the main model
+                log.warning("Model %s produced no tool blocks for %d iterations — routing to %s",
+                            current_model, no_tool_iterations, MODEL)
+                user_model = None
+                active_model = MODEL
+                full += _strip_system_markers(content) + "\n"
+                continue
             if not model and it == 0 and current_model != MODEL:
                 # planner model (1.5b) often ignores tool format — retry with main model
                 log.info("Planner iteration produced no tool blocks; retrying with %s", MODEL)
@@ -555,6 +619,7 @@ def run_agent_loop(msgs, session_id, events=None, model=None):
                 continue
             if name == "question":
                 r = execute_tool(name, tc)
+                _sess_record(sess_stats, name, r)
                 _emit({"type": "tool", "name": name, "args": tc, "result": r[:200]})
                 all_results.append(f"[tool:{name}] {r[:2000]}")
                 calls_made.append(name)
@@ -582,6 +647,7 @@ def run_agent_loop(msgs, session_id, events=None, model=None):
                 last = (msgs[-1]["content"].strip().lower() if msgs else "")[:5]
                 if last in ("yes","y","go a","да","ok","cont","proc","do i"):
                     r = execute_tool(name,tc)
+                    _sess_record(sess_stats, name, r)
                     _emit({"type": "tool", "name": name, "args": tc, "result": r[:200]})
                     all_results.append(f"[tool:{name}] {r[:2000]}")
                     calls_made.append(name)
@@ -597,11 +663,14 @@ def run_agent_loop(msgs, session_id, events=None, model=None):
                     needs_break=True; break
                 continue
             r = execute_tool(name,tc)
+            _sess_record(sess_stats, name, r)
             _emit({"type": "tool", "name": name, "args": tc, "result": r[:200]})
             all_results.append(f"[tool:{name}] {r[:2000]}")
             calls_made.append(name)
             last_result_name, last_result_text = name, r[:2000]
 
+        if calls_made:
+            no_tool_iterations = 0
         if needs_break: break
         if all_results:
             combined = "\n".join(all_results)
@@ -614,12 +683,25 @@ def run_agent_loop(msgs, session_id, events=None, model=None):
             full += f"\n[tool: TOKEN_LIMIT — estimated {int(total_tokens)} tokens exceeded {MAX_TOKENS}]\n"
             break
 
+        if session_id and (it + 1) % 2 == 0:
+            # runtime checkpoint: survive server crashes mid-run
+            try:
+                old = load_session(session_id) or {}
+                save_session(session_id, old.get("title", session_id), msgs[1:])
+                _state_path(session_id).touch()
+            except Exception:
+                pass
+
     if session_id:
         try:
             old = load_session(session_id) or {}
             save_session(session_id, old.get("title", session_id), msgs[1:])
         except Exception as e:
             log.warning("Save session %s: %s", session_id, e)
+        try:
+            _state_path(session_id).unlink(missing_ok=True)
+        except OSError:
+            pass
 
     return full
 
@@ -654,6 +736,26 @@ def app_js():
 def tool_stats():
     """Per-tool call/error counters (diagnostics; shows repeated model failures)."""
     return TOOL_STATS
+
+@app.get("/api/rag/status")
+def rag_status():
+    """RAG indexing progress (phase, files done/total, chunks) for the UI."""
+    from rag import RAG_STATUS
+    return dict(RAG_STATUS)
+
+@app.get("/api/audit")
+def audit_log(limit: str = "50"):
+    """Last N lines of .agent_audit.log (action audit view in the UI)."""
+    try:
+        n = int(limit)
+    except (TypeError, ValueError):
+        n = 50
+    n = max(1, min(n, 500))
+    try:
+        lines = (WORK_DIR / ".agent_audit.log").read_text("utf-8", errors="ignore").splitlines()
+        return {"lines": lines[-n:]}
+    except Exception as e:
+        return {"error": str(e)}
 
 @app.get("/health")
 def health():
@@ -810,7 +912,10 @@ async def upload_file(req: FileUploadReq):
 
 @app.get("/api/sessions")
 def list_sessions():
-    return list_sessions_db()
+    sessions = list_sessions_db()
+    for s in sessions:
+        s["interrupted"] = session_interrupted(s["id"])
+    return sessions
 
 @app.get("/api/sessions/search")
 def search_sessions(q: str = "", limit: int = 20):
@@ -872,6 +977,7 @@ def create_session(req: SessionReq):
 def get_session(sid: str):
     s = load_session(sid)
     if s is None: return {"error": "Not found"}
+    s["interrupted"] = session_interrupted(sid)
     return s
 
 @app.delete("/api/sessions/{sid}")

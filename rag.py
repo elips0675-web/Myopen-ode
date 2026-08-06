@@ -1,6 +1,6 @@
 """RAG - semantic code search via Ollama embeddings with incremental disk cache + hybrid BM25."""
 
-import json, os, glob, logging, hashlib, math, re, threading
+import json, os, glob, logging, hashlib, math, re, threading, time
 from pathlib import Path
 import requests
 
@@ -29,6 +29,9 @@ BM25_DF = {}       # term -> doc frequency
 BM25_N = 0         # doc count
 BM25_AVGLEN = 1.0
 RAG_LOCK = threading.RLock()  # thread safety (uvicorn multi-threaded)
+
+RAG_STATUS = {"phase": "idle", "files_done": 0, "files_total": 0,
+              "chunks": 0, "updated": 0.0}  # indexing progress for the UI
 
 EXT_PATTERNS = [
     ("**/*.py", 200), ("**/*.js", 100), ("**/*.ts", 100), ("**/*.go", 50),
@@ -135,6 +138,9 @@ def rag_index():
             if old != (mtime, size): changed.append((rel, mtime, size))
         removed = [rel for rel in _FILE_STATS if rel not in {f[0] for f in files}]
 
+        RAG_STATUS.update({"phase": "indexing", "files_done": 0,
+                           "files_total": len(files), "chunks": len(RAG_CHUNKS or [])})
+
         if not RAG_CHUNKS:
             # cold start: load everything from file caches
             RAG_CHUNKS = []
@@ -143,6 +149,7 @@ def rag_index():
                 if chunks:
                     RAG_CHUNKS += chunks
                     _FILE_STATS[rel] = (mtime, size)
+                RAG_STATUS["files_done"] += 1
 
         if removed or changed:
             # rebuild: drop old entries for changed/removed files, re-embed changed
@@ -152,9 +159,13 @@ def rag_index():
                 _FILE_STATS.pop(rel, None)
             for rel, mtime, size in changed:
                 _index_file(rel, mtime, size)
+                RAG_STATUS["files_done"] += 1
 
-        if not RAG_CHUNKS: return
+        if not RAG_CHUNKS:
+            RAG_STATUS.update({"phase": "idle", "updated": time.time()})
+            return
         if not changed and not removed and RAG_INDEX and not RAG_DIRTY:
+            RAG_STATUS.update({"phase": "idle", "chunks": len(RAG_CHUNKS), "updated": time.time()})
             return  # nothing changed since last index
         if RAG_MAX_CHUNKS and len(RAG_CHUNKS) > RAG_MAX_CHUNKS:
             # hard memory cap: drop oldest chunks (newest files were appended last)
@@ -165,6 +176,7 @@ def rag_index():
         RAG_INDEX = [c["emb"] for c in RAG_CHUNKS]
         _rebuild_fast_index()
         RAG_DIRTY = False
+        RAG_STATUS.update({"phase": "idle", "chunks": len(RAG_CHUNKS), "updated": time.time()})
 
 def _rebuild_fast_index():
     """Build a FAISS (or numpy) index for fast vector search; falls back to

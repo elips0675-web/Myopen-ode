@@ -62,7 +62,7 @@ function groupSessions(ss){
     g[1].forEach(function(s){
       var cls=s.id===curSid?'sess-card active':'sess-card';
       var nmsg=s.messages?s.messages.length:0;
-      h+='<div class="'+cls+'" onclick="openSession(\''+s.id+'\')"><div class="sess-title">'+esc(s.title)+'</div><div class="sess-meta"><span class="sess-time">'+timeAgo(s.updated)+'</span><span class="sess-count">'+nmsg+' msgs</span></div><button class="sess-del" onclick="event.stopPropagation();delSession(\''+s.id+'\')">&times;</button></div>';
+      h+='<div class="'+cls+'" onclick="openSession(\''+s.id+'\')"><div class="sess-title">'+esc(s.title)+'</div><div class="sess-meta"><span class="sess-time">'+timeAgo(s.updated)+'</span><span class="sess-count">'+nmsg+' msgs</span>'+(s.interrupted?'<span class="sess-int" style="color:var(--cnl-btn);font-size:10px;margin-left:6px">&#9888; interrupted</span>':'')+'</div><button class="sess-del" onclick="event.stopPropagation();delSession(\''+s.id+'\')">&times;</button></div>';
     });
   });
   $('sess-list').innerHTML=h||'<div style="padding:20px 16px;color:var(--st-c);font-size:12px;text-align:center">No sessions</div>';
@@ -263,6 +263,28 @@ function init(){
   }).catch(function(){});
   fetch(A+'/api/project').then(function(r){return r.json()}).then(function(p){$('prj').textContent=p.name}).catch(function(){});
   loadProjects();loadFiles();loadSessions();loadSkills();loadTabPaths();cl();$('ta').focus();
+  ragPoll();
+}
+function ragPoll(){
+  fetch(A+'/api/rag/status').then(function(r){return r.json()}).then(function(s){
+    if(s.phase=='indexing'&&s.files_total>$('ragst').textContent){
+      $('ragst').textContent='RAG: '+s.files_done+'/'+s.files_total;
+    } else if(s.phase=='indexing'){
+      $('ragst').textContent='RAG: '+s.files_done+'/'+s.files_total;
+    } else if(s.chunks>$('ragst')._c||s.phase=='idle'){
+      $('ragst').textContent=s.chunks?('RAG: '+s.chunks+' chunks'):'';
+    }
+    $('ragst')._c=s.chunks;
+    setTimeout(ragPoll,5000);
+  }).catch(function(){setTimeout(ragPoll,10000)});
+}
+function showAudit(){
+  var w=window.open('','audit','width=700,height=500');
+  if(!w){alert('Popup blocked — allow popups to view the audit log');return}
+  fetch(A+'/api/audit?limit=100').then(function(r){return r.json()}).then(function(d){
+    w.document.write('<html><head><title>Audit log</title><style>body{background:#111;color:#ddd;font:12px monospace;padding:10px;white-space:pre-wrap;word-break:break-all}</style></head><body>'+
+      (d.lines?esc(d.lines.join('\n')):(d.error||'empty'))+'</body></html>');w.document.close();
+  }).catch(function(e){w.document.write('Error: '+e.message);w.document.close()});
 }
 function cl(){fetch(A+'/api/models').then(function(){$('old').className='g';$('ols').textContent='Ollama OK'}).catch(function(){$('old').className='r';$('ols').textContent='Ollama -';setTimeout(cl,3000)})}
 

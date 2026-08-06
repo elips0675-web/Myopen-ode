@@ -1146,6 +1146,137 @@ def test_todo_thread_safety():
     TODO_LIST.clear()
     print("  [OK] todo thread safety")
 
+def test_sess_stats_advice():
+    """Failed tools accumulate in per-session stats and the advice appears in
+    the dynamic context of the next model call."""
+    import agent as agent_mod
+    calls = []
+    def mock_ollama(msgs, model):
+        calls.append(msgs)
+        if len(calls) == 1:
+            return '```tool\n{"tool": "read", "path": "missing_xyz_advice.txt"}\n```', 10
+        return "I could not read the file. There is nothing more to do.", 10
+    original = agent_mod.call_ollama
+    agent_mod.call_ollama = mock_ollama
+    try:
+        agent_mod.run_agent_loop([{"role": "user", "content": "read the file"}], None)
+    finally:
+        agent_mod.call_ollama = original
+    dyn = [m for m in calls[-1] if m.get("role") == "system"
+           and "Tool errors this session" in m.get("content", "")]
+    assert dyn, "session tool-error advice missing"
+    assert "read: 1 error(s)" in dyn[-1]["content"], dyn[-1]["content"]
+    assert "use glob or list to find the real path" in dyn[-1]["content"], dyn[-1]["content"]
+    print("  [OK] per-session tool-error advice in dynamic context")
+
+def test_model_router():
+    """When the user-selected model produces no tool blocks for 3 iterations,
+    the loop routes to the default MODEL."""
+    import agent as agent_mod
+    calls = []
+    def mock_ollama(msgs, model):
+        calls.append(model)
+        return "A friendly reply without any tool blocks.", 10
+    original = agent_mod.call_ollama
+    agent_mod.call_ollama = mock_ollama
+    try:
+        agent_mod.run_agent_loop([{"role": "user", "content": "do the thing"}], None,
+                                 model="bad_model_x")
+    finally:
+        agent_mod.call_ollama = original
+    assert calls, "model never called"
+    first = calls[0]
+    assert first == "bad_model_x", f"first call should use selected model, got {first}"
+    assert agent_mod.MODEL in calls, f"router never routed to {agent_mod.MODEL}: calls={calls}"
+    assert calls.index(agent_mod.MODEL) >= 2, f"routed too early: calls={calls}"
+    print("  [OK] model router falls back to default model after 3 empty iterations")
+
+def test_rag_status_api():
+    """GET /api/rag/status returns the RAG indexing progress dict."""
+    import agent as agent_mod
+    from fastapi.testclient import TestClient
+    client = TestClient(agent_mod.app)
+    r = client.get("/api/rag/status")
+    assert r.status_code == 200, f"status: {r.status_code} {r.text}"
+    d = r.json()
+    assert d["phase"] in ("idle", "indexing"), d
+    assert isinstance(d["chunks"], int) and d["files_done"] >= 0, d
+    assert "updated" in d, d
+    print("  [OK] /api/rag/status payload")
+
+def test_audit_api():
+    """GET /api/audit returns recent lines of the action audit log."""
+    import agent as agent_mod
+    from fastapi.testclient import TestClient
+    client = TestClient(agent_mod.app)
+    r = client.get("/api/audit?limit=3")
+    assert r.status_code == 200, f"audit: {r.status_code} {r.text}"
+    d = r.json()
+    assert "lines" in d, d
+    assert len(d["lines"]) <= 3, f"limit not applied: {len(d['lines'])}"
+    r2 = client.get("/api/audit?limit=abc")
+    assert r2.status_code == 200, f"bad limit should fall back: {r2.text}"
+    print("  [OK] /api/audit endpoint")
+
+def test_cli_main():
+    """python -m myopencode runs the agent loop headlessly with NO_CONFIRM."""
+    import myopencode as cli
+    calls = []
+    def fake_loop(msgs, session_id, **kw):
+        calls.append((msgs, session_id))
+        return "built hello.py"
+    old = cli.run_agent_loop
+    cli.run_agent_loop = fake_loop
+    try:
+        assert cli.main(["create hello.py"]) == 0
+        assert cli.main([]) == 2, "no args should print usage and return 2"
+    finally:
+        cli.run_agent_loop = old
+    assert len(calls) == 1 and calls[0][0][0]["content"] == "create hello.py", calls
+    assert calls[0][1] is None, "CLI uses a fresh session"
+    print("  [OK] CLI entry (python -m myopencode)")
+
+def test_session_checkpoint():
+    """Runtime state file marks interrupted runs; clean runs remove it."""
+    import agent as agent_mod, shutil
+    tmp_sessions = WORK_DIR / ".test_cp"
+    shutil.rmtree(tmp_sessions, ignore_errors=True)
+    tmp_sessions.mkdir(exist_ok=True)
+    old_dir, old_db = agent_mod.SESSIONS_DIR, agent_mod.DB_PATH
+    agent_mod.SESSIONS_DIR = tmp_sessions
+    agent_mod.DB_PATH = tmp_sessions / "sessions.db"
+    try:
+        sid = "cp-test"
+        agent_mod.save_session(sid, "CP", [{"role": "user", "content": "hi"}])
+        assert not agent_mod.session_interrupted(sid), "no state file -> not interrupted"
+        sp = agent_mod._state_path(sid)
+        sp.write_text('{"running": true}')
+        import os as os_mod
+        os_mod.utime(sp, (time.time() - 200, time.time() - 200))
+        assert agent_mod.session_interrupted(sid), "stale state -> interrupted"
+        old = sp.stat().st_mtime
+        sp.write_text('{"running": true}')
+        assert not agent_mod.session_interrupted(sid), "fresh state -> running, not interrupted"
+        sp.unlink()
+        # loop creates the marker and removes it on clean finish
+        calls = []
+        def mock_ollama(msgs, model):
+            calls.append(model)
+            return "plain text answer without tools", 5
+        orig = agent_mod.call_ollama
+        agent_mod.call_ollama = mock_ollama
+        try:
+            agent_mod.run_agent_loop([{"role": "user", "content": "long task to avoid planner skip"}], sid)
+        finally:
+            agent_mod.call_ollama = orig
+        assert not sp.exists(), "state file must be removed after a clean run"
+        s = agent_mod.load_session(sid)
+        assert s and s["messages"], f"checkpoint/save failed: {s}"
+    finally:
+        agent_mod.SESSIONS_DIR, agent_mod.DB_PATH = old_dir, old_db
+        shutil.rmtree(tmp_sessions, ignore_errors=True)
+    print("  [OK] session checkpoint + interrupted marker")
+
 if __name__ == "__main__":
     print(f"\nSmoke tests for agent.py\n{'='*40}")
     tests = [test_read, test_read_absolute, test_read_url, test_list, test_glob,
@@ -1171,7 +1302,10 @@ if __name__ == "__main__":
              test_parse_tool_json_lenient, test_tool_stats,
              test_system_prompt_rules, test_dynamic_context,
              test_dynamic_context_error_status, test_tool_error_fewshot,
-             test_bash_docker_flags, test_health_endpoint]
+             test_bash_docker_flags, test_health_endpoint,
+             test_sess_stats_advice, test_model_router,
+             test_rag_status_api, test_audit_api,
+             test_cli_main, test_session_checkpoint]
     passed = 0
     for t in tests:
         try:
