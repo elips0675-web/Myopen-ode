@@ -727,7 +727,7 @@ def app_js():
     try:
         path = WORK_DIR / "static" / "app.js"
         resp = FileResponse(path, media_type="text/javascript")
-        resp.headers["Cache-Control"] = "public, max-age=604800"
+        resp.headers["Cache-Control"] = "public, max-age=300"
         return resp
     except OSError as e:
         return JSONResponse({"error": f"static/app.js unavailable: {e}"}, status_code=404)
