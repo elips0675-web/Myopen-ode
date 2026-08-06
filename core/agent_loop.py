@@ -21,6 +21,7 @@ log = logging.getLogger('agent_loop')
 VALID_TOOLS = ("read", "write", "edit", "bash", "glob", "grep", "list", "web",
                "diff", "commit", "undo", "verify", "plan", "search", "websearch",
                "question", "skill", "patch", "task", "todo", "lsp",
+               "testgen", "db_query", "deps", "mcp",
                "snapshot", "restore")
 
 

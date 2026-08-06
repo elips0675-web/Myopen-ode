@@ -1,8 +1,8 @@
 # My OpenCode — Status
 
-## Что сделано (Core) — 69/69 тестов
+## Что сделано (Core) — 80/80 тестов
 - [x] FastAPI + SSE, agent loop (12 итераций, таймаут, cancel), prompt-based tool calling, стриминг тулов в UI
-- [x] 28 инструментов (read/write/edit/bash/glob/grep/list/web/websearch/diff/commit/undo/verify/plan/search/question/skill/patch/task/todo/lsp/testgen/db_query/deps/mcp + плагины)
+- [x] 27 инструментов (read/write/edit/bash/glob/grep/list/web/websearch/diff/commit/undo/verify/plan/search/question/skill/patch/task/todo/lsp/testgen/db_query/deps/mcp/snapshot/restore + плагины)
 - [x] Сессии SQLite (+миграция из JSON), multi-project, RAG (BM25+эмбеддинги, FAISS/numpy, RAG_MAX_CHUNKS, фоновая индексация), LLM кеш TTL, memory, skills, subagents, slash-команды, MCP сервер+клиенты, LSP (18 серверов), CodeMirror + терминал SSE, pywebview desktop, плагины, audit log
 - [x] Безопасность: whitelist bash (не blacklist) + рекурсивная проверка python -c/node -e + запрет `..`-обхода; Docker-песочница (BASH_DOCKER=1, opt-in, fallback); path jail через resolve() (symlink-safe); подтверждение деструктивных операций; блок абсурдных путей; anti-loop; graceful cancellation
 - [x] Промпт: правила 1-21 + EXAMPLES + VALID/INVALID (few-shot), code detector, tool-error nudge, lenient JSON (_parse_tool_json), live streaming (первый токен ~2.6s), статистика тулов (TOOL_STATS + /api/stats), Cache-Control static, регрессионный гард промпта (test_system_prompt_rules)
@@ -10,8 +10,9 @@
 
 ## Оценки внешних ревьюверов (2026-08)
 Kimi 2: 8.3/10 → DeepSeek 2: 8.5/10 → DeepSeek 3: 8.6/10 → Kimi 3: 8.7/10
-Путь к 9/10: рефакторинг монолитов, динамический контекст, few-shot при ошибках, USER_GUIDE.md
-Путь к 9.5/10: xterm.js+WS, интеграционные тесты, RAG-сегментация по папкам, CLI-режим
+Путь к 9/10: рефакторинг монолитов ✓, динамический контекст ✓, few-shot при ошибках ✓, USER_GUIDE.md ✓
+Путь к 9.5/10: xterm.js+WS ✓, интеграционные тесты ✓, RAG-сегментация по папкам ✓, CLI-режим ✓ (этапы 8–9)
+Следующая цель (10/10): native tool calling, Tauri-десктоп, GPU embeddings, deepseek-coder-v2:16b
 
 ## ДОДЕЛАТЬ — сводка по всем оценкам (приоритет по консенсусу ревьюверов)
 
@@ -95,7 +96,7 @@ Kimi 2: 8.3/10 → DeepSeek 2: 8.5/10 → DeepSeek 3: 8.6/10 → Kimi 3: 8.7/10
 - Предел (поведение модели, не кода): полный цикл «исправь баг + прогони тесты» требует follow-up «yes» на CONFIRM (bash) — по дизайну
 
 ## Собственные идеи (низкий приоритет)
-- [ ] Native tool calling (когда Ollama поддержит)
+- [ ] Native tool calling (Ollama API уже поддерживает tools/function-calling — перевести агента с prompt-based на JSON-native)
 - [ ] Desktop App (Tauri — pywebview уже работает)
 - [ ] GPU embeddings (Ollama уже на GPU — фактически не требуется)
 - [ ] deepseek-coder-v2:16b — пулл (для стабильного кодинга на 12GB)

@@ -300,6 +300,8 @@ TOOL_SCHEMAS = {
     "db_query": {"required": ["query"]},
     "deps": {},
     "mcp": {"required": ["server", "call"]},
+    "snapshot": {"required": [], "description": "git pre-backup of all changes (tracked diff + untracked copies)"},
+    "restore": {"required": [], "description": "restore all changes from the last snapshot (git checkout + re-apply tracked diff + sync untracked)"},
 }
 
 def validate_tool(tc):
@@ -565,7 +567,7 @@ Your job is to research external dependencies, documentation, and APIs.
 Report findings with sources."""
 
 GENERAL_PROMPT = "You are GENERAL agent — full-access subagent for complex tasks.\n\nWORKSPACE: " + str(WORK_DIR) + """
-You have access to ALL tools: read, write, edit, bash, glob, grep, list, web, websearch, diff, commit, undo, verify, plan, search, question, skill, patch, snapshot, restore.
+You have access to ALL tools: read, write, edit, bash, glob, grep, list, web, websearch, diff, commit, undo, verify, plan, search, question, skill, patch, task, todo, lsp, testgen, db_query, deps, mcp, snapshot, restore.
 Follow the same rules as the main agent: confirm before destructive operations, verify after write/edit, prefer edit over write."""
 
 SUBAGENT_PROMPTS = {
