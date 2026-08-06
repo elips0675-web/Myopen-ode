@@ -217,6 +217,21 @@ touched on checkpoints (save every 2nd iteration), removed on clean finish;
 session_interrupted() = stale state (>90s) -> "interrupted": true in
 /api/sessions (+"/{sid}"), "⚠ interrupted" badge in UI, resume marker in
 history. Test: test_session_checkpoint.
+REFRACTOR (2026-08-07) - monolith split (69/69 tests + live CLI OK):
+(28) core/agent_loop.py: run_agent_loop + _dynamic_context + summarize_context;
+     deps-module injection (config/sessions/pending/cancel via agent.py);
+     deps=None -> lazy import agent (CLI/tests unchanged).
+(29) core/tool_parser.py: TOOL_BLOCK_PAT/BARE/YAML + _parse_tool_json +
+     _strip_system_markers + extract_pending_tool + parse_tool_blocks().
+(30) core/tool_executor.py: execute_tool_block(idx, tc, ctx) - anti-repeat,
+     aliases, validate_tool, question/plan/CONFIRM branches, _sess_record.
+(31) core/safety/bash_guard.py: check_bash(cmd, work_dir) + docker_bash()
+     + BASH_BLACKLIST/ALLOWED/NO_DOTDOT; core/safety/path_guard.py:
+     resolve/ensure_safe_path/similar_files (work_dir param).
+(32) agent.py now HTTP+sessions+pending/cancel+projects (~790 lines), tools.py
+     re-exports wrappers (check_bash/resolve/ensure_safe_path bind WORK_DIR).
+     Key detail: loop calls deps.call_ollama/stream_ollama/execute_tool so
+     tests can still monkeypatch agent_mod.call_ollama.
 KIMI EVAL 3 (2026-08-06): 8.7/10 — "most mature open-source coding agent seen on 7B". For 9/10:
 split monoliths (agent.py/tools.py -> core/agent_loop.py, core/tool_parser.py,
 core/tool_executor.py, core/safety/bash_guard.py, core/safety/path_guard.py),

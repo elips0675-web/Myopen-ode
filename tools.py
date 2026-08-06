@@ -44,51 +44,18 @@ def init_config(**kw):
         except ValueError: pass
 
 # ─── path resolver with security ──────────────────────────
+from core.safety.path_guard import resolve as _resolve, ensure_safe_path as _ensure_safe_path
+from core.safety.path_guard import similar_files as _similar_files_impl
+
 def resolve(path):
-    p = Path(path)
-    if p.is_absolute(): return p
-    return WORK_DIR / path
+    return _resolve(path, WORK_DIR)
 
 def ensure_safe_path(path):
-    """Resolve path and verify it stays within WORK_DIR to prevent directory traversal."""
-    if not path or not isinstance(path, str):
-        return "Error: path must be a non-empty string"
-    if path.startswith(("/path/to", "/tmp", "/var", "/usr", "/home",
-                        "/etc", "/bin", "/dev", "C:\\Windows", "C:\\Program")):
-        return (f"Error: path '{path}' looks invented. Use RELATIVE paths or paths "
-                f"inside the workspace (use list/glob to see files). "
-                f"Do NOT give tutorials — retry with a correct path.")
-    p = resolve(path).resolve()
-    wk = WORK_DIR.resolve()
-    if wk not in p.parents and p != wk:
-        return (f"Error: path '{path}' is outside workspace '{WORK_DIR}'. "
-                f"Use RELATIVE paths inside the workspace (use list/glob to see files). "
-                f"Do NOT give tutorials — retry with a correct path.")
-    return None
+    return _ensure_safe_path(path, WORK_DIR)
 
 def _similar_files(path, limit=5):
     """Suggest nearby files when a path was not found — helps the model fix paths."""
-    try:
-        name = Path(path).name.lower()
-        candidates = []
-        exts = (".py", ".js", ".ts", ".json", ".md", ".html", ".css", ".txt", ".yaml", ".yml")
-        for p in list(WORK_DIR.rglob("*"))[:4000]:
-            if not p.is_file() or not p.suffix.lower() in exts:
-                continue
-            if any(x in p.parts for x in (".git", "__pycache__", ".agent_sessions",
-                                          ".rag_cache", ".agent_backups", ".agent_memory", "node_modules")):
-                continue
-            fn = p.name.lower()
-            if fn == name or fn.startswith(name[:6]) or name.startswith(fn[:6]):
-                try:
-                    candidates.append(str(p.relative_to(WORK_DIR)))
-                except Exception:
-                    pass
-        if candidates:
-            return f". Similar files in workspace: {', '.join(sorted(set(candidates))[:limit])}"
-    except Exception:
-        pass
-    return ""
+    return _similar_files_impl(path, WORK_DIR, limit)
 
 # ─── file versioning ──────────────────────────────────────
 BACKUP_DIR = None
@@ -583,97 +550,12 @@ def call_fallback(messages, model_name):
         return f"[Error: Fallback API: {e2}]"
 
 # ─── extract pending tool for auto-execute ────────────────
-def extract_pending_tool(msgs):
-    tp = re.compile(r'```(?:tool|json)\n(.*?)\n```', re.DOTALL)
-    bare = re.compile(r'\{\s*"tool"\s*:\s*"[^"]+"\s*.*?\}', re.DOTALL)
-    bad = ("write", "edit", "bash", "commit", "undo")
-    for m in reversed(msgs):
-        if m.get("role") != "assistant": continue
-        c = m.get("content", "")
-        for match in tp.finditer(c):
-            raw = match.group(1).strip()
-            try: j = json.loads(raw)
-            except json.JSONDecodeError:
-                try: j = json.loads(raw.replace("'", '"'))
-                except json.JSONDecodeError: continue
-            n = j.get("tool", "")
-            if n in bad:
-                tc = dict(j); tc.pop("tool", None); return n, tc
-        for match in bare.finditer(c):
-            try:
-                j = json.loads(match.group())
-                n = j.get("tool", "")
-                if n in bad:
-                    tc = dict(j); tc.pop("tool", None); return n, tc
-            except json.JSONDecodeError: pass
-    return None, None
-
 # ─── bash sandbox ─────────────────────────────────────────
-BASH_BLACKLIST = [
-    "rm -rf /", "rm -rf --no-preserve-root", "rm -rf ~", "rm -rf /tmp/",
-    "rm -rf c:\\", "rm -rf .", "rm -rf *", "rm -rf",
-    "mkfs", "format ", "dd if=", "dd of=", ":(){ :|:& };:", "fork bomb",
-    "> /dev/sda", "> /dev/sdb", "| sh", "| bash", "curl ", "wget ", "chmod 777",
-    "sudo ", "su ", "passwd", "del /f /s", "rmdir /s", "rd /s", "del /q /s",
-    "shutdown", "taskkill /f", "net user",
-]
-# Whitelist of allowed bare commands (first token). Everything else is rejected
-# unless it is a path to an existing file inside WORK_DIR (e.g. .\build.py).
-BASH_ALLOWED = {
-    "python", "python3", "py", "pythonw", "pip", "pip3", "pipenv", "poetry", "uv", "uvx",
-    "npm", "npx", "node", "yarn", "pnpm",
-    "git", "gh",
-    "cd", "pwd", "echo", "type", "cat", "dir", "ls", "where", "findstr", "find", "cls", "clear",
-    "mkdir", "rmdir", "del", "copy", "xcopy", "move", "ren", "cp", "mv", "rm",
-    "date", "time", "tasklist", "tree", "fc", "comp",
-}
-# Destructive commands whose args must not contain ".." (path escape / obfuscation)
-BASH_NO_DOTDOT = {"rm", "del", "rd", "rmdir", "move", "mv", "copy", "xcopy", "cp", "ren"}
-
-def _segment_token(segment):
-    seg = segment.strip().strip('"').strip("'")
-    if not seg:
-        return None, ""
-    tok = seg.split()[0].strip('"').strip("'")
-    base = tok.split("\\")[-1].replace(".exe", "").replace(".bat", "").replace(".cmd", "")
-    return tok, base.lower()
+from core.safety.bash_guard import check_bash as _check_bash, docker_bash, BASH_BLACKLIST, BASH_ALLOWED  # noqa: F401
 
 def check_bash(cmd):
-    """Block dangerous shell commands. Whitelist for bare commands + blacklist
-    patterns + recursive check of nested interpreters (bash -c, cmd /c,
-    powershell -c, python -c, node -e)."""
-    norm = " ".join(cmd.lower().split())
-    stripped = norm.replace('"', "").replace("'", "").replace("`", "").replace("\\", "")
-    checks = [norm, stripped]
-    # recursive interpreter bodies: bash/sh/cmd/powershell AND python/node inline scripts
-    for m in re.finditer(r"(?:bash|sh|cmd|powershell|pwsh)\s+(?:-c|-command)\s+[\"']?([^\"']+)", norm):
-        checks.append(" ".join(m.group(1).split()))
-    for m in re.finditer(r"(?:python|py|node)\s+(?:-c|-e|-m)\s+[\"']?([^\"']+)", norm):
-        checks.append(" ".join(m.group(1).split()))
-    for c in checks:
-        for dangerous in BASH_BLACKLIST:
-            if dangerous in c:
-                return f"Blocked: command matching blacklist pattern '{dangerous}' is not allowed"
-    # whitelist: every pipeline/; /&& segment must start with an allowed command
-    for segment in re.split(r"[\|;&]|(?:^| )(?:and|or) ", norm):
-        tok, base = _segment_token(segment)
-        if not tok:
-            continue
-        if base in BASH_ALLOWED:
-            continue
-        # allow project-local scripts: .\x.py, ./x.py, or relative paths that exist in WORK_DIR
-        p = Path(tok.replace("/", os.sep))
-        if not os.path.isabs(str(p)) and not tok.startswith(".."):
-            pp = (WORK_DIR / p).resolve()
-            if WORK_DIR.resolve() in pp.parents and pp.exists():
-                continue
-        return f"Blocked: '{tok}' is not in the command whitelist"
-    # destructive commands must not reference parent dirs (rm -rf /tmp/.. bypass)
-    for seg in re.split(r"[\|;&]", norm):
-        tok, base = _segment_token(seg)
-        if base in BASH_NO_DOTDOT and re.search(r"\.\.[\\/]| \.\.$", seg):
-            return f"Blocked: '{base}' with '..' path escape is not allowed"
-    return None
+    """Block dangerous shell commands (whitelist + blacklist + nested checks)."""
+    return _check_bash(cmd, WORK_DIR)
 
 # ─── unified diff parser ──────────────────────────────────
 def _parse_hunks(diff_text):
@@ -841,29 +723,9 @@ def _execute_tool_inner(name, args):
             if blocked: return blocked
             cwd = resolve(args.get("cwd", ".")) if args.get("cwd") else WORK_DIR
             bt = globals().get("BASH_TIMEOUT", 60)
-            if os.environ.get("BASH_DOCKER") and shutil.which("docker"):
-                image = os.environ.get("BASH_DOCKER_IMAGE", "python:3.12-slim")
-                mount = f"{WORK_DIR.resolve()}:/workspace"
-                if os.environ.get("BASH_DOCKER_READONLY"):
-                    mount += ":ro"
-                dcmd = ["docker", "run", "--rm", "-i",
-                        "-v", mount,
-                        "-w", "/workspace", "-e", "PYTHONUTF8=1"]
-                if os.environ.get("BASH_DOCKER_MEM"):
-                    dcmd += ["--memory", os.environ["BASH_DOCKER_MEM"]]
-                if os.environ.get("BASH_DOCKER_SWAP"):
-                    dcmd += ["--memory-swap", os.environ["BASH_DOCKER_SWAP"]]
-                if os.environ.get("BASH_DOCKER_USER"):
-                    dcmd += ["--user", os.environ["BASH_DOCKER_USER"]]
-                dcmd += [image, "sh", "-lc", cmd]
-                try:
-                    r = subprocess.run(
-                        dcmd, capture_output=True, text=True, timeout=bt,
-                        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
-                    return ((r.stdout or "")[-3000:]
-                            + ("\nSTDERR:\n" + (r.stderr or "")[-1000:] if r.stderr else ""))
-                except Exception as e:
-                    log.warning("Docker bash failed (%s), falling back to local shell", e)
+            out = docker_bash(cmd, WORK_DIR, bt)
+            if out is not None:
+                return out
             r = subprocess.run(cmd, shell=True, cwd=str(cwd) if cwd else str(WORK_DIR), capture_output=True, text=True, timeout=bt)
             return ((r.stdout or "")[-3000:] + ("\nSTDERR:\n" + (r.stderr or "")[-1000:] if r.stderr else ""))
         elif name == "glob":

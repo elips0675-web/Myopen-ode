@@ -40,8 +40,14 @@ Kimi 2: 8.3/10 → DeepSeek 2: 8.5/10 → DeepSeek 3: 8.6/10 → Kimi 3: 8.7/10
 - [x] USER_GUIDE.md: установка, первый запуск, как задавать задачи, настройка, troubleshooting, скиллы/плагины
 - [x] Troubleshooting в USER_GUIDE.md («модель не отвечает», «тулы не работают», «Ollama не видит GPU»)
 
-### Этап 7. Рефакторинг монолитов (Kimi3 P1, 2-3 дня)
-- [ ] core/agent_loop.py (только цикл LLM→parse→execute→feedback), core/tool_parser.py (```tool/yaml/bare/lenient), core/tool_executor.py (dispatch+validation+stats), core/safety/bash_guard.py, core/safety/path_guard.py; agent.py — HTTP-роутинг, tools.py — инструменты
+### Этап 7. Рефакторинг монолитов (Kimi3 P1) — СДЕЛАНО (2026-08-07)
+- [x] core/agent_loop.py — цикл LLM→parse→execute→feedback + _dynamic_context + summarize_context (зависимости инжектятся через deps-модуль; deps=None → import agent)
+- [x] core/tool_parser.py — ```tool/bare/yaml парсеры + lenient JSON + _strip_system_markers + extract_pending_tool
+- [x] core/tool_executor.py — dispatch одного тула: anti-repeat, алиасы, validate_tool, question/plan/confirm-ветки, _sess_record
+- [x] core/safety/bash_guard.py — BASH_BLACKLIST/ALLOWED/NO_DOTDOT + check_bash(cmd, work_dir) + docker_bash()
+- [x] core/safety/path_guard.py — resolve/ensure_safe_path/similar_files (path jail)
+- [x] agent.py (~1180 → ~790 строк) — HTTP-роутинг + сессии + pending/cancel + проекты, реэкспорты для совместимости; tools.py — инструменты + обёртки (check_bash/resolve/ensure_safe_path с WORK_DIR)
+- [x] Поведение 1-в-1: 69/69 тестов + live CLI («4») без изменений
 
 ### Этап 8. xterm.js + WebSocket (DS2 P2, DS3 №3, Kimi3 P2)
 - [ ] Полноценный PTY для долгих процессов (npm start, python server.py) — сейчас SSE-терминал
