@@ -49,8 +49,14 @@ Kimi 2: 8.3/10 → DeepSeek 2: 8.5/10 → DeepSeek 3: 8.6/10 → Kimi 3: 8.7/10
 - [x] agent.py (~1180 → ~790 строк) — HTTP-роутинг + сессии + pending/cancel + проекты, реэкспорты для совместимости; tools.py — инструменты + обёртки (check_bash/resolve/ensure_safe_path с WORK_DIR)
 - [x] Поведение 1-в-1: 69/69 тестов + live CLI («4») без изменений
 
-### Этап 8. xterm.js + WebSocket (DS2 P2, DS3 №3, Kimi3 P2)
-- [ ] Полноценный PTY для долгих процессов (npm start, python server.py) — сейчас SSE-терминал
+### Этап 8. xterm.js + WebSocket (DS2 P2, DS3 №3, Kimi3 P2) — СДЕЛАНО (2026-08-07)
+- [x] core/pty_shell.py — интерактивный шелл: POSIX настоящий PTY (pty.fork + TIOCSWINSZ resize), Windows pipes-fallback (cmd/python -u -i/powershell); API feed/read_available/resize/kill
+- [x] WebSocket /ws/term в agent.py — cmd/input/resize/kill JSON-сообщения, потоковый out-фан-аут, exit-код, auto-kill при disconnect
+- [x] xterm.js 5.3.0 vendored в static/vendor/ (+whitelist-роут /static/vendor/{fname}, Cache-Control 3600)
+- [x] UI: панель терминала на xterm (настоящий терминал вместо pre-вывода): запуск шелла/команды, Ctrl+C, New shell / Kill / Clear, resize → TIOCSWINSZ, история команд
+- [x] Требование: websockets>=12.0 добавлено в requirements.txt
+- [x] Тесты: test_pty_shell (интерактивный I/O python -u -i), test_ws_terminal (TestClient WS); live: python -i через WS → «>>> 42»
+- [x] SSE-эндпоинты /api/terminal(+kill) оставлены для совместимости
 
 ### Этап 9. Средние фичи (P2, по оценкам)
 - [x] CLI-режим без UI (python -m myopencode "задача"; NO_CONFIRM=1; test_cli_main; live: «what is 2+2?» → «4»)

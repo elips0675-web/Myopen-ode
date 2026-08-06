@@ -14,3 +14,4 @@ projects.json
 .test_migr/
 .test_rag/
 .live_tests/
+.test_cp/

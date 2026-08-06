@@ -348,6 +348,43 @@ def test_terminal_api():
     assert r2.json().get("killed", 0) >= 0
     print("  [OK] terminal (SSE)")
 
+def test_pty_shell():
+    """Interactive shell process: feed input, read output, exit."""
+    from core.pty_shell import PtyShell
+    sh = PtyShell([sys.executable, "-u", "-i"])
+    got = b""
+    deadline = time.time() + 12
+    while time.time() < deadline and b"pty_ok" not in got:
+        got += sh.read_available()
+        sh.feed(b"print('pty_ok')\n")
+        time.sleep(0.1)
+    assert b"pty_ok" in got, f"no pty output: {got[:200]}"
+    sh.feed(b"exit()\n")
+    deadline = time.time() + 12
+    while time.time() < deadline and not sh.dead:
+        sh.read_available()
+        time.sleep(0.1)
+    assert sh.dead, "pty shell did not exit"
+    print("  [OK] pty shell (interactive I/O)")
+
+def test_ws_terminal():
+    """WebSocket terminal: start python, run code, receive output."""
+    from fastapi.testclient import TestClient
+    client = TestClient(__import__("agent").app)
+    with client.websocket_connect("/ws/term") as ws:
+        ws.send_json({"cmd": [sys.executable, "-u", "-i"]})
+        ws.send_json({"input": "print('ws_ok')\n"})
+        got = ""
+        deadline = time.time() + 15
+        while time.time() < deadline and "ws_ok" not in got:
+            m = json.loads(ws.receive_text())
+            got += m.get("out", "")
+            if "exit" in m:
+                break
+        assert "ws_ok" in got, f"no ws output: {got[:200]}"
+        ws.send_json({"kill": True})
+    print("  [OK] terminal (WebSocket)")
+
 def test_deps_tool():
     r = execute_tool("deps", {})
     assert isinstance(r, str) and len(r) > 0, f"deps failed: {r}"
@@ -1282,7 +1319,7 @@ if __name__ == "__main__":
     tests = [test_read, test_read_absolute, test_read_url, test_list, test_glob,
              test_write_and_undo, test_edit, test_bash, test_verify_py, test_verify_json,
              test_backup_undo, test_db_query, test_testgen, test_validation, test_save_api,
-             test_terminal_api, test_deps_tool, test_audit, test_rag_cache_incremental,
+             test_terminal_api, test_pty_shell, test_ws_terminal, test_deps_tool, test_audit, test_rag_cache_incremental,
              test_agent_loop_tool_call, test_agent_loop_plain_text, test_agent_loop_shell_alias,
              test_agent_loop_yaml_style_tool, test_agent_loop_planner_fallback,
              test_confirm_yes_autoexec, test_agent_loop_model_param,

@@ -476,65 +476,61 @@ $('ta').addEventListener('keydown',function(e){
 });
 $('ta').addEventListener('input',ah);init();
 
-// ─── Terminal ─────────────────────────────────────────────
-var termBusy=false,termHist=[],termHIdx=0,termAbc=null;
-function toggleTerm(){var p=$('term-panel');p.classList.toggle('open');if(p.classList.contains('open')){var ti=$('term-input');ti.focus()}}
+// ─── Terminal (xterm.js + WebSocket) ───────────────────────
+var term=null,termWs=null,termBuf='',termHist=[],termHIdx=0;
+function toggleTerm(){
+  var p=$('term-panel');p.classList.toggle('open');
+  if(p.classList.contains('open'))termStart();else termClose();
+}
 function termCwd(){return $('prj').getAttribute('data-path')||''}
-function termPrint(line,cls){
-  var out=$('term-out');if(!line&&cls!='t-done')return;
-  var d=document.createElement('div');if(cls)d.className=cls;
-  d.textContent=line;out.appendChild(d);out.scrollTop=out.scrollHeight;
+function termStart(){
+  if(term)return;
+  if(typeof Terminal==='undefined'){termBuf='xterm.js failed to load\n';return}
+  term=new Terminal({
+    convertEol:true,cursorBlink:true,fontSize:12,
+    theme:{background:'#0d1117',foreground:'#e2e8f0',cursor:'#58a6ff',selection:'#264f78'}
+  });
+  term.open(document.getElementById('xterm-host'));
+  term.onData(function(d){if(termWs&&termWs.readyState==1)termWs.send(JSON.stringify({input:d}))});
+  term.onResize(function(s){if(termWs&&termWs.readyState==1)termWs.send(JSON.stringify({resize:{cols:s.cols,rows:s.rows}}))});
+  term.reset();
+  if(termBuf){term.write(termBuf);termBuf=''}
+  termShell(null);
 }
-function termRun(cmd){
-  if(!cmd)return;termPrint('$ '+cmd,'t-cmd');
-  termHist.unshift(cmd);if(termHist.length>50)termHist.pop();termHIdx=-1;
-  termBusy=true;termPrint('',null);termPrint('running...','t-done');
-  var body=JSON.stringify({cmd:cmd,cwd:termCwd()});
-  var ctrl=new AbortController();termAbc=ctrl;
-  fetch(A+'/api/terminal',{method:'POST',headers:{'Content-Type':'application/json'},body:body,signal:ctrl.signal})
-    .then(function(r){
-      if(!r.ok)throw new Error('HTTP '+r.status);
-      var rd=r.body.getReader(),dec=new TextDecoder(),buf='';
-      function pump(){
-        return rd.read().then(function(res){
-          if(res.done){finish(null);return}
-          buf+=dec.decode(res.value,{stream:true});
-          var i;
-          while((i=buf.indexOf('\n\n'))>=0){
-            var chunk=buf.slice(0,i);buf=buf.slice(i+2);
-            if(chunk.startsWith('data: ')){
-              try{
-                var d=JSON.parse(chunk.slice(6));
-                if(d.done){finish(d.code);continue}
-                termPrint(d.line);
-              }catch(e){}
-            }
-          }
-          return pump();
-        });
-      }
-      function finish(code){
-        var last=$('term-out').lastElementChild;
-        if(last&&last.textContent=='running...')last.remove();
-        if(code!=null)termPrint('exit code: '+code,'t-done');
-        termBusy=false;termAbc=null;
-      }
-      pump();
-    })
-    .catch(function(e){
-      var last=$('term-out').lastElementChild;
-      if(last&&last.textContent=='running...')last.remove();
-      termPrint('Error: '+e.message,'t-done');termBusy=false;termAbc=null;
-    });
+function termShell(cmd){
+  termShellKill();
+  var proto=location.protocol=='https:'?'wss://':'ws://';
+  termWs=new WebSocket(proto+location.host+'/ws/term');
+  termWs.onopen=function(){
+    termWs.send(JSON.stringify({cmd:cmd||null,cwd:termCwd(),cols:term.cols,rows:term.rows}));
+  };
+  termWs.onmessage=function(ev){
+    var m;try{m=JSON.parse(ev.data)}catch(e){return}
+    if(m.out){term.write(m.out)}
+    else if(m.exit!=null){
+      term.writeln('\r\n[process exited with code '+m.exit+']');
+      termWs=null;
+    }
+  };
+  termWs.onclose=function(){if(termWs===this)termWs=null};
 }
-function termKill(){
-  if(termAbc){termAbc.abort();termAbc=null}
-  fetch(A+'/api/terminal/kill',{method:'POST'});
-  termPrint('(killed)','t-done');termBusy=false;
+function termShellKill(){
+  if(termWs&&termWs.readyState==1){try{termWs.send(JSON.stringify({kill:true}))}catch(e){}}
+  try{if(termWs)termWs.close()}catch(e){}
+  termWs=null;
 }
-$('term-input').addEventListener('keydown',function(e){
-  if(e.key=='Enter'){e.preventDefault();var v=this.value;this.value='';termRun(v)}
-  else if(e.key=='ArrowUp'&&termHIdx<termHist.length-1){termHIdx++;this.value=termHist[termHIdx]}
-  else if(e.key=='ArrowDown'&&termHIdx>0){termHIdx--;this.value=termHist[termHIdx]}
-  else if(e.key=='c'&&e.ctrlKey){e.preventDefault();termKill()}
+function termClear(){if(term)term.clear()}
+function termClose(){termShellKill();if(term){term.dispose();term=null}}
+var termCmdInput=null;
+window.addEventListener('load',function(){
+  termCmdInput=document.getElementById('term-cmd');
+  if(!termCmdInput)return;
+  termCmdInput.addEventListener('keydown',function(e){
+    if(e.key=='Enter'){e.preventDefault();var v=this.value;this.value='';
+      if(v){termHist.unshift(v);if(termHist.length>50)termHist.pop();termHIdx=-1}
+      termShell(v||null);this.blur();}
+    else if(e.key=='ArrowUp'&&termHIdx<termHist.length){termHIdx++;this.value=termHist[termHIdx]}
+    else if(e.key=='ArrowDown'&&termHIdx>0){termHIdx--;this.value=termHist[termHIdx]}
+    else if(e.key=='c'&&e.ctrlKey){e.preventDefault();termShellKill()}
+  });
 });

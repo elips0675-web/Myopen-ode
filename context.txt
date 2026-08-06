@@ -317,6 +317,35 @@ comma before }, garbage after block (truncate at last }).
 Tests: 57/57 (test_bash_docker_mode/fallback, test_parse_tool_json_lenient,
 test_tool_stats added; docker tests use mocks — no Docker needed in CI).
 
+UPDATE (2026-08-07): этап 8 — xterm.js + WebSocket PTY (commit после 2b94aa7):
+(29) REFRACTOR (этап 7): монолиты разбиты на core/ — core/agent_loop.py
+(run_agent_loop с deps-инъекцией; deps=None → import agent; цикл зовёт
+deps.call_ollama/stream_ollama/execute_tool — тестовые моки работают),
+core/tool_parser.py (tool/bare/yaml-парсеры + lenient JSON + strip markers +
+extract_pending_tool), core/tool_executor.py (dispatch + anti-repeat + алиасы +
+validate + question/plan/confirm + _sess_record), core/safety/bash_guard.py
+(whitelist + docker_bash), core/safety/path_guard.py (resolve/ensure_safe_path/
+similar_files, work_dir-параметр). agent.py ~790 строк (HTTP+сессии+pending),
+tools.py — обёртки с WORK_DIR. 69/69 тестов + live CLI без изменений.
+(30) PUSH: 2b94aa7 "refactor: split monoliths into core/ ..." запушен.
+(31) PTY (этап 8): core/pty_shell.py — интерактивный шелл: POSIX настоящий PTY
+(pty.fork + TIOCSWINSZ), Windows pipes-fallback (env PYTHONUNBUFFERED/
+PYTHONIOENCODING). API: feed/read_available/resize/kill, буфер-поллинг ~50ms.
+(32) WS TERMINAL: app.websocket /ws/term в agent.py — JSON-сообщения
+{cmd|cwd|cols|rows} старт, {input} ввод, {resize} размеры, {kill}; серверные
+{out} чанки + {exit} код; auto-kill при disconnect; reader-task фан-аут.
+ВАЖНО: uvicorn без websockets/wsproto НЕ умеет WS — websockets>=12.0 добавлен
+в requirements.txt (установлен 17.0.1). /static/vendor/{fname} — whitelist
+(xterm.min.js, xterm.css) + Cache-Control 3600.
+(33) UI: панель терминала переведена с SSE-pre на xterm.js 5.3.0 (vendored в
+static/vendor/, CDN не нужен): termStart/termShell/termShellKill/termClear/
+termClose; термин-бар: input команды (Enter → запуск шелла с ней, история
+стрелками), кнопки New shell/Kill/Clear; resize → TIOCSWINSZ; Ctrl+C → kill.
+SSE /api/terminal (+kill) оставлены для совместимости (test_terminal_api).
+(34) TESTS: test_pty_shell (python -u -i: ввод → вывод → exit), test_ws_terminal
+(TestClient websocket_connect: python -i через WS). 71/71. Live: WS → python -i
+интерактив → «>>> 42»; banner приходит с задержкой ~1-2s (python стартует).
+
 COMPARISON
 ----------
 | Aspect        | My OpenCode v2  | Cursor/Windsurf | Claude Code |

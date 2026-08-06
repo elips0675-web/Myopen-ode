@@ -3,6 +3,7 @@
 HTML = r"""<!DOCTYPE html>
 <html lang="en">
 <head><meta charset="UTF-8"><title>AI Coder v2 — OpenCode Desktop</title>
+<link rel="stylesheet" href="/static/vendor/xterm.css">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.css">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/theme/dracula.min.css">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/fold/foldgutter.min.css">
@@ -110,16 +111,14 @@ body[data-theme="dark"]{--bg:#0f1117;--fg:#e2e8f0;--sidebar:#161b22;--sidebar-bo
 #dropzone .dz-box .dz-title{font-size:16px;font-weight:600;color:var(--fg)}
 #dropzone .dz-box .dz-sub{font-size:12px;color:var(--st-c);margin-top:4px}
 
-#term-panel{position:fixed;left:230px;right:0;bottom:0;height:220px;background:var(--pre-bg);border-top:1px solid var(--sidebar-border);display:none;flex-direction:column;z-index:50;font-family:Consolas,monospace}
+#term-panel{position:fixed;left:230px;right:0;bottom:0;height:240px;background:#0d1117;border-top:1px solid var(--sidebar-border);display:none;flex-direction:column;z-index:50}
 #term-panel.open{display:flex}
 #term-bar{padding:4px 10px;background:var(--sidebar);border-bottom:1px solid var(--sidebar-border);display:flex;align-items:center;gap:8px}
 #term-bar .t-title{font-size:11px;font-weight:600;color:var(--st-c)}
-#term-out{flex:1;overflow-y:auto;padding:6px 10px;font-size:12px;white-space:pre-wrap;word-break:break-all;line-height:1.4}
-#term-out .t-cmd{color:var(--accent);font-weight:600}
-#term-out .t-done{color:var(--st-c)}
-#term-in{display:flex;border-top:1px solid var(--sidebar-border)}
-#term-in input{flex:1;background:transparent;border:none;color:var(--fg);font-family:inherit;font-size:12px;padding:6px 10px;outline:none}
-#term-in .t-kill{background:var(--cnl-btn);color:#fff;border:none;padding:0 12px;cursor:pointer;font-size:11px}
+#term-bar input{flex:1;background:var(--code-bg);border:1px solid var(--sidebar-border);border-radius:4px;color:var(--fg);font-family:inherit;font-size:11px;padding:3px 8px;outline:none;max-width:320px}
+#term-bar button{background:none;border:1px solid var(--sidebar-border);border-radius:4px;color:var(--st-c);cursor:pointer;font-size:11px;padding:2px 8px}
+#term-bar button:hover{border-color:var(--accent);color:var(--accent)}
+#xterm-host{flex:1;overflow:hidden;padding:4px 0 0 4px}
 .tline{font-family:Consolas,monospace;font-size:11px;color:var(--st-c);background:var(--code-bg);border:1px solid var(--sidebar-border);border-radius:4px;padding:3px 8px;margin:3px 0;word-break:break-all}
 .tline .tldone{color:#4ade80}
 .tline.terr{color:#f87171;border-color:rgba(248,113,113,.4)}
@@ -174,9 +173,14 @@ body[data-theme="dark"]{--bg:#0f1117;--fg:#e2e8f0;--sidebar:#161b22;--sidebar-bo
 </div>
 <div id="fileview"><div class="fv-bar"><div id="fv-tabs" style="display:flex;gap:2px;overflow-x:auto;flex:1"></div><button id="fv-save" onclick="saveFile()" style="display:none;background:var(--btn);color:#fff;border:none;border-radius:4px;padding:4px 12px;cursor:pointer;font-size:11px">Save (Ctrl+S)</button><button class="fv-close" onclick="closeFile()">&times;</button></div><div id="fv-content" style="flex:1;padding:0;overflow:hidden;background:var(--pre-bg);margin:0;font-family:monospace;white-space:pre"></div></div>
 <div id="term-panel">
-  <div id="term-bar"><span class="t-title">Terminal</span><span id="term-cwd" style="font-size:10px;color:var(--st-c)"></span></div>
-  <div id="term-out"></div>
-  <div id="term-in"><input id="term-input" placeholder="Run command... (Enter to run, Ctrl+C to kill)"><button class="t-kill" onclick="termKill()">Kill</button></div>
+  <div id="term-bar"><span class="t-title">Terminal</span>
+    <input id="term-cmd" placeholder="Run command (Enter)...">
+    <button onclick="termShell(null)" title="New shell">&#8635;</button>
+    <button onclick="termShellKill()" title="Kill process">&#10005;</button>
+    <button onclick="termClear()" title="Clear">&#9003;</button>
+    <span id="term-cwd" style="font-size:10px;color:var(--st-c)"></span>
+  </div>
+  <div id="xterm-host"></div>
 </div>
 <div id="dropzone"><div class="dz-box"><svg viewBox="0 0 24 24"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg><div class="dz-title">Drop files here</div><div class="dz-sub">Upload to workspace</div></div></div>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.js"></script>
@@ -195,6 +199,7 @@ body[data-theme="dark"]{--bg:#0f1117;--fg:#e2e8f0;--sidebar:#161b22;--sidebar-bo
 <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/edit/matchbrackets.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/fold/foldcode.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/fold/foldgutter.min.js"></script>
+<script src="/static/vendor/xterm.min.js"></script>
 <script>
 var CM_READY = typeof CodeMirror !== 'undefined';
 </script>

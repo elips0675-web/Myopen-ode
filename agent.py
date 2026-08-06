@@ -5,7 +5,7 @@ import json, os, glob, webbrowser, re, time, logging, asyncio, subprocess, threa
 from pathlib import Path
 from datetime import datetime
 import requests, uvicorn
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse, HTMLResponse, JSONResponse, FileResponse
 from pydantic import BaseModel
@@ -330,6 +330,20 @@ def app_js():
     except OSError as e:
         return JSONResponse({"error": f"static/app.js unavailable: {e}"}, status_code=404)
 
+_VENDOR_ALLOW = {"xterm.min.js": "text/javascript", "xterm.css": "text/css"}
+
+@app.get("/static/vendor/{fname}")
+def vendor_file(fname: str):
+    """Vendored frontend libraries (xterm.js) with a strict whitelist."""
+    if fname not in _VENDOR_ALLOW:
+        raise HTTPException(404)
+    try:
+        resp = FileResponse(WORK_DIR / "static" / "vendor" / fname, media_type=_VENDOR_ALLOW[fname])
+        resp.headers["Cache-Control"] = "public, max-age=3600"
+        return resp
+    except OSError as e:
+        return JSONResponse({"error": f"vendor file unavailable: {e}"}, status_code=404)
+
 @app.get("/api/stats")
 def tool_stats():
     """Per-tool call/error counters (diagnostics; shows repeated model failures)."""
@@ -640,6 +654,66 @@ def terminal_kill():
             n += 1
         except: pass
     return {"killed": n}
+
+@app.websocket("/ws/term")
+async def ws_term(ws: WebSocket):
+    """Interactive WebSocket terminal (xterm.js frontend, core/pty_shell.py).
+
+    Client messages (JSON): {"cmd": str|None, "cwd", "cols", "rows"} to start,
+    {"input": str} to write, {"resize": {cols, rows}}, {"kill": true} to stop.
+    Server messages: {"out": str} chunks, {"exit": code} when the process ends.
+    """
+    from core.pty_shell import PtyShell
+    await ws.accept()
+    shell = None
+    async def reader():
+        nonlocal shell
+        while True:
+            if shell is None:
+                await asyncio.sleep(0.05)
+                continue
+            data = shell.read_available()
+            if data:
+                try:
+                    await ws.send_text(json.dumps({"out": data.decode("utf-8", "replace")}))
+                except Exception:
+                    return
+            elif shell.dead:
+                try:
+                    await ws.send_text(json.dumps({"exit": shell.exit_code}))
+                except Exception:
+                    return
+                return
+            await asyncio.sleep(0.05)
+    rtask = asyncio.create_task(reader())
+    try:
+        while True:
+            msg = await ws.receive_text()
+            try:
+                m = json.loads(msg)
+            except json.JSONDecodeError:
+                continue
+            if "cmd" in m:
+                if shell is not None:
+                    shell.kill()
+                shell = PtyShell(m.get("cmd") or None, cwd=m.get("cwd") or WORK_DIR,
+                                 cols=m.get("cols", 100), rows=m.get("rows", 30))
+                await ws.send_text(json.dumps({"out": f"$ {' '.join(m['cmd']) if isinstance(m.get('cmd'), list) else m.get('cmd', '')}\r\n"}))
+            elif "input" in m and shell is not None:
+                shell.feed(m["input"])
+            elif "resize" in m and shell is not None:
+                shell.resize(m["resize"].get("cols"), m["resize"].get("rows"))
+            elif m.get("kill"):
+                if shell is not None:
+                    shell.kill()
+                await ws.send_text(json.dumps({"exit": shell.exit_code if shell is not None else 0}))
+                break
+    except WebSocketDisconnect:
+        pass
+    finally:
+        rtask.cancel()
+        if shell is not None:
+            shell.kill()
 
 @app.post("/api/lsp/completion")
 def lsp_completion(req: dict):
