@@ -293,7 +293,13 @@ def _bg_index_work():
 
 _BG_THREAD = None
 
-def rag_search(query, top_k=5, hybrid=True):
+def _chunk_scope(chunk):
+    """Top-level folder of the chunk's file (RAG folder segmentation)."""
+    rel = chunk.get("file", "").replace("\\", "/").strip("/")
+    return rel.split("/")[0] if "/" in rel else ""
+
+
+def rag_search(query, top_k=5, hybrid=True, scope=None):
     with RAG_LOCK:
         if RAG_INDEX is None:
             rag_index()  # cold start: synchronous so the first search has data
@@ -306,7 +312,20 @@ def rag_search(query, top_k=5, hybrid=True):
             }, timeout=30)
             q_emb = r.json().get("embeddings", [[]])[0]
             if not q_emb: return "No embedding for query"
-            if FAISS_INDEX and _faiss is not None and FAISS_INDEX != "numpy":
+            if scope:
+                # folder-scoped search: only chunks under <scope>/ (cheap linear pass)
+                scope = str(scope).strip().strip("/\\")
+                keep = [i for i in range(len(RAG_CHUNKS)) if _chunk_scope(RAG_CHUNKS[i]).startswith(scope)]
+                if not keep:
+                    return f"No RAG chunks under folder '{scope}'"
+                mat = _np.asarray([RAG_INDEX[i] for i in keep], dtype="float32") if _np else None
+                if mat is None:
+                    return "RAG scoped search needs numpy"
+                q = _np.asarray(q_emb, dtype="float32")
+                dots = mat @ q
+                cos = dots / (_np.linalg.norm(mat, axis=1) * _np.linalg.norm(q) + 1e-10)
+                sem = [(float(cos[j]), keep[j]) for j in range(len(keep))]
+            elif FAISS_INDEX and _faiss is not None and FAISS_INDEX != "numpy":
                 D, I = FAISS_INDEX.search(_np.asarray([q_emb], dtype="float32"),
                                           min(top_k, max(1, len(RAG_CHUNKS))))
                 sem = [(float(D[0][j]), int(I[0][j])) for j in range(len(D[0]))]

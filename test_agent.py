@@ -408,6 +408,96 @@ def test_update_check():
         assert isinstance(data["behind"], int), data
     print("  [OK] update check")
 
+def test_rag_folder_scope():
+    """RAG folder segmentation: scope= filters chunks to one top-level folder."""
+    import rag
+    import unittest.mock as um
+    rag.RAG_INDEX = None
+    rag.RAG_CHUNKS = []
+    rag.RAG_DIRTY = True
+    rag.RAG_CACHE_DIR = None
+    rag.FAISS_INDEX = None
+    rag.init_rag(OLLAMA_URL="http://localhost:11434", WORK_DIR=WORK_DIR, EMBED_MODEL="nomic-embed-text")
+    rag.RAG_CHUNKS = [
+        {"text": "core router handling", "file": "core/router.py", "line": 1, "emb": [1.0, 0.0], "_toks": []},
+        {"text": "tools shell guard", "file": "tools/guard.py", "line": 1, "emb": [0.0, 1.0], "_toks": []},
+        {"text": "standalone script", "file": "main.py", "line": 1, "emb": [0.5, 0.5], "_toks": []},
+    ]
+    rag.RAG_INDEX = [c["emb"] for c in rag.RAG_CHUNKS]
+    rag._rebuild_fast_index()
+    def fake_embed(*a, **k):
+        class R:
+            def json(self):
+                return {"embeddings": [[1.0, 0.0]]}
+        return R()
+    with um.patch("rag.requests.post", side_effect=fake_embed):
+        scoped = rag.rag_search("router", top_k=5, scope="core")
+        assert "core/router.py" in scoped, scoped
+        assert "tools/guard.py" not in scoped, f"scope leaked: {scoped}"
+        assert "main.py" not in scoped, f"scope leaked: {scoped}"
+        empty = rag.rag_search("router", top_k=5, scope="nope")
+        assert "No RAG chunks" in empty, empty
+    print("  [OK] RAG folder scope")
+
+def test_mcp_client():
+    """MCP stdio handshake: initialize -> initialized -> tools/list -> tools/call."""
+    import mcp_client
+    import json as _json
+    mock_script = TMP / "mock_mcp_server.py"
+    mock_script.write_text(
+        "import json, sys\n"
+        "for line in sys.stdin:\n"
+        "    line = line.strip()\n"
+        "    if not line: continue\n"
+        "    msg = json.loads(line)\n"
+        "    if msg.get('method') == 'initialize':\n"
+        "        sys.stdout.write(json.dumps({'jsonrpc':'2.0','id':msg['id'],"
+        "'result':{'protocolVersion':'2024-11-05','capabilities':{'tools':{}}}})+'\\n'); sys.stdout.flush()\n"
+        "    elif msg.get('method') == 'tools/list':\n"
+        "        sys.stdout.write(json.dumps({'jsonrpc':'2.0','id':msg['id'],"
+        "'result':{'tools':[{'name':'add','description':'a+b',"
+        "'inputSchema':{'type':'object','properties':{'a':{'type':'number'},'b':{'type':'number'}}}}]}})+'\\n'); sys.stdout.flush()\n"
+        "    elif msg.get('method') == 'tools/call':\n"
+        "        a=msg['params'].get('arguments',{}); s=str(a.get('a',0)+a.get('b',0))\n"
+        "        sys.stdout.write(json.dumps({'jsonrpc':'2.0','id':msg['id'],"
+        "'result':{'content':[{'type':'text','text':'sum='+s}]}})+'\\n'); sys.stdout.flush()\n"
+    )
+    old_cfg = mcp_client.CONFIG_PATH
+    cfg = TMP / "mcp_servers.json"
+    cfg.write_text(_json.dumps({"servers": [
+        {"name": "mock", "command": sys.executable, "args": [str(mock_script)]}]}))
+    mcp_client.CONFIG_PATH = cfg
+    try:
+        clients = mcp_client.get_clients()
+        assert "mock" in clients, clients
+        tools = mcp_client.mcp_tools_list()
+        assert ("mock", "add") in tools, tools
+        r = mcp_client.mcp_call("mock", "add", {"a": 2, "b": 3})
+        assert "sum=5" in r, f"call result: {r}"
+        mcp_client.mcp_call("mock", "stop", {})
+    finally:
+        mcp_client.CONFIG_PATH = old_cfg
+        for c in list(mcp_client._procs.values()):
+            c.stop()
+        mcp_client._procs.clear()
+    print("  [OK] MCP client (initialize/tools/call)")
+
+def test_task_subagent_loop():
+    """task tool delegates to a subagent that runs its own tool loop."""
+    import agent as agent_mod
+    import tools as tools_mod
+    orig_c = agent_mod.call_ollama
+    def mock_ollama(msgs, model):
+        return ("subagent reply 12345", 10)
+    agent_mod.call_ollama = mock_ollama
+    try:
+        r = tools_mod.execute_tool("task", {"agent": "general", "prompt": "explore x"})
+        assert "[SUBAGENT:general]" in r, r
+        assert "subagent reply" in r, r
+    finally:
+        agent_mod.call_ollama = orig_c
+    print("  [OK] hierarchical subagent (tool loop)")
+
 
 def test_verify_py():
     r = verify_file(str(Path(WORK_DIR) / "agent.py"))
@@ -1487,7 +1577,8 @@ if __name__ == "__main__":
              test_dynamic_context_error_status, test_tool_error_fewshot,
              test_bash_docker_flags, test_health_endpoint, test_vendor_static,
              test_json_schema_format, test_git_snapshot_restore, test_diff_preview,
-             test_update_check,
+             test_update_check, test_rag_folder_scope, test_mcp_client,
+             test_task_subagent_loop,
              test_sess_stats_advice, test_model_router,
              test_rag_status_api, test_audit_api,
              test_cli_main, test_session_checkpoint]

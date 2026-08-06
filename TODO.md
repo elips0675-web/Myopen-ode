@@ -58,21 +58,21 @@ Kimi 2: 8.3/10 → DeepSeek 2: 8.5/10 → DeepSeek 3: 8.6/10 → Kimi 3: 8.7/10
 - [x] Тесты: test_pty_shell (интерактивный I/O python -u -i), test_ws_terminal (TestClient WS); live: python -i через WS → «>>> 42»
 - [x] SSE-эндпоинты /api/terminal(+kill) оставлены для совместимости
 
-### Этап 9. Средние фичи (P2, по оценкам)
+### Этап 9. Средние фичи (P2, по оценкам) — СДЕЛАНО (2026-08-07)
 - [x] CLI-режим без UI (python -m myopencode "задача"; NO_CONFIRM=1; test_cli_main; live: «what is 2+2?» → «4»)
 - [x] Восстановление сессии после падения сервера: state-файл на время цикла, checkpoint каждые 2 итерации, «⚠ interrupted» в списке сессий, маркер-резюме при возобновлении (test_session_checkpoint)
 - [x] Модель-роутер: при 2+ итерациях без tool-блоков авто-переключение на основную модель (метрика: % tool-blocks; test_model_router)
-- [ ] RAG-сегментация по папкам (>100k строк, 6000 чанков ≈ 3 млн символов)
-- [ ] Восстановление после сбоев: перезапуск без потери контекста
-- [ ] RAG source attribution: цитирование [file:line]
-- [ ] JSON Schema constrained output (Ollama format:"json" — экспериментально)
-- [ ] Тесты кроссплатформенности (Windows/Linux/macOS)
-- [ ] Автопроверка новых версий (update check)
-- [ ] Мульти-агентное иерархическое планирование
-- [ ] Git pre-backup перед batch-операциями + «restore all»
-- [ ] Inline diff preview перед edit (как в Cursor)
-- [ ] Vendor CodeMirror 5 в static/vendor/ (CDN fallback); StaticFiles mount вместо ручного FileResponse
-- [ ] Полноценный MCP client (браузер, БД) — mcp_client.py уже есть
+- [x] RAG-сегментация по папкам: rag_search(scope=) — поиск только по top-level папке (core/, tools/...); тул search: {"scope": ...}; test_rag_folder_scope
+- [x] Восстановление после сбоев: перезапуск без потери контекста (checkpoint + interrupted-маркер)
+- [x] RAG source attribution: [file:line] в каждом чанке вывода rag_search
+- [x] JSON Schema constrained output: Ollama format:TOOL_JSON_SCHEMA (экспериментально) — set_json_mode() thread-local, включается циклом после format/tool-error/code-нуджей, AI_JSON_FORMAT=1 глобально (test_json_schema_format)
+- [x] Тесты кроссплатформенности: CI-матрица .github/workflows/tests.yml (ubuntu/windows/macos), pathlib-пути, CREATE_NO_WINDOW-guard (test_cross_platform)
+- [x] Автопроверка новых версий: GET /api/update (HEAD vs origin/master, кэш 1ч, офлайн-safe) + бейдж «⬆ update N» в UI (test_update_check)
+- [x] Мульти-агентное иерархическое планирование: тул task запускает сабагента С собственным tool-циклом (run_agent_loop, NO_CONFIRM, fallback на одиночный вызов) (test_task_subagent_loop)
+- [x] Git pre-backup перед batch-операциями + «restore all»: авто-snapshot перед первым мутирующим тулом (git diff --binary + untracked-копии), тулы snapshot/restore (test_git_snapshot_restore)
+- [x] Inline diff preview перед edit: SSE-событие 'diff' → цветной блок в чате (Cursor-style) (test_diff_preview)
+- [x] Vendor CodeMirror 5 в static/vendor/cm/ + StaticFiles mount; /static/vendor/{fname} whitelist; UI полностью офлайн (test_vendor_static)
+- [x] Полноценный MCP client: initialize→notifications/initialized хендшейк, capabilities, resources/list|read, prompts/list|get, tools/list/call (test_mcp_client)
 
 ## Найденные баги при live-проверке кодинга (2026-07-31) — исправлены
 - [x] /api/chat игнорировал выбранную модель (req.model не доходил) — добавлен параметр model

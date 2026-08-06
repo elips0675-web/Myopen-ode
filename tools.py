@@ -953,7 +953,8 @@ def _execute_tool_inner(name, args):
             return verify_file(path) if path else "No path specified"
         elif name == "search":
             import rag as _rag
-            return _rag.rag_search(args.get("query", ""), args.get("top_k", 5))
+            return _rag.rag_search(args.get("query", ""), args.get("top_k", 5),
+                                   scope=args.get("scope") or None)
         elif name == "snapshot":
             return git_prebackup()
         elif name == "restore":
@@ -1012,8 +1013,26 @@ def _execute_tool_inner(name, args):
                 {"role": "system", "content": sub_prompt},
                 {"role": "user", "content": user_prompt},
             ]
-            result, _ = call_ollama(msgs, PLANNER_MODEL)
-            return f"[SUBAGENT:{agent_type}]\n{result[:3000]}"
+            try:
+                # hierarchical delegation: the subagent runs its own tool loop
+                from core.agent_loop import run_agent_loop
+                import agent as _a
+                import types as _types
+                d = _types.SimpleNamespace()
+                for _name in ("OLLAMA_URL", "PLANNER_MODEL", "MODEL", "WORK_DIR",
+                              "MAX_TOKENS", "_available_models", "_cancel_pending",
+                              "_cancel_clear", "_pending_get", "_pending_set",
+                              "session_interrupted", "_state_path", "load_session",
+                              "save_session", "call_ollama", "stream_ollama",
+                              "execute_tool", "datetime"):
+                    setattr(d, _name, getattr(_a, _name))
+                d.NO_CONFIRM = True
+                res = run_agent_loop(msgs, None, None, model=MODEL, deps=d)
+                return f"[SUBAGENT:{agent_type}]\n{res[:3000]}"
+            except Exception as e:
+                log.warning("subagent loop failed (%s), falling back to single call", e)
+                result, _ = call_ollama(msgs, MODEL)
+                return f"[SUBAGENT:{agent_type}]\n{result[:3000]}"
         elif name == "todo":
             action = args.get("action", "list")
             items = args.get("items", [])

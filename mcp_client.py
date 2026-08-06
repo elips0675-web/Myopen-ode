@@ -53,11 +53,21 @@ class MCPStdioClient:
                 creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
             )
             threading.Thread(target=self._reader, daemon=True).start()
-            self._request("initialize", {
+            init = self._request("initialize", {
                 "protocolVersion": "2024-11-05",
                 "capabilities": {},
                 "clientInfo": {"name": "my-opencode", "version": "2.0"},
             }, timeout=15)
+            # full handshake: notify initialized + server capabilities
+            self.server_info = (init or {}).get("result", {})
+            self.capabilities = self.server_info.get("capabilities", {})
+            with self.cv:
+                self.req_id += 1
+                rid = self.req_id
+                self.proc.stdin.write(json.dumps({"jsonrpc": "2.0",
+                                                  "method": "notifications/initialized",
+                                                  "params": {}}) + "\n")
+                self.proc.stdin.flush()
             self.ready = True
             return True
         except Exception as e:
@@ -163,7 +173,8 @@ def mcp_tools_list():
 
 
 def mcp_call(server, tool, args):
-    """Call an external MCP tool. Returns text result or error message."""
+    """Call an external MCP tool (or a resource/prompt method). Returns text
+    result or error message."""
     client = get_clients().get(server)
     if client is None:
         return f"MCP server '{server}' not configured (see mcp_servers.json)"
@@ -172,6 +183,27 @@ def mcp_call(server, tool, args):
     if not client.ready:
         return f"MCP server '{server}' failed to start"
     try:
+        if tool in ("resources/list", "prompts/list"):
+            res = client._request(tool, args or {})
+            items = ((res or {}).get("result") or {}).get("resources" if "resources" in tool else "prompts", [])
+            if not items:
+                return f"no {tool} items"
+            return "\n".join(f"{i.get('uri') or i.get('name')} — {(i.get('description') or '')[:120]}"
+                             for i in items)
+        if tool in ("resources/read", "prompts/get"):
+            res = client._request(tool, args or {})
+            if not res or "result" not in res:
+                return f"MCP error: {res}"
+            contents = (res.get("result") or {}).get("contents", [])
+            parts = []
+            for c in contents:
+                if c.get("type") == "text":
+                    parts.append(c.get("text", ""))
+                elif c.get("type") == "resource":
+                    parts.append((c.get("text") or str(c.get("blob", "")))[:8000])
+            if not parts:
+                parts.append(str((res.get("result") or {}))[:8000])
+            return "\n".join(parts)
         return client.call_tool(tool, args)
     except Exception as e:
         return f"MCP call error: {e}"

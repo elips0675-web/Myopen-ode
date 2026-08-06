@@ -390,3 +390,20 @@ fewer hallucinations, now DEFAULT via AI_MODEL), deepseek-r1:1.5b (~1.5GB planne
 summary), nomic-embed-text (~0.5GB RAG embeddings), qwen2.5-coder:1.5b/3b,
 llama3.1, qwen3:8b.
 
+STAGE 9 (done 2026-08-07): CLI mode (python -m myopencode "task", NO_CONFIRM=1);
+session checkpoint state-json each 2 iters + "interrupted" marker + resume note;
+model router: it>=2 && no tool blocks -> switch to main model (planner = router);
+RAG folder scope: rag_search(scope="core/") linear pass over cached chunks, tool
+search passes args["scope"]; JSON Schema: TOOL_JSON_SCHEMA + set_json_mode
+(thread-local) + AI_JSON_FORMAT=1, loop enables after nudges, disables each iter;
+cross-platform CI matrix .github/workflows/tests.yml; /api/update (git HEAD vs
+origin, 1h cache, offline-safe) + "updst" badge; hierarchical subagent: task
+tool runs sub-loop (run_agent_loop, NO_CONFIRM=True, fallback single call);
+git pre-backup: auto snapshot before 1st mutating tool (git diff --binary + copy
+untracked, skip .git/.agent_backups), tools snapshot/restore (restore = checkout
+-- . + re-apply patch + sync untracked); inline diff: execute_tool emits 'diff'
+event, UI renders .dp/.a/.d/.h; CodeMirror 5.65 vendored static/vendor/cm/ via
+StaticFiles mount (offline UI); MCP client full handshake (initialize ->
+notifications/initialized -> capabilities, resources/list|read,
+prompts/list|get, tools/list/call). 80/80 tests. Commit b5994ea (not pushed).
+
