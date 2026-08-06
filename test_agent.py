@@ -545,6 +545,40 @@ def test_native_tool_calling():
     assert calls and calls[0].startswith("qwen3"), calls
     print("  [OK] native tool calling (tool_calls -> execute -> feedback -> answer)")
 
+def test_desktop_helpers():
+    """Desktop app: icon files are valid; port detection and readiness
+    polling work against a temporary local HTTP server."""
+    import desktop
+    root = Path(__file__).resolve().parent
+    ico = (root / "assets" / "icon.ico").read_bytes()
+    png = (root / "assets" / "icon.png").read_bytes()
+    assert ico[:4] == b"\x00\x00\x01\x00", "bad ICO header"
+    assert png[:8] == b"\x89PNG\r\n\x1a\n", "bad PNG signature"
+    assert len(png) > 100
+    assert not desktop.is_port_open(9), "reserved/closed port must be closed"
+    import http.server, threading
+    class _Ok(http.server.BaseHTTPRequestHandler):
+        def do_GET(self):
+            self.send_response(200)
+            self.end_headers()
+            self.wfile.write(b"ok")
+        def log_message(self, *a):
+            pass
+    srv = http.server.HTTPServer(("127.0.0.1", 0), _Ok)
+    port = srv.server_address[1]
+    th = threading.Thread(target=srv.serve_forever, daemon=True)
+    th.start()
+    try:
+        assert desktop.is_port_open(port), "listening port must be open"
+        assert desktop.wait_server_ready(port, timeout=5), \
+            "readiness poll must succeed on a live HTTP server"
+    finally:
+        srv.shutdown()
+        srv.server_close()
+        time.sleep(0.3)
+    assert not desktop.is_port_open(port), "port must be closed after shutdown"
+    print("  [OK] desktop helpers (icons + port/readiness)")
+
 
 def test_verify_py():
     r = verify_file(str(Path(WORK_DIR) / "agent.py"))
@@ -1626,7 +1660,7 @@ if __name__ == "__main__":
              test_json_schema_format, test_git_snapshot_restore, test_diff_preview,
              test_update_check, test_rag_folder_scope, test_mcp_client,
              test_task_subagent_loop, test_native_tools_schema,
-             test_native_tool_calling,
+             test_native_tool_calling, test_desktop_helpers,
              test_sess_stats_advice, test_model_router,
              test_rag_status_api, test_audit_api,
              test_cli_main, test_session_checkpoint]

@@ -421,4 +421,14 @@ JSON in content) — legacy path untouched for it. Live-verified with qwen3:8b
 (write -> confirm -> verify). 82/82 tests. Commits 3bc58f4 (stage 9), 619c3ea
 (docs/tool sync).
 
+STAGE 11 (done 2026-08-07): Desktop App pywebview. desktop.py rewritten:
+is_port_open() reuses an already-running server (no double uvicorn bind),
+wait_server_ready() polls GET /health before opening the window (no more
+blocking wait_ollama — server survives missing Ollama), 1280x860 window with
+min_size, title "My OpenCode", icon from assets/icon.ico; fallback to browser
+when pywebview fails; --browser flag. scripts/make_icon.py generates
+assets/icon.png+icon.ico (hand-rolled PNG/ICO via zlib, no PIL). Tauri NOT
+used — Rust/MSVC toolchain not installed. 83/83 tests.
+
+
 

@@ -96,10 +96,10 @@ Kimi 2: 8.3/10 → DeepSeek 2: 8.5/10 → DeepSeek 3: 8.6/10 → Kimi 3: 8.7/10
 - Предел (поведение модели, не кода): полный цикл «исправь баг + прогони тесты» требует follow-up «yes» на CONFIRM (bash) — по дизайну
 
 ## Собственные идеи (низкий приоритет)
-- [x] Native tool calling — СДЕЛАНО как Этап 10 (ниже)
-- [ ] Desktop App (Tauri — pywebview уже работает)
+- [x] Native tool calling — СДЕЛАНО (Этап 10)
+- [x] Desktop App — СДЕЛАНО как Этап 11 (pywebview; Tauri требует Rust/MSVC тулчейн — не установлен)
 - [ ] GPU embeddings (Ollama уже на GPU — фактически не требуется)
-- [ ] deepseek-coder-v2:16b — пулл (для стабильного кодинга на 12GB)
+- [ ] deepseek-coder-v2:16b — пулл (~13GB; RAM 15.4GB — впритык; риск) 
 
 ### Этап 10. Native tool calling (Ollama tools=) — СДЕЛАНО (2026-08-07)
 - [x] native_chat(): /api/chat с tools=[схемы из TOOL_SCHEMAS], парсинг tool_calls (arguments как dict/строка)
@@ -109,3 +109,10 @@ Kimi 2: 8.3/10 → DeepSeek 2: 8.5/10 → DeepSeek 3: 8.6/10 → Kimi 3: 8.7/10
 - [x] ВАЖНО: qwen2.5-coder:7b (дефолт) НЕ поддерживает native (отдаёт JSON в контенте) — фича активна только для поддерживающих моделей, legacy-путь не тронут
 - [x] live (qwen3:8b): «создай файл и проверь» → native write → [CONFIRM] → yes → write+verify → ответ
 - [x] Тесты: test_native_tool_calling (мок native_chat: tool_calls → execute → feedback → answer), test_native_tools_schema; 82/82
+
+### Этап 11. Desktop App (pywebview) — СДЕЛАНО (2026-08-07)
+- [x] desktop.py: авто-обнаружение уже запущенного сервера (is_port_open — не стартует второй uvicorn), poll /health до готовности окна (wait_server_ready), reuse вместо double-bind
+- [x] Иконка: scripts/make_icon.py генерирует assets/icon.png + icon.ico (PNG/ICO вручную через zlib, без PIL); иконка в заголовке окна
+- [x] Окно: 1280x860, min_size 800x600, заголовок «My OpenCode»; fallback: pywebview сломался → браузер; --browser флаг
+- [x] Убран блокирующий wait_ollama() перед стартом окна (сервер переживает отсутствие Ollama)
+- [x] Тест: test_desktop_helpers (валидность иконок, is_port_open/wait_server_ready на временном http.server); 83/83
