@@ -166,26 +166,65 @@ def run_agent_loop(msgs, session_id, events=None, model=None, deps=None):
         project = deps.WORK_DIR.name or str(deps.WORK_DIR)
         dyn = {"role": "system",
                "content": _dynamic_context(last_result_name, last_result_text, it, sess_stats, project)}
-        if events:
+        native_on = False
+        native_calls = []
+        try:
+            import tools as _tools_mod
+            native_on = _tools_mod.native_supported(current_model)
+        except Exception:
+            pass
+        if native_on:
             try:
-                content = deps.stream_ollama(
-                    msgs + [dyn], current_model,
-                    on_chunk=lambda f: _emit({"type": "text", "text": f}))
-                tokens_used = 0
+                call_msgs = []
+                for m in msgs + [dyn]:
+                    if (m.get("role") == "system"
+                            and "RULES" in (m.get("content") or "")[:4000]):
+                        call_msgs.append({"role": "system",
+                                          "content": _tools_mod.native_system_prompt()})
+                    else:
+                        call_msgs.append(m)
+                n_content, native_calls, n_tokens = _tools_mod.native_chat(
+                    call_msgs, current_model)
+                content, tokens_used = n_content, n_tokens
+                _emit({"type": "status", "msg": f"native tool call round {it+1}"})
+                if not content and not native_calls:
+                    raise RuntimeError("empty native response")
             except Exception as e:
-                log.warning("stream failed (%s), falling back to call_ollama", e)
+                log.warning("native_chat failed (%s), falling back to legacy", e)
+                native_on = False
+                native_calls = []
+        if not native_on:
+            if events:
+                try:
+                    content = deps.stream_ollama(
+                        msgs + [dyn], current_model,
+                        on_chunk=lambda f: _emit({"type": "text", "text": f}))
+                    tokens_used = 0
+                except Exception as e:
+                    log.warning("stream failed (%s), falling back to call_ollama", e)
+                    result = deps.call_ollama(msgs + [dyn], current_model)
+                    content, tokens_used = (result if isinstance(result, tuple)
+                                            else (result, 0))
+            else:
                 result = deps.call_ollama(msgs + [dyn], current_model)
                 content, tokens_used = (result if isinstance(result, tuple)
                                         else (result, 0))
-        else:
-            result = deps.call_ollama(msgs + [dyn], current_model)
-            content, tokens_used = (result if isinstance(result, tuple)
-                                    else (result, 0))
-        if not content:
+        if not content and not (native_on and native_calls):
             break
         total_tokens += tokens_used or (len(content) / 4)
 
-        tool_blocks = parse_tool_blocks(content, VALID_TOOLS)
+        if native_on:
+            if not native_calls:
+                full += _strip_system_markers(content)
+                break
+            before = _strip_system_markers(content).strip()
+            if before:
+                full += before + "\n"
+                msgs.append({"role": "assistant", "content": before})
+            tool_blocks = [(None, None, {"tool": c["name"], **c["arguments"]})
+                           for c in native_calls]
+        else:
+            tool_blocks = parse_tool_blocks(content, VALID_TOOLS)
 
         if not tool_blocks:
             no_tool_iterations += 1
@@ -256,10 +295,11 @@ def run_agent_loop(msgs, session_id, events=None, model=None, deps=None):
             full += _strip_system_markers(content)
             break
 
-        before = _strip_system_markers(content[:tool_blocks[0][0].start()].strip())
-        if before:
-            full += before + "\n"
-            msgs.append({"role": "assistant", "content": before})
+        if not native_on:
+            before = _strip_system_markers(content[:tool_blocks[0][0].start()].strip())
+            if before:
+                full += before + "\n"
+                msgs.append({"role": "assistant", "content": before})
 
         all_results = []
         calls_made = []

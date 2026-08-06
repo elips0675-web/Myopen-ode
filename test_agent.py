@@ -498,6 +498,53 @@ def test_task_subagent_loop():
         agent_mod.call_ollama = orig_c
     print("  [OK] hierarchical subagent (tool loop)")
 
+def test_native_tools_schema():
+    """native_tools_schema covers all tools incl. snapshot/restore; support
+    detection matches only models known for native tool calling."""
+    import tools as tools_mod
+    s = tools_mod.native_tools_schema()
+    names = {t["function"]["name"] for t in s}
+    assert {"read", "write", "edit", "snapshot", "restore", "mcp"} <= names, names
+    rd = next(t for t in s if t["function"]["name"] == "read")
+    assert "path" in rd["function"]["parameters"]["required"]
+    assert not tools_mod.native_supported("qwen2.5-coder:7b")
+    assert tools_mod.native_supported("qwen3:8b")
+    assert not tools_mod.native_supported("deepseek-r1:1.5b")
+    print("  [OK] native tools schema + support detection")
+
+def test_native_tool_calling():
+    """Native tool calls (Ollama tools=) are executed, results fed back,
+    final text returned; unsupported model falls back to legacy parser."""
+    import agent as agent_mod
+    import tools as tools_mod
+    orig = tools_mod.native_chat
+    calls = []
+    demo = TMP / "demo_native.txt"
+    demo.write_text("hello native world", "utf-8")
+    def mock_native(messages, model, tools=None):
+        calls.append(model)
+        joined = " ".join(m.get("content", "") for m in messages)
+        if "hello native world" in joined:
+            return "FINAL ANSWER 42", [], 5
+        return "", [{"name": "read", "arguments": {"path": ".test_tmp/demo_native.txt"}}], 5
+    tools_mod.native_chat = mock_native
+    old_env = os.environ.get("AI_NATIVE_TOOLS")
+    os.environ["AI_NATIVE_TOOLS"] = "1"
+    try:
+        out = agent_mod.run_agent_loop(
+            [{"role": "user", "content": "read demo_native.txt"}], None,
+            model="qwen3:8b")
+    finally:
+        tools_mod.native_chat = orig
+        if old_env is None:
+            os.environ.pop("AI_NATIVE_TOOLS", None)
+        else:
+            os.environ["AI_NATIVE_TOOLS"] = old_env
+    assert "hello native world" in out, f"tool result missing: {out}"
+    assert "FINAL ANSWER 42" in out, f"final answer missing: {out}"
+    assert calls and calls[0].startswith("qwen3"), calls
+    print("  [OK] native tool calling (tool_calls -> execute -> feedback -> answer)")
+
 
 def test_verify_py():
     r = verify_file(str(Path(WORK_DIR) / "agent.py"))
@@ -1578,7 +1625,8 @@ if __name__ == "__main__":
              test_bash_docker_flags, test_health_endpoint, test_vendor_static,
              test_json_schema_format, test_git_snapshot_restore, test_diff_preview,
              test_update_check, test_rag_folder_scope, test_mcp_client,
-             test_task_subagent_loop,
+             test_task_subagent_loop, test_native_tools_schema,
+             test_native_tool_calling,
              test_sess_stats_advice, test_model_router,
              test_rag_status_api, test_audit_api,
              test_cli_main, test_session_checkpoint]

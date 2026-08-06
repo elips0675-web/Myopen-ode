@@ -680,6 +680,158 @@ def call_ollama(messages, model=None):
                 log.warning("All Ollama retries exhausted. Trying fallback...")
                 return call_fallback(messages, m), 0
 
+# ─── native tool calling (Ollama /api/chat "tools") ─────────────────────
+NATIVE_TOOL_MODELS = tuple(
+    p.strip() for p in os.environ.get("AI_NATIVE_MODELS",
+                                      "qwen3,llama3.1,gpt-oss").split(",")
+    if p.strip())
+
+TOOL_DESCS = {
+    "read": "Read a file from the workspace (relative path)",
+    "write": "Create or overwrite a file with content",
+    "edit": "Replace old text with new text in a file",
+    "bash": "Run a shell command in the workspace",
+    "glob": "Find files by glob pattern",
+    "grep": "Search file contents by regex",
+    "list": "List workspace files and folders",
+    "web": "Fetch a web page and return text",
+    "websearch": "Search the web (DuckDuckGo)",
+    "diff": "Show uncommitted changes",
+    "commit": "Commit all changes with a message",
+    "undo": "Revert last write/edit of a file",
+    "verify": "Syntax-check a file",
+    "plan": "Propose a multi-step plan",
+    "search": "Semantic code search (RAG)",
+    "question": "Ask the user a multiple choice question",
+    "skill": "Load a .agent_skills/*.md skill",
+    "patch": "Apply a unified diff to a file",
+    "task": "Delegate to a subagent (explore/scout/general)",
+    "todo": "Manage the in-session todo list",
+    "lsp": "Code intelligence via LSP",
+    "testgen": "Generate unit tests from code",
+    "db_query": "Run an SQL query against the local SQLite DB",
+    "deps": "Analyze project dependencies",
+    "mcp": "Call an external MCP server tool",
+    "snapshot": "Git pre-backup of all changes",
+    "restore": "Restore all changes from the last snapshot",
+}
+
+_NATIVE_OPTIONAL = {
+    "read": ["max_lines", "offset"],
+    "bash": ["cwd"],
+    "glob": ["path"],
+    "grep": ["path", "include"],
+    "search": ["top_k", "hybrid", "scope"],
+    "web": ["format"],
+    "websearch": ["num_results"],
+    "write": ["append"],
+    "edit": ["path"],
+    "todo": ["items", "index"],
+    "mcp": ["args", "prompt"],
+    "lsp": ["operation", "path"],
+}
+
+_NATIVE_INT = {"top_k", "max_results", "num_results", "offset", "max_lines", "index", "character", "line"}
+
+
+def _native_prop(key):
+    if key in _NATIVE_INT:
+        return {"type": "integer"}
+    if key == "items":
+        return {"type": "array", "items": {"type": "string"}}
+    return {"type": "string"}
+
+
+def native_supported(model):
+    """True if the model name is known to support Ollama native tool calls
+    (and native calling is not disabled via AI_NATIVE_TOOLS=0)."""
+    if os.environ.get("AI_NATIVE_TOOLS", "").lower() in ("0", "off", "false", "no"):
+        return False
+    m = (model or "").lower()
+    return any(m.startswith(p.lower()) for p in NATIVE_TOOL_MODELS)
+
+
+def native_tools_schema():
+    """TOOL_SCHEMAS -> Ollama tools=[{"type": "function", ...}]."""
+    out = []
+    for name, sch in TOOL_SCHEMAS.items():
+        required = sch.get("required", [])
+        props = {}
+        for key in required:
+            props[key] = _native_prop(key)
+        for key in _NATIVE_OPTIONAL.get(name, ()):
+            if key not in props:
+                props[key] = _native_prop(key)
+        out.append({"type": "function", "function": {
+            "name": name,
+            "description": TOOL_DESCS.get(name, name),
+            "parameters": {"type": "object", "properties": props,
+                           "required": required or None}}})
+    return out
+
+
+NATIVE_SYSTEM_PROMPT = """CRITICAL: You are a coding AGENT with tools on Windows.
+
+WORKSPACE: . — project root.
+
+You can call the provided FUNCTIONS (tools) when you need to act on the workspace.
+RULES:
+1. Complex multi-step tasks: call plan FIRST with steps, wait for user confirmation, then execute.
+2. Ask before destructive tools: write, edit, bash, commit, undo.
+3. When the user confirms with "yes"/"да" — proceed with the exact tool call you proposed.
+4. NEVER invent tools — use ONLY the functions provided to you.
+5. If a tool returns an error (file not found, bad args) — fix the arguments and retry (use glob to locate real paths). Report the final result only, no tutorials or checklists.
+6. If no tool is needed — reply with plain text.
+7. Answer in the user's language (same as the last user message).
+8. Simple questions ("who are you", greetings, thanks, small talk) — answer DIRECTLY with one short sentence, NEVER call any tool.
+9. NEVER write system markers like [PLAN], [CONFIRM], [tool:...] or "Reply yes" in your text.
+10. After every write/edit — run a check with the bash function (e.g. python -m py_compile) and report the result.
+11. ALWAYS read a file BEFORE calling edit or write on it (except brand-new files); the old text of an edit must be copied EXACTLY from the read output.
+12. NEVER invent file paths; use paths returned by list/glob/grep; paths are RELATIVE to the workspace.
+13. You may call several functions in one turn if they are independent and do not depend on each other's results.
+14. The final reply to the user is plain text in the user's language.
+"""
+
+
+def native_system_prompt():
+    return NATIVE_SYSTEM_PROMPT
+
+
+def native_chat(messages, model=None, tools=None):
+    """Ollama native tool-calling chat. Returns (content, tool_calls, tokens).
+    tool_calls: list of {"name": str, "arguments": dict}."""
+    m = model or MODEL
+    num_ctx = int(os.environ.get("OLLAMA_NUM_CTX", "16384"))
+    payload = {
+        "model": m,
+        "messages": [msg for msg in messages if msg.get("content")],
+        "stream": False, "keep_alive": -1,
+        "options": {"temperature": 0.2, "num_predict": 2048, "num_ctx": num_ctx},
+    }
+    if tools is None:
+        tools = native_tools_schema()
+    payload["tools"] = tools
+    r = requests.post(f"{OLLAMA_URL}/api/chat", json=payload, timeout=180)
+    r.raise_for_status()
+    data = r.json()
+    msg = data.get("message", {}) or {}
+    content = re.sub(r'<think>.*?</think>', '', msg.get("content", "") or "",
+                     flags=re.DOTALL)
+    calls = []
+    for tc in msg.get("tool_calls") or []:
+        fn = tc.get("function") or {}
+        name = fn.get("name", "")
+        args = fn.get("arguments") or {}
+        if isinstance(args, str):
+            try:
+                args = json.loads(args)
+            except Exception:
+                args = {}
+        if name:
+            calls.append({"name": name, "arguments": args or {}})
+    return content, calls, data.get("eval_count", 0)
+
+
 def call_fallback(messages, model_name):
     fallback = FALLBACK_MODEL or ""
     flash_provider = os.environ.get("FLASH_PROVIDER", "")

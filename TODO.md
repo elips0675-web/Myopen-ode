@@ -96,7 +96,16 @@ Kimi 2: 8.3/10 → DeepSeek 2: 8.5/10 → DeepSeek 3: 8.6/10 → Kimi 3: 8.7/10
 - Предел (поведение модели, не кода): полный цикл «исправь баг + прогони тесты» требует follow-up «yes» на CONFIRM (bash) — по дизайну
 
 ## Собственные идеи (низкий приоритет)
-- [ ] Native tool calling (Ollama API уже поддерживает tools/function-calling — перевести агента с prompt-based на JSON-native)
+- [x] Native tool calling — СДЕЛАНО как Этап 10 (ниже)
 - [ ] Desktop App (Tauri — pywebview уже работает)
 - [ ] GPU embeddings (Ollama уже на GPU — фактически не требуется)
 - [ ] deepseek-coder-v2:16b — пулл (для стабильного кодинга на 12GB)
+
+### Этап 10. Native tool calling (Ollama tools=) — СДЕЛАНО (2026-08-07)
+- [x] native_chat(): /api/chat с tools=[схемы из TOOL_SCHEMAS], парсинг tool_calls (arguments как dict/строка)
+- [x] native_supported(): автодетект по имени модели (default qwen3,llama3.1,gpt-oss; AI_NATIVE_MODELS; отключение AI_NATIVE_TOOLS=0)
+- [x] NATIVE_SYSTEM_PROMPT: отдельный промпт БЕЗ legacy-правил ```tool-формата (полный SYSTEM_PROMPT заставляет qwen3 отдавать текст вместо tool_calls — подтверждено probe)
+- [x] loop: native-ветка — tool_calls → execute_tool_block (несколько вызовов за ход) → feedback; пустые calls → финальный ответ; сбой → fallback на legacy-парсер
+- [x] ВАЖНО: qwen2.5-coder:7b (дефолт) НЕ поддерживает native (отдаёт JSON в контенте) — фича активна только для поддерживающих моделей, legacy-путь не тронут
+- [x] live (qwen3:8b): «создай файл и проверь» → native write → [CONFIRM] → yes → write+verify → ответ
+- [x] Тесты: test_native_tool_calling (мок native_chat: tool_calls → execute → feedback → answer), test_native_tools_schema; 82/82

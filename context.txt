@@ -407,3 +407,18 @@ StaticFiles mount (offline UI); MCP client full handshake (initialize ->
 notifications/initialized -> capabilities, resources/list|read,
 prompts/list|get, tools/list/call). 80/80 tests. Commit b5994ea (not pushed).
 
+STAGE 10 (done 2026-08-07): Native tool calling via Ollama /api/chat "tools".
+tools.py: native_chat(messages, model, tools) -> (content, tool_calls, tokens),
+native_supported(model) — autodetect by name prefix (AI_NATIVE_MODELS default
+"qwen3,llama3.1,gpt-oss", disable AI_NATIVE_TOOLS=0), native_tools_schema()
+(TOOL_SCHEMAS -> Ollama function format), NATIVE_SYSTEM_PROMPT (legacy rules
+about ```tool blocks REMOVED — the full SYSTEM_PROMPT makes qwen3 return text
+instead of tool_calls, verified by probe). agent_loop native branch: swaps
+system prompt, calls native_chat, executes tool_calls via execute_tool_block
+(multiple calls per turn), empty calls -> final answer, failure -> legacy
+fallback. qwen2.5-coder:7b (default model) does NOT support native (returns
+JSON in content) — legacy path untouched for it. Live-verified with qwen3:8b
+(write -> confirm -> verify). 82/82 tests. Commits 3bc58f4 (stage 9), 619c3ea
+(docs/tool sync).
+
+
