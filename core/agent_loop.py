@@ -20,7 +20,8 @@ log = logging.getLogger('agent_loop')
 
 VALID_TOOLS = ("read", "write", "edit", "bash", "glob", "grep", "list", "web",
                "diff", "commit", "undo", "verify", "plan", "search", "websearch",
-               "question", "skill", "patch", "task", "todo", "lsp")
+               "question", "skill", "patch", "task", "todo", "lsp",
+               "snapshot", "restore")
 
 
 def _dynamic_context(tool_name, tool_text, it, sess_stats=None, project="workspace"):
@@ -121,6 +122,12 @@ def run_agent_loop(msgs, session_id, events=None, model=None, deps=None):
             deps._cancel_clear(session_id)
             break
 
+        try:
+            import tools as _tools_mod
+            _tools_mod.set_json_mode(False)
+        except Exception:
+            pass
+
         _emit({"type": "status", "msg": f"iteration {it+1}/{max_iter}"})
 
         # Summarize context every 3 iterations to keep token usage in check
@@ -210,6 +217,11 @@ def run_agent_loop(msgs, session_id, events=None, model=None, deps=None):
                              'Error: file not found\n'
                              'Corrected: {"tool": "glob", "pattern": "**/*.py"} — locate the real path, '
                              'then read it and retry the edit with the EXACT text from the read output.'})
+                try:
+                    import tools as _tools_mod
+                    _tools_mod.set_json_mode(True)
+                except Exception:
+                    pass
                 log.info("Tool error, nudging model back to tool format (retry %d)", err_hint_retried)
                 continue
             if (code_hint_retried < 2 and len(content.strip()) > 40
@@ -220,6 +232,11 @@ def run_agent_loop(msgs, session_id, events=None, model=None, deps=None):
                 msgs.append({"role": "system", "content":
                              "Do NOT write code in your reply. Put code into a file with the "
                              "`write` or `edit` tool, then verify it with `bash`."})
+                try:
+                    import tools as _tools_mod
+                    _tools_mod.set_json_mode(True)
+                except Exception:
+                    pass
                 log.info("Code detected in reply, nudging to write tool (retry %d)", code_hint_retried)
                 continue
             if format_retried < 1 and len(content.strip()) > 20:
@@ -229,6 +246,11 @@ def run_agent_loop(msgs, session_id, events=None, model=None, deps=None):
                 msgs.append({"role": "user", "content": hint})
                 full += _strip_system_markers(content) + "\n"
                 format_retried += 1
+                try:
+                    import tools as _tools_mod
+                    _tools_mod.set_json_mode(True)
+                except Exception:
+                    pass
                 continue
             full += _strip_system_markers(content)
             break

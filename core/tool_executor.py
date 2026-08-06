@@ -72,6 +72,29 @@ def execute_tool_block(idx, tc, ctx):
 
     DESTRUCTIVE = () if ctx["no_confirm"] else ("write", "edit", "bash", "commit", "undo")
 
+    if name == "edit" and tc.get("old") is not None:
+        # inline diff preview (Cursor-style): shown to the user before applying
+        try:
+            from tools import diff_preview
+            d = diff_preview(tc.get("path", ""), tc.get("old", ""), tc.get("new", ""))
+            if d:
+                ctx["emit"]({"type": "diff", "path": tc.get("path", ""), "diff": d[:4000]})
+        except Exception:
+            pass
+
+    if name in DESTRUCTIVE and not state.get("git_snap"):
+        # git pre-backup: snapshot the tree once before the first mutating tool
+        state["git_snap"] = True
+        try:
+            import os as _os
+            import tools as _tools
+            if (not ctx["no_confirm"]) or _os.environ.get("AI_GIT_SNAPSHOT") == "1":
+                sn = _tools.git_prebackup()
+                if sn and "snapshot" in sn:
+                    full[0] += f"[tool: pre-backup] {sn}\n"
+        except Exception:
+            pass
+
     if name == "question":
         r = execute_tool(name, tc)
         _sess_record(ctx["sess_stats"], name, r)

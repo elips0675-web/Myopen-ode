@@ -114,7 +114,7 @@ function langFor(path){
   var ext=('.'+path).split('.').pop().toLowerCase();
   var map={py:'python',js:'javascript',jsx:'javascript',ts:'javascript',tsx:'javascript',mjs:'javascript',
     html:'htmlmixed',htm:'htmlmixed',vue:'htmlmixed',css:'css',scss:'css',md:'markdown',
-    json:'json',jsonc:'json',sh:'shell',bat:'shell',ps1:'shell',go:'go',rs:'rust',
+    json:'javascript',jsonc:'javascript',sh:'shell',bat:'shell',ps1:'shell',go:'go',rs:'rust',
     c:'clike',h:'clike',cpp:'clike',cc:'clike',java:'clike',cs:'clike',yaml:'yaml',yml:'yaml',toml:'shell'};
   return map[ext]||'';
 }
@@ -263,7 +263,15 @@ function init(){
   }).catch(function(){});
   fetch(A+'/api/project').then(function(r){return r.json()}).then(function(p){$('prj').textContent=p.name}).catch(function(){});
   loadProjects();loadFiles();loadSessions();loadSkills();loadTabPaths();cl();$('ta').focus();
-  ragPoll();
+  ragPoll();updPoll();
+}
+function updPoll(){
+  fetch(A+'/api/update').then(function(r){return r.json()}).then(function(d){
+    var el=$('updst');
+    if(!el){return}
+    if(d.ok&&d.has_update)el.textContent='\u2B06 update '+d.behind;
+    else el.textContent='';
+  }).catch(function(){});
 }
 function ragPoll(){
   fetch(A+'/api/rag/status').then(function(r){return r.json()}).then(function(s){
@@ -324,6 +332,22 @@ function send(){
       if(result&&result.toString().toLowerCase().includes('error'))tl.className='tline terr';
       tlCount++;
     }
+    function diffHtml(diff){
+      var out='',rows=diff.split('\n');
+      for(var i=0;i<rows.length;i++){
+        var r=rows[i];
+        if(r.startsWith('+++')||r.startsWith('---')||r.startsWith('@@'))out+='<span class="h">'+esc(r)+'</span>';
+        else if(r.startsWith('+'))out+='<span class="a">'+esc(r)+'</span>';
+        else if(r.startsWith('-'))out+='<span class="d">'+esc(r)+'</span>';
+        else if(r)out+='<span>'+esc(r)+'</span>';
+      }
+      return '<div class="dp">'+out+'</div>';
+    }
+    function diffLine(path,diff){
+      var bx=document.createElement('div');bx.className='msg a';
+      bx.innerHTML='<b style="font-size:11px">Edit preview: '+esc(path||'')+'</b>'+diffHtml(diff);
+      be.parentNode.appendChild(bx);
+    }
     fetch(A+'/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},
     body:JSON.stringify({model:m,messages:ms,session_id:curSid}),signal:ac.signal})
   .then(function(r){if(!r.ok)throw Error(r.status);
@@ -336,6 +360,7 @@ function send(){
         else if(d.tool){
           if(d.tool.type=='status')$('st2').textContent=d.tool.msg;
           else if(d.tool.type=='tool')toolLine(d.tool.name,d.tool.args,d.tool.result);
+          else if(d.tool.type=='diff')diffLine(d.tool.path,d.tool.diff);
         }
       }catch(e){}}});
       be.innerHTML=fm(fl)||'<span class="sp"></span>';rd2()

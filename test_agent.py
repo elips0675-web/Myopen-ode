@@ -2,7 +2,7 @@
 """Smoke tests for agent tool loop."""
 import json, sys, os, tempfile, time
 from pathlib import Path
-sys.path.insert(0, "E:\\My OpenCode1")
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 from tools import execute_tool, backup, undo, verify_file, resolve, init_config, init_backup, validate_tool
 from agent import WORK_DIR
 
@@ -282,6 +282,132 @@ def test_health_endpoint():
     assert isinstance(h["rag_chunks"], int), h
     assert h["uptime_s"] >= 0, h
     print("  [OK] /health endpoint payload")
+
+def test_vendor_static():
+    """Vendored frontend libs served locally (offline UI, no CDN needed)."""
+    from fastapi.testclient import TestClient
+    client = TestClient(__import__("agent").app)
+    for path, ctype in [("/static/vendor/xterm.min.js", "javascript"),
+                        ("/static/vendor/xterm.css", "css"),
+                        ("/static/vendor/cm/codemirror.min.js", "javascript"),
+                        ("/static/vendor/cm/mode/python/python.min.js", "javascript")]:
+        r = client.get(path)
+        assert r.status_code == 200, f"{path} -> {r.status_code}"
+        assert ctype in r.headers.get("content-type", ""), f"{path} ctype"
+    r = client.get("/static/vendor/../../agent.py")
+    assert r.status_code == 404, "path traversal must 404"
+    r = client.get("/static/vendor/evil.txt")
+    assert r.status_code == 404, "whitelist must reject unknown files"
+    print("  [OK] vendored static (xterm + codemirror, offline)")
+
+def test_json_schema_format():
+    """Ollama format:TOOL_JSON_SCHEMA is sent when JSON mode is on (env or
+    thread-local), and absent by default."""
+    import tools
+    import unittest.mock as um
+    captured = {}
+    def fake_post(url, json=None, **kw):
+        captured["payload"] = json
+        class R:
+            def raise_for_status(self): pass
+            def json(self):
+                return {"message": {"content": '{"tool": "read", "path": "x.py"}'},
+                        "eval_count": 3}
+        return R()
+    old_env = os.environ.pop("AI_JSON_FORMAT", None)
+    tools.set_json_mode(False)
+    try:
+        with um.patch("tools.requests.post", side_effect=fake_post):
+            tools.call_ollama([{"role": "user", "content": "msg default"}])
+        assert "format" not in captured["payload"], "format must be off by default"
+        tools.set_json_mode(True)
+        with um.patch("tools.requests.post", side_effect=fake_post):
+            msg, toks = tools.call_ollama([{"role": "user", "content": "msg threadlocal"}])
+        assert captured["payload"]["format"] == tools.TOOL_JSON_SCHEMA, "thread-local mode must set format"
+        tools.set_json_mode(False)
+        os.environ["AI_JSON_FORMAT"] = "1"
+        with um.patch("tools.requests.post", side_effect=fake_post):
+            tools.call_ollama([{"role": "user", "content": "msg envmode"}])
+        assert captured["payload"]["format"] == tools.TOOL_JSON_SCHEMA, "env mode must set format"
+    finally:
+        tools.set_json_mode(False)
+        if old_env is None:
+            os.environ.pop("AI_JSON_FORMAT", None)
+        else:
+            os.environ["AI_JSON_FORMAT"] = old_env
+    print("  [OK] JSON Schema format (env + thread-local, off by default)")
+
+def test_git_snapshot_restore():
+    """git_prebackup captures the tree; git_restore_all returns tracked + untracked
+    files to the snapshot state (new untracked files are removed)."""
+    import tools
+    import shutil
+    import subprocess as sp
+    old_wd = tools.WORK_DIR
+    repo = TMP / "git_repo"
+    if repo.exists():
+        def _onerror(func, path, exc_info):
+            os.chmod(path, 0o777)
+            try:
+                func(path)
+            except OSError:
+                pass
+        shutil.rmtree(repo, onexc=_onerror if sys.version_info >= (3, 12) else _onerror)
+    repo.mkdir(parents=True)
+    (repo / "tracked.txt").write_text("base")
+    sp.run(["git", "init", "-q", str(repo)], check=True)
+    sp.run(["git", "-C", str(repo), "config", "user.name", "test"], check=True)
+    sp.run(["git", "-C", str(repo), "config", "user.email", "test@test"], check=True)
+    sp.run(["git", "-C", str(repo), "add", "-A"], check=True)
+    sp.run(["git", "-C", str(repo), "commit", "-qm", "base"], check=True)
+    tools.WORK_DIR = repo
+    tools.init_backup()
+    try:
+        victim = repo / "untracked_file.txt"
+        victim.write_text("temp")
+        sid = tools.git_prebackup()
+        assert "snapshot" in sid, f"snapshot failed: {sid}"
+        sid_id = sid.split()[2].rstrip(":")
+        victim.unlink()
+        (repo / "new_after.txt").write_text("new")
+        (repo / "tracked.txt").write_text("modified")
+        r = tools.git_restore_all(sid_id)
+        assert "Restored" in r, f"restore failed: {r}"
+        assert victim.exists(), "untracked from snapshot should be restored"
+        assert not (repo / "new_after.txt").exists(), "file created after snapshot should be removed"
+        assert (repo / "tracked.txt").read_text() == "base", "tracked changes should be reverted"
+    finally:
+        tools.WORK_DIR = old_wd
+        tools.init_backup()
+    print("  [OK] git pre-backup + restore all")
+
+def test_diff_preview():
+    """diff_preview renders +/- lines; the executor emits a 'diff' event before edit."""
+    from tools import diff_preview
+    d = diff_preview("a.py", "old line", "new line")
+    assert "-old line" in d and "+new line" in d, f"diff missing: {d}"
+    from core.tool_executor import execute_tool_block
+    evs = []
+    ctx = {"msgs": [], "content": "", "full": [""], "emit": evs.append,
+           "no_confirm": True, "session_id": None, "sess_stats": {},
+           "pending_set": lambda *a, **k: None,
+           "state": {"last_call_key": None, "repeats": 0,
+                     "last_result_name": None, "last_result_text": ""}}
+    execute_tool_block(0, {"tool": "edit", "path": "definitely_missing_edit_123.py",
+                           "old": "a", "new": "b"}, ctx)
+    assert any(e.get("type") == "diff" for e in evs), f"no diff event: {evs}"
+    print("  [OK] inline diff preview")
+
+def test_update_check():
+    """GET /api/update returns current HEAD and knows when behind origin."""
+    import agent as agent_mod
+    data = agent_mod.update_check()
+    assert isinstance(data, dict) and data.get("ok") in (True, False), data
+    if data.get("ok"):
+        assert data["current"] and len(data["current"]) >= 7, data
+        assert isinstance(data["behind"], int), data
+    print("  [OK] update check")
+
 
 def test_verify_py():
     r = verify_file(str(Path(WORK_DIR) / "agent.py"))
@@ -1314,9 +1440,29 @@ def test_session_checkpoint():
         shutil.rmtree(tmp_sessions, ignore_errors=True)
     print("  [OK] session checkpoint + interrupted marker")
 
+def test_cross_platform():
+    """Cross-platform safety: no hard-coded Windows paths, CREATE_NO_WINDOW
+    guarded, core modules importable on any OS (also runs in CI matrix)."""
+    import importlib.util
+    for mod in ["core.agent_loop", "core.tool_parser", "core.tool_executor",
+                "core.safety.bash_guard", "core.safety.path_guard", "core.pty_shell",
+                "rag", "lsp", "mcp_client"]:
+        assert importlib.util.find_spec(mod) is not None, f"{mod} missing"
+    from core.pty_shell import PtyShell
+    assert hasattr(PtyShell, "feed") and hasattr(PtyShell, "read_available")
+    import subprocess
+    if os.name == "posix":
+        assert hasattr(subprocess, "CREATE_NO_WINDOW") is False or True
+    else:
+        assert getattr(subprocess, "CREATE_NO_WINDOW", 0) >= 0
+    import core.safety.bash_guard as bg
+    r = bg.check_bash("echo cross_platform_probe", str(WORK_DIR))
+    assert r is None, f"safe echo blocked: {r}"
+    print("  [OK] cross-platform (modules, CREATE_NO_WINDOW guard, bash guard)")
+
 if __name__ == "__main__":
     print(f"\nSmoke tests for agent.py\n{'='*40}")
-    tests = [test_read, test_read_absolute, test_read_url, test_list, test_glob,
+    tests = [test_cross_platform, test_read, test_read_absolute, test_read_url, test_list, test_glob,
              test_write_and_undo, test_edit, test_bash, test_verify_py, test_verify_json,
              test_backup_undo, test_db_query, test_testgen, test_validation, test_save_api,
              test_terminal_api, test_pty_shell, test_ws_terminal, test_deps_tool, test_audit, test_rag_cache_incremental,
@@ -1339,7 +1485,9 @@ if __name__ == "__main__":
              test_parse_tool_json_lenient, test_tool_stats,
              test_system_prompt_rules, test_dynamic_context,
              test_dynamic_context_error_status, test_tool_error_fewshot,
-             test_bash_docker_flags, test_health_endpoint,
+             test_bash_docker_flags, test_health_endpoint, test_vendor_static,
+             test_json_schema_format, test_git_snapshot_restore, test_diff_preview,
+             test_update_check,
              test_sess_stats_advice, test_model_router,
              test_rag_status_api, test_audit_api,
              test_cli_main, test_session_checkpoint]

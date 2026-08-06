@@ -4,9 +4,9 @@ HTML = r"""<!DOCTYPE html>
 <html lang="en">
 <head><meta charset="UTF-8"><title>AI Coder v2 — OpenCode Desktop</title>
 <link rel="stylesheet" href="/static/vendor/xterm.css">
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.css">
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/theme/dracula.min.css">
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/fold/foldgutter.min.css">
+<link rel="stylesheet" href="/static/vendor/cm/codemirror.min.css">
+<link rel="stylesheet" href="/static/vendor/cm/theme/dracula.min.css">
+<link rel="stylesheet" href="/static/vendor/cm/addon/fold/foldgutter.min.css">
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 :root{--bg:#f5f5f5;--fg:#1a1a1a;--sidebar:#fff;--sidebar-border:#ddd;--accent:#2563eb;--accent-hover:#1d4ed8;--msg-u:#e8f0fe;--msg-a:#fff;--msg-a-border:#eee;--pre-bg:#f8f9fa;--code-bg:#f0f0f0;--inp-bg:#fff;--inp-border:#ccc;--btn:#2563eb;--btn-hover:#1d4ed8;--cnl-btn:#dc2626;--stat-bg:#fff;--st-c:#999;--diff-add:#dcfce7;--diff-add-fg:#166534;--diff-del:#fce7f3;--diff-del-fg:#991b1b;--diff-hdr:#f0f0f0;--plan:#eff6ff;--plan-fg:#1e40af;--tree-hover:#f0f0f0;--sp:10px;--s:#2563eb;--radius:8px;--font:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
@@ -156,7 +156,7 @@ body[data-theme="dark"]{--bg:#0f1117;--fg:#e2e8f0;--sidebar:#161b22;--sidebar-bo
     <button onclick="delModel()" title="Delete model" style="background:var(--cnl-btn);color:#fff;border:none;border-radius:4px;padding:2px 8px;cursor:pointer;font-size:11px">-Del</button>
     <span class="badge" id="model-badge">Model</span>
     <span id="prj"></span>
-    <span id="st2"></span><a href="/docs" target="_blank" style="font-size:11px;color:var(--st-c);text-decoration:none;margin-left:8px">API</a><span id="ragst" style="font-size:11px;color:var(--st-c);margin-left:8px"></span><button onclick="showAudit()" title="Action audit log" style="background:none;border:none;color:var(--st-c);cursor:pointer;font-size:12px;margin-left:8px">&#128203;</button><button onclick="toggleTerm()" title="Terminal" style="background:none;border:none;color:var(--st-c);cursor:pointer;font-size:14px;margin-left:8px">&#9654;_</button><button id="theme-btn" onclick="toggleTheme()" style="background:none;border:none;color:var(--st-c);cursor:pointer;font-size:16px;margin-left:8px">&#127769;</button>
+    <span id="st2"></span><a href="/docs" target="_blank" style="font-size:11px;color:var(--st-c);text-decoration:none;margin-left:8px">API</a><span id="ragst" style="font-size:11px;color:var(--st-c);margin-left:8px"></span><span id="updst" style="font-size:11px;color:var(--st-c);margin-left:8px"></span><button onclick="showAudit()" title="Action audit log" style="background:none;border:none;color:var(--st-c);cursor:pointer;font-size:12px;margin-left:8px">&#128203;</button><button onclick="toggleTerm()" title="Terminal" style="background:none;border:none;color:var(--st-c);cursor:pointer;font-size:14px;margin-left:8px">&#9654;_</button><button id="theme-btn" onclick="toggleTheme()" style="background:none;border:none;color:var(--st-c);cursor:pointer;font-size:16px;margin-left:8px">&#127769;</button>
   </div>
   <div id="chat">
     <div id="msgs"><div class="msg s">Agent ready. Try: &quot;create a fibonacci function&quot;</div></div>
@@ -183,22 +183,21 @@ body[data-theme="dark"]{--bg:#0f1117;--fg:#e2e8f0;--sidebar:#161b22;--sidebar-bo
   <div id="xterm-host"></div>
 </div>
 <div id="dropzone"><div class="dz-box"><svg viewBox="0 0 24 24"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg><div class="dz-title">Drop files here</div><div class="dz-sub">Upload to workspace</div></div></div>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/python/python.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/javascript/javascript.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/xml/xml.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/css/css.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/htmlmixed/htmlmixed.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/markdown/markdown.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/json/json.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/shell/shell.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/go/go.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/rust/rust.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/clike/clike.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/yaml/yaml.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/edit/matchbrackets.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/fold/foldcode.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/fold/foldgutter.min.js"></script>
+<script src="/static/vendor/cm/codemirror.min.js"></script>
+<script src="/static/vendor/cm/mode/python/python.min.js"></script>
+<script src="/static/vendor/cm/mode/javascript/javascript.min.js"></script>
+<script src="/static/vendor/cm/mode/xml/xml.min.js"></script>
+<script src="/static/vendor/cm/mode/css/css.min.js"></script>
+<script src="/static/vendor/cm/mode/htmlmixed/htmlmixed.min.js"></script>
+<script src="/static/vendor/cm/mode/markdown/markdown.min.js"></script>
+<script src="/static/vendor/cm/mode/shell/shell.min.js"></script>
+<script src="/static/vendor/cm/mode/go/go.min.js"></script>
+<script src="/static/vendor/cm/mode/rust/rust.min.js"></script>
+<script src="/static/vendor/cm/mode/clike/clike.min.js"></script>
+<script src="/static/vendor/cm/mode/yaml/yaml.min.js"></script>
+<script src="/static/vendor/cm/addon/edit/matchbrackets.min.js"></script>
+<script src="/static/vendor/cm/addon/fold/foldcode.min.js"></script>
+<script src="/static/vendor/cm/addon/fold/foldgutter.min.js"></script>
 <script src="/static/vendor/xterm.min.js"></script>
 <script>
 var CM_READY = typeof CodeMirror !== 'undefined';

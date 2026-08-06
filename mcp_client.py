@@ -49,7 +49,8 @@ class MCPStdioClient:
                 [self.command] + self.args,
                 stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE, text=True, encoding="utf-8",
-                errors="replace", creationflags=subprocess.CREATE_NO_WINDOW,
+                errors="replace",
+                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
             )
             threading.Thread(target=self._reader, daemon=True).start()
             self._request("initialize", {

@@ -6,6 +6,7 @@ from pathlib import Path
 from datetime import datetime
 import requests, uvicorn
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse, HTMLResponse, JSONResponse, FileResponse
 from pydantic import BaseModel
@@ -344,6 +345,8 @@ def vendor_file(fname: str):
     except OSError as e:
         return JSONResponse({"error": f"vendor file unavailable: {e}"}, status_code=404)
 
+app.mount("/static/vendor/cm", StaticFiles(directory=WORK_DIR / "static" / "vendor" / "cm"), name="codemirror")
+
 @app.get("/api/stats")
 def tool_stats():
     """Per-tool call/error counters (diagnostics; shows repeated model failures)."""
@@ -387,6 +390,34 @@ def health():
         "rag_embeddings": len(RAG_INDEX or []),
         "uptime_s": round(time.time() - _SERVER_START, 1),
     }
+
+_UPDATE_CACHE = {"at": 0, "data": None}
+
+@app.get("/api/update")
+def update_check():
+    """Check for new versions (git origin/master). Cached for 1 hour; graceful
+    when offline or not a git checkout."""
+    now = time.time()
+    if _UPDATE_CACHE["data"] and now - _UPDATE_CACHE["at"] < 3600:
+        return _UPDATE_CACHE["data"]
+    try:
+        cur = subprocess.run(["git", "rev-parse", "--short", "HEAD"], cwd=str(WORK_DIR),
+                             capture_output=True, text=True, timeout=10).stdout.strip()
+        remote = subprocess.run(["git", "ls-remote", "origin", "refs/heads/master"],
+                                cwd=str(WORK_DIR), capture_output=True, text=True, timeout=20)
+        latest = remote.stdout.split()[0][:7] if remote.stdout.split() else ""
+        behind = 0
+        if latest:
+            bc = subprocess.run(["git", "rev-list", "--count", "HEAD..origin/master"],
+                                cwd=str(WORK_DIR), capture_output=True, text=True, timeout=20)
+            try: behind = int(bc.stdout.strip() or 0)
+            except ValueError: pass
+        data = {"ok": True, "current": cur, "latest": latest,
+                "behind": behind, "has_update": bool(latest) and behind > 0}
+    except Exception as e:
+        data = {"ok": False, "error": str(e)[:120]}
+    _UPDATE_CACHE.update({"at": now, "data": data})
+    return data
 
 @app.get("/api/models")
 def list_models():
@@ -629,7 +660,7 @@ async def terminal(req: TerminalReq):
                 cmd, shell=True, cwd=req.cwd or WORK_DIR,
                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                 text=True, encoding="utf-8", errors="replace",
-                creationflags=subprocess.CREATE_NO_WINDOW,
+                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
             )
             TERMINAL_PROCS[id(gen)] = proc
             yield f"data: {json.dumps({'line': f'$ {cmd}', 'done': False})}\n\n"
