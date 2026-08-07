@@ -430,5 +430,20 @@ when pywebview fails; --browser flag. scripts/make_icon.py generates
 assets/icon.png+icon.ico (hand-rolled PNG/ICO via zlib, no PIL). Tauri NOT
 used — Rust/MSVC toolchain not installed. 83/83 tests.
 
+REMAINING (as of 2026-08-07): deepseek-coder-v2:16b pull interrupted at 26%
+(8.9GB total, ~5.4MB/s, "error: unexpected EOF") — resume with
+`ollama pull deepseek-coder-v2:16b`; then probe native tool-calling support
+(not in AI_NATIVE_MODELS default) and live coding test on RTX 3060 12GB.
+GPU embeddings: explicitly NOT needed — Ollama already on GPU (qwen3:8b 7.5GB
+100% GPU).
+RESOLVED (2026-08-07): pull resumed and completed (8.9GB). deepseek-coder-v2:16b
+does NOT support native tool calling — Ollama returns HTTP 400 when "tools" is
+sent (like qwen2.5-coder; only qwen3/llama3.1/gpt-oss accept tools). It works
+via the legacy ```tool pipeline. Live coding cycle verified: write ->
+[CONFIRM] -> yes -> file created (8 bytes, exactly one audit entry). NOTE:
+audit log only records tools that actually execute — CONFIRM-armed writes
+appear only after "yes". All TODO items now resolved or explicitly skipped.
+
+
 
 

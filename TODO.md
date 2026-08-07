@@ -98,8 +98,8 @@ Kimi 2: 8.3/10 → DeepSeek 2: 8.5/10 → DeepSeek 3: 8.6/10 → Kimi 3: 8.7/10
 ## Собственные идеи (низкий приоритет)
 - [x] Native tool calling — СДЕЛАНО (Этап 10)
 - [x] Desktop App — СДЕЛАНО как Этап 11 (pywebview; Tauri требует Rust/MSVC тулчейн — не установлен)
-- [ ] GPU embeddings (Ollama уже на GPU — фактически не требуется)
-- [ ] deepseek-coder-v2:16b — пулл (~13GB; RAM 15.4GB — впритык; риск) 
+- [x] GPU embeddings — НЕ ТРЕБУЕТСЯ (Ollama уже работает на GPU: RTX 3060 12GB, qwen3:8b 7.5GB 100% GPU)
+- [x] deepseek-coder-v2:16b — пулл завершён (8.9GB, resume после обрыва на 26%); native tool calling НЕ поддерживается (Ollama возвращает 400 при tools= — как qwen2.5-coder), работает legacy-путь; live-кодинг подтверждён: write → CONFIRM → yes → файл создан (8 байт, аудит 1 вызов)
 
 ### Этап 10. Native tool calling (Ollama tools=) — СДЕЛАНО (2026-08-07)
 - [x] native_chat(): /api/chat с tools=[схемы из TOOL_SCHEMAS], парсинг tool_calls (arguments как dict/строка)
