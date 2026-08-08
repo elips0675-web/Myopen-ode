@@ -80,10 +80,11 @@ def check_bash(cmd, work_dir=None):
 
 
 def docker_bash(cmd, work_dir, timeout=60):
-    """Run a command inside a Docker sandbox when BASH_DOCKER=1 and docker is
-    available. Returns the combined output, or None when docker is not in use
-    or the run failed (caller falls back to the local shell)."""
-    if not (os.environ.get("BASH_DOCKER") and shutil.which("docker")):
+    """Run a command inside a Docker sandbox when BASH_DOCKER=1 or
+    DOCKER_SANDBOX=1 and docker is available. Returns the combined output, or
+    None when docker is not in use or the run failed (caller falls back to
+    the local shell)."""
+    if not (os.environ.get("BASH_DOCKER") or os.environ.get("DOCKER_SANDBOX") == "1"):
         return None
     image = os.environ.get("BASH_DOCKER_IMAGE", "python:3.12-slim")
     mount = f"{Path(work_dir).resolve()}:/workspace"

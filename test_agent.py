@@ -1895,6 +1895,51 @@ def test_auto_pick_model():
             _os.environ["AI_MODEL"] = old_env
     print("  [OK] auto model pick: VRAM>=10GB -> qwen3:8b, explicit wins")
 
+def test_docker_sandbox_flag():
+    """Stage 26: DOCKER_SANDBOX=1 routes bash through docker_bash; without the
+    flag (or with 0) it returns None -> local shell; detection is disabled by
+    DOCKER_SANDBOX=0."""
+    import core.safety.bash_guard as bg
+    import os as _os
+    old = {
+        k: _os.environ.get(k)
+        for k in ("BASH_DOCKER", "DOCKER_SANDBOX", "BASH_DOCKER_IMAGE")
+    }
+    _os.environ.pop("BASH_DOCKER", None)
+    _os.environ.pop("DOCKER_SANDBOX", None)
+    captured = []
+    orig_which = bg.shutil.which
+    orig_run = bg.subprocess.run
+    def fake_run(dcmd, **kw):
+        captured.append(dcmd[1])
+        class R:
+            returncode = 0
+            stdout = "ok\n"
+            stderr = ""
+        return R()
+    try:
+        bg.shutil.which = lambda name: "C:\\docker.exe" if name == "docker" else None
+        bg.subprocess.run = fake_run
+        assert bg.docker_bash("echo hi", ".", 10) is None, "no flag -> local"
+        _os.environ["DOCKER_SANDBOX"] = "1"
+        out = bg.docker_bash("echo hi", ".", 10)
+        assert out is not None and "ok" in out, f"flag 1 -> sandbox: {out}"
+        assert captured and captured[0] == "run", f"docker run invoked: {captured}"
+        _os.environ["DOCKER_SANDBOX"] = "0"
+        assert bg.docker_bash("echo hi", ".", 10) is None, "flag 0 -> local"
+        _os.environ["DOCKER_SANDBOX"] = "1"
+        _os.environ["BASH_DOCKER_IMAGE"] = "python:3.12-slim"
+        assert bg.docker_bash("echo hi", ".", 10) is not None, "BASH_DOCKER alias still works"
+    finally:
+        bg.shutil.which = orig_which
+        bg.subprocess.run = orig_run
+        for k, v in old.items():
+            if v is None:
+                _os.environ.pop(k, None)
+            else:
+                _os.environ[k] = v
+    print("  [OK] docker sandbox: DOCKER_SANDBOX=1 -> docker run, else local")
+
 def test_cross_platform():
     """Cross-platform safety: no hard-coded Windows paths, CREATE_NO_WINDOW
     guarded, core modules importable on any OS (also runs in CI matrix)."""
@@ -1922,7 +1967,7 @@ if __name__ == "__main__":
     if _native_supported(_agent_main.MODEL):
         _agent_main.MODEL = "qwen2.5-coder:7b"
         print("  [test] default MODEL is native-capable -> forced to qwen2.5-coder:7b (legacy path)")
-    tests = [test_cross_platform, test_auto_pick_model, test_git_auto_commit, test_compact_prompt_after_iterations,
+    tests = [test_cross_platform, test_auto_pick_model, test_docker_sandbox_flag, test_git_auto_commit, test_compact_prompt_after_iterations,
              test_auto_confirm_safe, test_read, test_read_absolute, test_read_url, test_list, test_glob,
              test_write_and_undo, test_edit, test_edit_guard_ambiguous, test_edit_guard_fuzzy_hint,
              test_syntax_guard_write, test_patch_multi_file, test_bash, test_verify_py, test_verify_json,

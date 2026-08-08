@@ -53,6 +53,27 @@ def _auto_pick_model():
 
 
 _auto_pick_model()
+
+
+def _detect_docker():
+    """Stage 26 (DS4): when Docker is present, suggest the bash sandbox.
+    Detection is one `docker version` call; a failing daemon just means the
+    local shell stays in use. Returns True when docker is usable."""
+    if os.environ.get("DOCKER_SANDBOX") == "0":
+        return False
+    try:
+        r = subprocess.run(["docker", "version"], capture_output=True,
+                           text=True, timeout=5)
+        ok = r.returncode == 0
+        if ok:
+            log.warning("Docker detected — bash commands CAN run sandboxed: "
+                        "set DOCKER_SANDBOX=1 to enable (0 to disable detection)")
+        return ok
+    except Exception:
+        return False
+
+
+_detect_docker()
 PLANNER_MODEL = os.environ.get("PLANNER_MODEL", "deepseek-r1:1.5b")
 WORK_DIR = Path(os.environ.get("WORK_DIR") or Path(__file__).resolve().parent)
 NO_CONFIRM = os.environ.get("NO_CONFIRM", "0") == "1"

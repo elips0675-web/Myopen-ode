@@ -727,3 +727,19 @@ UPDATE (2026-08-08) - stage 25 done (P1 #5 auto model pick), 92/92 x2:
 Next: (6) Docker default when present. Then P2: (7) task-level router,
 (8) plan tree UI, (9) ARCHITECTURE.md, (10) AST refactor tools,
 (11) VRAM indicator.
+
+UPDATE (2026-08-08) - stage 26 done (P1 #6 Docker), 93/93 x2:
+- core/safety/bash_guard.py docker_bash: now enabled by BASH_DOCKER=1 OR
+  DOCKER_SANDBOX=1 (both work). Safe 'default when present' interpretation:
+  auto-detect at startup + log suggestion, NO automatic replacement of the
+  local shell (python:3.12-slim lacks git/pip/node - would break verify/commit).
+- agent.py _detect_docker(): one 'docker version' call (5s timeout) at
+  import; on success logs 'set DOCKER_SANDBOX=1 to enable'; DOCKER_SANDBOX=0
+  disables both detection and sandboxing.
+- Test test_docker_sandbox_flag: mocks bash_guard.shutil.which + subprocess.run
+  (no flag -> None/local; =1 -> docker run invoked; =0 -> local; BASH_DOCKER
+  alias still works). Docker is NOT installed on this machine - detection
+  silently returns False.
+- Server restarted (health 200).
+All P1 (DS4) items done. Next: P2 - (7) task-level router, (8) plan tree UI,
+(9) ARCHITECTURE.md, (10) AST refactor tools, (11) VRAM indicator.

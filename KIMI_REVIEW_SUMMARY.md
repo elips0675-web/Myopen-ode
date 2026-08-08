@@ -226,6 +226,20 @@ Ollama/stream/native/fallback; `exec.py` — диспетчер 26 per-tool хе
     _rebuild_fast_index брал dim от ПЕРВОГО эмбеддинга → один битый файл
     ломал весь индекс («RAG search error: »); фикс: dim = max по всем +
     фильтр в _load_file_cache; битые файлы удалены.
+40. **Этап 26 — Docker по умолчанию при наличии** (2026-08-08): Docker-
+    песочница уже была (docker_bash в core/safety/bash_guard.py, флаг
+    BASH_DOCKER=1). Добавлено: (1) флаг DOCKER_SANDBOX=1 как синоним
+    (проверка `os.environ.get("BASH_DOCKER") or DOCKER_SANDBOX == "1"`);
+    (2) `_detect_docker()` в agent.py при старте — один `docker version`
+    (timeout 5s), при успехе лог-предупреждение «set DOCKER_SANDBOX=1»;
+    DOCKER_SANDBOX=0 отключает и детект, и песочницу. Безопасная
+    интерпретация «default when present»: локальный shell НЕ заменяется
+    автоматически (иначе ломаются git/pip/node в python:3.12-slim), но
+    docker по умолчанию детектируется и включается одним флагом. Тест
+    test_docker_sandbox_flag (мок shutil.which + subprocess.run в
+    bash_guard: без флага → None/локально; =1 → docker run; =0 → локально).
+    93/93 ×2, сервер перезапущен (docker на машине отсутствует — детект
+    молча вернул False).
 
 Из рекомендаций оценок 2-3 реализовано: few-shot, [DONE]-маркер, один тул за раз, статистика тулов,
 пост-обработка JSON, Docker-песочница, code detector, Cache-Control, динамический контекст,
