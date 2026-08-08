@@ -148,7 +148,7 @@ Kimi 2: 8.3/10 → DeepSeek 2: 8.5/10 → DeepSeek 3: 8.6/10 → Kimi 3: 8.7/10 
 ### P1 (критично для production)
 - [x] AST-based edit guard — уникальность/fuzzy-совпадение old text (warning «found N times») — Этап 21
 - [x] Git-auto-branch — сессия = ветка, write/edit/patch = auto-commit, undo = git reset — Этап 22 (GIT_AUTO_COMMIT/GIT_AUTO_BRANCH)
-- [ ] Prompt KV-cache — compressed system prompt после 3-й итерации
+- [x] Prompt KV-cache — compressed system prompt после 3-й итерации — Этап 23 (COMPACT_SYSTEM_PROMPT)
 - [ ] AUTO_CONFIRM_SAFE=1 — автоподтверждение безопасных write/edit (DS4)
 - [ ] qwen3:8b дефолт при >10GB VRAM (проверка через ollama ps) (DS4)
 - [ ] Docker-песочница по умолчанию при наличии Docker + предупреждение в логе (DS4)

@@ -187,6 +187,19 @@ Ollama/stream/native/fallback; `exec.py` — диспетчер 26 per-tool хе
     test_git_auto_commit (временный репо, ветка agent-session, main нетронут,
     history ≥2 «agent:» коммитов; rmtree с chmod-обработчиком из-за read-only
     .git на Windows). 89/89 ×3, CLI live, сервер перезапущен.
+37. **Этап 23 — Prompt KV-cache (compact system prompt)** (2026-08-08):
+    `COMPACT_SYSTEM_PROMPT` в tools/__init__.py (~0.3K токенов против ~2K
+    полного RULES-блока: 8 сжатых правил + список тулов, маркеры RULES и
+    COMPACT сохранены). В core/agent_loop.py после итерации ≥3 (it>=3) первое
+    system-сообщение (msgs[0]) заменяется на компактный промпт — модель уже
+    усвоила правила, а фиксированный system-префикс становится короче, что
+    позволяет Ollama переиспользовать KV-cache префикса между ходами.
+    Предохранитель «COMPACT not in content» — от повторной компакции;
+    native-ветка по-прежнему подменяет RULES-сообщение. Тест
+    test_compact_prompt_after_iterations (5+ вызовов: полный на ранних,
+    компактный на поздних, размер < 50%). 90/90 ×2 + live-набор 4/9
+    (обычная стохастика: qwen2.5 2/3, qwen3 2/3, 16b 0/3), CLI live,
+    сервер перезапущен.
 
 Из рекомендаций оценок 2-3 реализовано: few-shot, [DONE]-маркер, один тул за раз, статистика тулов,
 пост-обработка JSON, Docker-песочница, code detector, Cache-Control, динамический контекст,

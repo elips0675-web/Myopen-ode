@@ -74,6 +74,50 @@ def test_edit_guard_fuzzy_hint():
     assert f.read_text() == "def compute_total():\n    return 42\n", "file mutated on typo"
     print("  [OK] edit guard: fuzzy closest-match hint")
 
+def test_compact_prompt_after_iterations():
+    """Stage 23: after iteration 3 the full RULES block is swapped for the
+    compact prompt (KV-cache prefix shrink); earlier calls keep the full one."""
+    import agent as agent_mod
+    calls = {"n": 0, "prompts": []}
+    def mock_ollama(msgs, model):
+        calls["n"] += 1
+        sys0 = next((m["content"] for m in msgs if m.get("role") == "system"), "")
+        calls["prompts"].append(sys0)
+        return ("Done.", 5)
+    def mock_stream(msgs, model, on_chunk=None):
+        calls["n"] += 1
+        sys0 = next((m["content"] for m in msgs if m.get("role") == "system"), "")
+        calls["prompts"].append(sys0)
+        tools = [
+            '```tool\n{"tool": "list", "path": "."}\n```',
+            '```tool\n{"tool": "list", "path": "tools"}\n```',
+            '```tool\n{"tool": "glob", "pattern": "*.py"}\n```',
+            '```tool\n{"tool": "grep", "pattern": "def ", "include": "*.py"}\n```',
+        ]
+        text = tools[calls["n"] - 1] if calls["n"] <= len(tools) else "Done."
+        if on_chunk:
+            on_chunk(text)
+        return text
+    original = agent_mod.call_ollama
+    original_stream = agent_mod.stream_ollama
+    agent_mod.call_ollama = mock_ollama
+    agent_mod.stream_ollama = mock_stream
+    try:
+        agent_mod.run_agent_loop(
+            [{"role": "system", "content": agent_mod.SYSTEM_PROMPT},
+             {"role": "user", "content": "list files"}], None, events=lambda e: None)
+    finally:
+        agent_mod.call_ollama = original
+        agent_mod.stream_ollama = original_stream
+    assert len(calls["prompts"]) >= 5, f"not enough model calls: {len(calls['prompts'])}"
+    full_prompt = calls["prompts"][0]
+    assert "COMPACT_SYSTEM_PROMPT" not in full_prompt and "RULES" in full_prompt
+    compact_prompt = calls["prompts"][-1]
+    assert "COMPACT" in compact_prompt and "RULES" in compact_prompt, \
+        f"prompt not compacted on later iterations: {compact_prompt[:100]}"
+    assert len(compact_prompt) < len(full_prompt) / 2, "compact prompt not smaller"
+    print("  [OK] prompt KV-cache: full -> compact after iteration 3")
+
 def test_syntax_guard_write():
     """write/edit/patch report AST syntax status (Python/JSON) so the model
     can self-correct broken code immediately."""
@@ -1777,7 +1821,7 @@ def test_cross_platform():
 
 if __name__ == "__main__":
     print(f"\nSmoke tests for agent.py\n{'='*40}")
-    tests = [test_cross_platform, test_git_auto_commit, test_read, test_read_absolute, test_read_url, test_list, test_glob,
+    tests = [test_cross_platform, test_git_auto_commit, test_compact_prompt_after_iterations, test_read, test_read_absolute, test_read_url, test_list, test_glob,
              test_write_and_undo, test_edit, test_edit_guard_ambiguous, test_edit_guard_fuzzy_hint,
              test_syntax_guard_write, test_patch_multi_file, test_bash, test_verify_py, test_verify_json,
              test_backup_undo, test_db_query, test_testgen, test_validation, test_save_api,

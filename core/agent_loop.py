@@ -132,6 +132,7 @@ def run_agent_loop(msgs, session_id, events=None, model=None, deps=None):
     retried_empty = False
     active_model = None
     user_model = model
+    compacted = False
 
     for it in range(max_iter):
         if time.time() - start_time > max_time:
@@ -153,6 +154,21 @@ def run_agent_loop(msgs, session_id, events=None, model=None, deps=None):
         # Summarize context every 3 iterations to keep token usage in check
         if it > 0 and it % 3 == 0:
             msgs = summarize_context(msgs, deps)
+
+        # Prompt KV-cache (stage 23): after a few iterations swap the full
+        # RULES block for the compact version — the model has internalized the
+        # rules by now and the fixed system prefix shrinks (~2K -> ~0.3K tokens),
+        # letting Ollama reuse its KV-cache prefix across turns.
+        if not compacted and it >= 3:
+            if (msgs and msgs[0].get("role") == "system"
+                    and "RULES" in (msgs[0].get("content") or "")[:4000]
+                    and "COMPACT" not in msgs[0]["content"]):
+                try:
+                    import tools as _t
+                    msgs[0] = {"role": "system", "content": _t.compact_system_prompt()}
+                    compacted = True
+                except Exception:
+                    pass
 
         # pending confirmation: user said "yes" — execute the deferred tool without calling the model
         pending = deps._pending_get(session_id)

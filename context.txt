@@ -680,3 +680,17 @@ UPDATE (2026-08-08) - stage 22 done (P1 #2 Git auto-branch/commit), 89/89 x3:
   "git:" in result, branch starts agent-session-, main log still "base".
 Next: (3) Prompt KV-cache, (4) AUTO_CONFIRM_SAFE, (5) qwen3 default >10GB,
 (6) Docker default when present.
+
+UPDATE (2026-08-08) - stage 23 done (P1 #3 Prompt KV-cache), 90/90 x2:
+- tools/__init__.py: COMPACT_SYSTEM_PROMPT (contains "RULES" + "[COMPACT SYSTEM
+  PROMPT]" markers, ~0.3K tokens vs ~2K full block) + compact_system_prompt().
+- core/agent_loop.py: on it >= 3 swap msgs[0] (system RULES message) to compact
+  once (compacted flag; "COMPACT" guard prevents double swap; native branch still
+  matches "RULES" and replaces with native_system_prompt()).
+- NOTE: compact prompt must KEEP "RULES" in first 4000 chars - native-call
+  branch detects the system prompt by that marker (core/agent_loop.py:200).
+- Test test_compact_prompt_after_iterations: 5 unique tool calls (list ./tools,
+  glob, grep) to avoid anti-loop identical-call blocking; events path uses
+  stream_ollama (mock BOTH call_ollama and stream_ollama!). 90/90 x2, live 4/9
+  (usual variance), CLI live, server restarted.
+Next: (4) AUTO_CONFIRM_SAFE, (5) qwen3:8b default >10GB VRAM, (6) Docker default.
