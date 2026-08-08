@@ -40,7 +40,8 @@ EXT_PATTERNS = [
     ("**/*.cfg", 20), ("**/*.ini", 20),
 ]
 SKIP_PARTS = (".git", "__pycache__", ".agent_backups", ".agent_sessions",
-              ".rag_cache", "node_modules", ".venv", "venv", "static", "vendor")
+              ".rag_cache", "node_modules", ".venv", "venv", "static", "vendor",
+              "target", "dist", "build", "debug", "release")
 
 def init_rag(**kw):
     global OLLAMA_URL, WORK_DIR, EMBED_MODEL, RAG_CACHE_DIR
