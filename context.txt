@@ -550,3 +550,28 @@ UPDATE (2026-08-08) - stage 18: AST syntax guard + multi-file patch (86/86):
 (4) _apply_diff semantics kept: '-' lines just skip a line (no content
     match), only ' ' context lines are matched - mismatch tests use a
     context line. 86/86, CLI live, server restarted.
+
+UPDATE (2026-08-08) - stage 19: CodeMirror 6 replaces CodeMirror 5 (86/86):
+(1) Built an offline CM6 bundle via esbuild (IIFE, 601KB) in a temp dir
+    (npm i codemirror @codemirror/lang-{python,javascript,json,html}
+    @codemirror/theme-one-dark; entry.js -> window.cm6 exports; npx esbuild
+    --bundle --minify --format=iife). Output: static/vendor/cm6.bundle.js.
+    NOTE: newer codemirror@6 no longer re-exports EditorState/keymap from
+    the top-level package - import from @codemirror/state and @codemirror/view.
+(2) ui.py: the 15 CM5 <script> tags replaced by one cm6.bundle.js tag;
+    inline flag: var CM_READY = typeof cm6 !== 'undefined'. The static
+    /vendor/{fname} route only matches ONE path segment - the bundle lives
+    flat in static/vendor/ (not static/vendor/cm6/), whitelist extended.
+(3) app.js: makeEditor returns EditorView (basicSetup + oneDark +
+    foldGutter() + keymap Ctrl-s/Cmd-s -> saveFile + autocompletion
+    override cmCompleteSource -> POST /api/lsp/completion with
+    line=lineAt(pos).number-1 (CM6 positions are 0-based vs CM5 0-based too
+    but lineAt gives 1-based line); renderEditor destroys previous view
+    (view.destroy) and sets content via dispatch changes; saveFile uses
+    state.doc.toString(). Dead CM5 popup function editorComplete removed;
+    closeTab destroys the view instead of getWrapperElement().remove().
+(4) RAG flakiness fixed: 616KB minified bundles got indexed (vendor/ wasn't
+    in SKIP_PARTS) and polluted search ranking - added "static","vendor" to
+    SKIP_PARTS. test_rag_search_via_execute stable across two full runs.
+(5) 86/86 x2, CLI live ("4"), server restarted (index serves cm6 script,
+    /static/vendor/cm6.bundle.js 200, /health 200). P2 left: Tauri only.

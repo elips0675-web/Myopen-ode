@@ -131,6 +131,12 @@ Kimi 2: 8.3/10 → DeepSeek 2: 8.5/10 → DeepSeek 3: 8.6/10 → Kimi 3: 8.7/10
 - [x] validate_tool: при files-вызове required path/diff не обязательны; каждый diff валидируется (no hunk headers / shape), ошибка по файлу
 - [x] Тесты: test_syntax_guard_write (OK/ERROR py+json, edit-правка ломающая синтаксис), test_patch_multi_file (2 файла, валидация files, per-file mismatch); 86/86, CLI live, сервер перезапущен
 
+## Этап 19. CodeMirror 6 (2026-08-08) — СДЕЛАНО
+- [x] Сборка офлайн-бандла esbuild (IIFE, 601KB) → static/vendor/cm6.bundle.js: codemirror@6 + lang-python/js/json/html + theme-one-dark + autocomplete; 15 CM5-скриптов в ui.py → один тег, CM_READY = typeof cm6
+- [x] app.js: makeEditor → EditorView (basicSetup+oneDark+foldGutter+Ctrl-S+autocompletion override → /api/lsp/completion, 0-based line); renderEditor → dispatch правки; saveFile → state.doc.toString(); старый кастомный completion-попап удалён
+- [x] Whitelist /static/vendor/ + cm6.bundle.js; RAG-флак устранён: static/vendor в SKIP_PARTS (616KB-бандл попадал в индекс)
+- [x] Тесты: test_vendor_static + cm6.bundle.js; 86/86 ×2 прогона, CLI live, сервер перезапущен (index без CM5-тегов, /static/vendor/cm6.bundle.js 200)
+
 ## Собственные идеи (низкий приоритет)
 - [x] Native tool calling — СДЕЛАНО (Этап 10)
 - [x] Desktop App — СДЕЛАНО как Этап 11 (pywebview; Tauri требует Rust/MSVC тулчейн — не установлен)

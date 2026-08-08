@@ -138,6 +138,18 @@ Ollama/stream/native/fallback; `exec.py` — диспетчер 26 per-tool хе
     files-вызов (required path/diff не обязательны при files) и валидирует
     каждый diff; legacy path+diff не тронут. 86/86, CLI live, сервер
     перезапущен.
+33. **Этап 19 — CodeMirror 6 вместо CodeMirror 5**: собран офлайн-бандл
+    (esbuild, IIFE, 601KB) в `static/vendor/cm6.bundle.js` — codemirror@6 +
+    lang-python/lang-javascript/lang-json/lang-html + theme-one-dark +
+    autocomplete/lint API; 15 CM5-скриптов из ui.py заменены одним тегом,
+    `CM_READY = typeof cm6`. app.js: makeEditor → EditorView (basicSetup +
+    oneDark + foldGutter + Ctrl-S keymap + autocompletion), renderEditor →
+    dispatch-правки, saveFile → state.doc.toString(), старый кастомный
+    completion-попап удалён — Ctrl+Space отдаёт `cm6.autocompletion` с
+    override-source на /api/lsp/completion (line = number-1, CM6 0-based).
+    Whitelist /static/vendor/ дополнен (cm6.bundle.js); RAG-флак (большой
+    JS-бандл попадал в индекс) устранён: `static`/`vendor` добавлены в
+    SKIP_PARTS. 86/86 ×2 прогона, CLI live, сервер перезапущен.
 
 Из рекомендаций оценок 2-3 реализовано: few-shot, [DONE]-маркер, один тул за раз, статистика тулов,
 пост-обработка JSON, Docker-песочница, code detector, Cache-Control, динамический контекст,
@@ -147,7 +159,7 @@ native tool calling, desktop (pywebview). «Таймаут после [CONFIRM]�
 после CONFIRM цикл завершается break по дизайну (юзер пишет «yes» → auto-exec pending без вызова модели).
 
 ## Что осталось (P2)
-- CodeMirror 6 / Monaco
+- Tauri desktop (ждёт установки Rust/MSVC — pywebview уже закрывает потребность)
 - Tauri desktop (ждёт установки Rust/MSVC — pywebview уже закрывает потребность)
 - JSON Schema constrained output — экспериментально доступен (AI_JSON_FORMAT=1)
 - UI-динамика (индикатор «думает», RAG-прогресс, audit-просмотр) — уже реализованы в app.js

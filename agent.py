@@ -337,7 +337,8 @@ def app_js():
     except OSError as e:
         return JSONResponse({"error": f"static/app.js unavailable: {e}"}, status_code=404)
 
-_VENDOR_ALLOW = {"xterm.min.js": "text/javascript", "xterm.css": "text/css"}
+_VENDOR_ALLOW = {"xterm.min.js": "text/javascript", "xterm.css": "text/css",
+                 "cm6.bundle.js": "text/javascript"}
 
 @app.get("/static/vendor/{fname}")
 def vendor_file(fname: str):

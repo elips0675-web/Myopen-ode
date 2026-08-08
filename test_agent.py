@@ -350,6 +350,7 @@ def test_vendor_static():
     client = TestClient(__import__("agent").app)
     for path, ctype in [("/static/vendor/xterm.min.js", "javascript"),
                         ("/static/vendor/xterm.css", "css"),
+                        ("/static/vendor/cm6.bundle.js", "javascript"),
                         ("/static/vendor/cm/codemirror.min.js", "javascript"),
                         ("/static/vendor/cm/mode/python/python.min.js", "javascript")]:
         r = client.get(path)

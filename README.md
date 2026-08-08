@@ -247,7 +247,7 @@ Local AI coding agent powered by Ollama. Free, private, offline alternative to C
 - ✅ **Model router** — auto-switch to main model when the planner ignores tool format
 - ✅ **Native tool calling** — Ollama `tools=` for qwen3/llama3.1/gpt-oss, legacy ` ```tool` pipeline as fallback
 - ✅ **Git snapshot / restore all** — automatic pre-backup before the first mutating tool
-- ✅ **Inline diff preview** (Cursor-style) + fully offline UI (vendored CodeMirror 5, no CDN)
+- ✅ **Inline diff preview** (Cursor-style) + fully offline UI (vendored CodeMirror 6, no CDN)
 - ✅ **Update check** (`/api/update` badge) + CI matrix (Windows/Linux/macOS) + JSON Schema constrained output
 - ✅ **RAG folder scope** + source attribution `[file:line]`
 - ✅ **MCP client** — full handshake (initialize → notifications/initialized), resources/prompts/tools

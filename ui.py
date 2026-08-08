@@ -183,24 +183,25 @@ body[data-theme="dark"]{--bg:#0f1117;--fg:#e2e8f0;--sidebar:#161b22;--sidebar-bo
   <div id="xterm-host"></div>
 </div>
 <div id="dropzone"><div class="dz-box"><svg viewBox="0 0 24 24"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg><div class="dz-title">Drop files here</div><div class="dz-sub">Upload to workspace</div></div></div>
-<script src="/static/vendor/cm/codemirror.min.js"></script>
-<script src="/static/vendor/cm/mode/python/python.min.js"></script>
-<script src="/static/vendor/cm/mode/javascript/javascript.min.js"></script>
-<script src="/static/vendor/cm/mode/xml/xml.min.js"></script>
-<script src="/static/vendor/cm/mode/css/css.min.js"></script>
-<script src="/static/vendor/cm/mode/htmlmixed/htmlmixed.min.js"></script>
-<script src="/static/vendor/cm/mode/markdown/markdown.min.js"></script>
-<script src="/static/vendor/cm/mode/shell/shell.min.js"></script>
-<script src="/static/vendor/cm/mode/go/go.min.js"></script>
-<script src="/static/vendor/cm/mode/rust/rust.min.js"></script>
-<script src="/static/vendor/cm/mode/clike/clike.min.js"></script>
-<script src="/static/vendor/cm/mode/yaml/yaml.min.js"></script>
-<script src="/static/vendor/cm/addon/edit/matchbrackets.min.js"></script>
-<script src="/static/vendor/cm/addon/fold/foldcode.min.js"></script>
-<script src="/static/vendor/cm/addon/fold/foldgutter.min.js"></script>
-<script src="/static/vendor/xterm.min.js"></script>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<script src="/static/vendor/cm6.bundle.js"></script>
+    <script src="/static/vendor/xterm.min.js"></script>
 <script>
-var CM_READY = typeof CodeMirror !== 'undefined';
+var CM_READY = typeof cm6 !== 'undefined';
 </script>
 <script src="/static/app.js"></script>
 </body></html>"""
