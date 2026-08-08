@@ -271,3 +271,70 @@ P3 (10/10):
 decoding — AI_JSON_FORMAT=1 уже есть); TOOL_STATS лучше в мнемонику, а не сырые счётчики;
 семантическая валидация аргументов read/edit; unquoted string values в lenient JSON.
 ========================================================================
+
+========================================================================
+ОЦЕНКА 5 (внешний ревьювер, 2026-08-08): 8.9/10 (+0.1 к 8.8)
+========================================================================
+«С учётом обновлённых артефактов (stage 20 Tauri desktop, 86/86 тестов,
+оценки 8.7/8.8/8.9) даю переоценку: 8.9/10.»
+
+Что изменилось (прогресс с последней оценки):
+- Tauri (P2, blocked on Rust/MSVC) -> СДЕЛАН (stage 20): Rust 1.97.1 + MSVC
+  Build Tools, src-tauri/ cargo-only wrapper, WebView2 окно 1280x860,
+  scripts/run_tauri.bat. UX/UI +0.2: native desktop теперь двойной
+  (Tauri ~50MB + pywebview fallback).
+- 83/83 тестов -> 86/86 (+3: vendor static, syntax guard, multi-file patch).
+  Код/тесты — на уровне 9.5.
+- Оценки: Kimi 8.7 + DS 8.6 -> Kimi 8.7, External 8.8, DS 8.9. Консенсус
+  внешних ревьюверов вырос.
+
+Разбивка по осям:
+- Архитектура 9.0: монолиты разбиты, core/ + api_* + tools/ — зрелая
+  модульность. Остаётся DI-контейнер вместо import agent as _agent.
+- Код/тесты 9.5: 86/86 unit + live multi-model suite — production-команда.
+- Безопасность 8.5: Docker opt-in, whitelist bash, path jail. Ждёт
+  AST-анализ python -c/node -e, git-auto-branch.
+- AI/модели 8.2: native/legacy гибрид, dynamic context, TOOL_STATS. Ждёт
+  prompt KV-cache, task-level router.
+- UX/UI 8.3: CM6, xterm.js+WS, Tauri WebView2, diff preview, RAG progress.
+  Ждёт plan tree UI, AST multi-file edit.
+- Доки/процесс 9.0: AGENTS.md, bilingual README, context.txt с историей
+  коммитов — дисциплина лучше 90% open-source.
+
+План до 9.5 (актуальный на момент оценки):
+P1 (критично): (1) AST-based edit guard — уникальность old текста (count>1
+  -> warning), ~50% «edit failed» в live; (2) git-auto-branch — сессия =
+  agent-session-<id> ветка, write/edit/patch = auto-commit, undo = git
+  reset; (3) prompt KV-cache — после 3-й итерации сжимать rules до 5-6
+  строк (KV-cache повторное использование).
+P2: (1) task-level model router — zero-shot классификация ДО цикла, не
+  override user model (урок stage 13), а advise; (2) plan tree UI — чекбоксы
+  pending/done/error (Cursor Composer-style); (3) ARCHITECTURE.md —
+  Mermaid-диаграмма + примеры тулов (рекомендация DS 8.9).
+P3 (10/10): (1) self-healing loop — 2 ошибки edit подряд -> автопереключение
+  read->write; (2) multi-turn RAG — «RAG over plan»: search всех затронутых
+  файлов, потом edit.
+
+Вердикт: проект прошёл точку «зрелый прототип» и находится в зоне
+«production-ready beta». Tauri закрыл последний крупный P2. Оставшиеся P1 —
+полировка крайних случаев, а не архитектурные дыры. После P1(1) AST edit
+guard проект заслуживает v2.0-stable и 9.2-9.3/10.
+
+СТАТУС НА СЕГОДНЯ (все пункты оценки 5 закрыты этапами 21-31):
+P1(1) edit guard = Этап 21 (found N times -> отклонение без мутаций,
+fuzzy-подсказка «Closest match», difflib)
+P1(2) git-auto-branch = Этап 22 (GIT_AUTO_COMMIT/GIT_AUTO_BRANCH, ветка
+agent-session-<ts>, auto-commit write/edit/patch, --no-verify)
+P1(3) prompt KV-cache = Этап 23 (COMPACT_SYSTEM_PROMPT при it>=3, ~0.3K
+токенов, RULES-маркер сохранён для native-ветки)
+P2(1) task-level router = Этап 30 (pick_task_model: zero-shot классификация
+PLANNER_MODEL до цикла; AI_MODEL/юзер-выбор побеждают; кэш установленных
+моделей 60с)
+P2(2) plan tree UI = Этап 31 (PLAN_STEPS + события {type:plan} + дерево
+✓/✗/○; _plan_mark после каждого тула)
+P2(3) ARCHITECTURE.md = Этап 27 (Mermaid-диаграмма, таблица тулов и env)
+Плюс: AUTO_CONFIRM_SAFE (24), авто-подбор qwen3:8b по VRAM (25), Docker
+default-when-present (26), AST-тулы rename/extract/inline (28), VRAM-
+индикатор (29). Тесты: 97/97 x2 (на момент оценки было 86/86).
+До 9.5 остался P3: self-healing loop, multi-turn RAG, voice input.
+========================================================================

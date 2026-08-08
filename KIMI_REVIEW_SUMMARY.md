@@ -29,6 +29,7 @@ Ollama/stream/native/fallback; `exec.py` — диспетчер 26 per-tool хе
 - Kimi: **8.7/10** (оценка 3, 2026-08-06; «самый зрелый open-source агент на 7B»; до 9/10: рефакторинг монолитов, динамический контекст, few-shot при ошибках, USER_GUIDE.md; до 9.5/10: xterm.js+WS, живой интеграционный тест, RAG-сегментация, CLI-режим)
 - DeepSeek: **8.9/10** (оценка 4, 2026-08-08; «самая зрелая локальная open-source альтернатива Cursor/Claude Code»; до 9.2–9.3: AUTO_CONFIRM_SAFE, qwen3:8b дефолт при 12GB+, Docker по умолчанию; до 9.5: ARCHITECTURE.md+Mermaid, AST-рефакторинг тулы, VRAM-индикатор)
 - Внешний ревьювер: **8.8/10** (оценка 4, 2026-08-08; план до 9.5: P1 — AST-based edit guard, git-auto-branch, prompt KV-cache; P2 — task-level router, plan tree UI, Tauri [уже сделан этапом 20]; P3 — self-healing loop, multi-turn RAG)
+- Внешний ревьювер: **8.9/10** (оценка 5, 2026-08-08, +0.1 к 8.8; «зона production-ready beta», Tauri закрыл последний крупный P2; план P1/P2/P3 — ВЕСЬ закрыт этапами 21–31: edit guard=21, git-auto-branch=22, KV-cache=23, AUTO_CONFIRM_SAFE=24, авто-модель=25, Docker=26, ARCHITECTURE.md=27, AST-тулы=28, VRAM=29, router=30, plan tree=31; тесты 97/97 (на момент оценки было 86/86); до 9.5 остался P3: self-healing loop, multi-turn RAG, voice input)
 
 ## Сессия 2026-08-05 (коммиты 2480a59..c2aea27, все запушены)
 1. **Живой стриминг**: `stream_ollama()` отдаёт текст по мере генерации → UI печатает с ~2.6s
@@ -371,6 +372,43 @@ AI_JSON_FORMAT=1 уже частично покрывают; семантиче�
 - 7B-модели иногда пишут JSON-тул в тексте без ```tool-ограждения — bare-парсер + lenient JSON теперь ловит почти всё
 - deepseek-coder-v2:16b (legacy-путь) — слабый исполнитель: ~0–1/3 live-сценариев (битые блоки, инструкции вместо действий); qwen3:8b (native) — лучшая из установленных ~3/3
 - live-прогоны нестабильны между запусками из-за вытеснения моделей из 12GB VRAM (warm-up сглаживает)
+
+## Оценка 5 — 8.9/10 (внешний ревьювер, 2026-08-08)
+
+«С учётом обновлённых артефактов (stage 20 Tauri desktop, 86/86 тестов, оценки 8.7/8.8/8.9)
+даю переоценку: 8.9/10 (+0.1 к предыдущей).»
+
+| Что изменилось | Было | Стало | Влияние |
+|---|---|---|---|
+| Tauri (P2, blocked on Rust/MSVC) | заблокировано | сделано (stage 20): Rust 1.97.1 + MSVC Build Tools, src-tauri/ cargo-only wrapper, WebView2 1280×860, scripts/run_tauri.bat | UX/UI +0.2 (native desktop двойной: Tauri ~50MB + pywebview fallback) |
+| Тесты | 83/83 | 86/86 (+3: vendor static, syntax guard, multi-file patch) | Код/тесты — на уровне 9.5 |
+| Оценки | Kimi 8.7, DS 8.6 | Kimi 8.7, External 8.8, DS 8.9 | консенсус внешних ревьюверов вырос |
+
+| Ось | Балл | Комментарий |
+|---|---|---|
+| Архитектура | 9.0 | монолиты разбиты, core/ + api_* + tools/ — зрелая модульность. Остаётся: DI вместо import agent as _agent |
+| Код/тесты | 9.5 | 86/86 unit + live multi-model suite — уровень production-команды |
+| Безопасность | 8.5 | Docker opt-in, whitelist bash, path jail. Ждёт: AST-анализ python -c/node -e, git-auto-branch |
+| AI/модели | 8.2 | native/legacy гибрид, dynamic context, TOOL_STATS. Ждёт: prompt KV-cache, task-level router |
+| UX/UI | 8.3 | CM6, xterm.js+WS, Tauri WebView2, diff preview, RAG progress. Ждёт: plan tree UI, AST multi-file edit |
+| Доки/процесс | 9.0 | AGENTS.md, bilingual README, context.txt с историей коммитов — лучше 90% open-source |
+
+Что осталось до 9.5/10 (по оценке): P1 — AST-based edit guard, git-auto-branch, prompt KV-cache;
+P2 — task-level router, plan tree UI, ARCHITECTURE.md; P3 — self-healing loop, multi-turn RAG.
+Вердикт: «прошёл точку "зрелый прототип", зона production-ready beta. Tauri закрыл последний
+крупный P2. Оставшиеся P1 — полировка крайних случаев, а не архитектурные дыры. После P1(1)
+AST edit guard проект заслуживает v2.0-stable и 9.2–9.3/10.»
+
+СТАТУС НА СЕГОДНЯ (этапы 21–31, 2026-08-08): **ВСЕ пункты оценки 5 закрыты** —
+P1(1) AST edit guard = этап 21 (уникальность + fuzzy-подсказка), P1(2) git-auto-branch =
+этап 22 (GIT_AUTO_COMMIT/GIT_AUTO_BRANCH, ветка agent-session-*, auto-commit write/edit/patch),
+P1(3) prompt KV-cache = этап 23 (COMPACT_SYSTEM_PROMPT при it>=3), P2(1) task-level router =
+этап 30 (pick_task_model до цикла, AI_MODEL/юзер-выбор побеждают), P2(2) plan tree UI = этап 31
+(PLAN_STEPS + события {type:plan} + дерево ✓/✗/○), P2(3) ARCHITECTURE.md = этап 27 (Mermaid +
+тулы + env), плюс AUTO_CONFIRM_SAFE (этап 24), авто-подбор qwen3:8b по VRAM (этап 25),
+Docker default-when-present (этап 26), AST-рефакторинг тулы rename/extract/inline (этап 28),
+VRAM-индикатор (этап 29). Тесты: 97/97 ×2 (было 86/86 на момент оценки). Осталось до 9.5:
+P3 — self-healing loop, multi-turn RAG, voice input.
 
 ## Вопросы для анализа (что хотим от Kimi)
 1. Правильна ли архитектура prompt-based tool calling для 7B-моделей? Что улучшить в system prompt теперь?

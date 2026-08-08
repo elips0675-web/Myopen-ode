@@ -798,3 +798,19 @@ UPDATE (2026-08-08) - stage 31 done (P2 #8 plan tree UI, LAST evaluation item), 
 ALL evaluation items (Kimi 8.3 / DS 8.5 / DS 8.6 / Kimi 8.7 / external 8.8 /
 DS4 8.9) are implemented. Next options: new external review, 9.5 push (P3:
 self-healing loop, multi-turn RAG, voice input), or polish.
+
+UPDATE (2026-08-08) - external review #2 (Kimi file): 8.9/10 (+0.1), оценка 5:
+- Based on stage 20 artifacts (Tauri done, 86/86 tests, ratings 8.7/8.8/8.9).
+- Verdict: 'production-ready beta'; Tauri closed the last big P2; remaining
+  P1 = edge-case polish, not architectural holes.
+- Axis scores: Arch 9.0, Code/tests 9.5, Safety 8.5, AI 8.2, UX 8.3, Docs 9.0.
+- Plan to 9.5: P1 (edit guard, git-auto-branch, prompt KV-cache), P2 (task
+  router, plan tree UI, ARCHITECTURE.md), P3 (self-healing loop, multi-turn
+  RAG).
+- STATUS: ALL P1+P2 items were ALREADY closed (stages 21-31): edit guard=21,
+  git-auto-branch=22, KV-cache=23, AUTO_CONFIRM_SAFE=24, auto model=25,
+  Docker=26, ARCHITECTURE.md=27, AST tools=28, VRAM=29, router=30, plan
+  tree=31. Tests now 97/97 x2 (86/86 at review time).
+- Files updated: 'Оценка kimi.txt' (ОЦЕНКА 5 section), KIMI_REVIEW_SUMMARY.md
+  (header line + section), TODO.md (rating line), README.md (ratings line).
+- Remaining to 9.5: P3 - self-healing loop, multi-turn RAG, voice input.
