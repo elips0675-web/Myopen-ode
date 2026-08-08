@@ -497,3 +497,26 @@ UPDATE (2026-08-08) — stage 15: _execute_tool_inner split (83/83):
 
 
 
+
+UPDATE (2026-08-08) - stage 16: agent.py route split (83/83):
+(1) agent.py (883 lines) reduced to ~470: app + index/static/chat(+cancel) routes,
+    sessions storage (SQLite+JSON), memory, projects, pending/cancel state.
+    New modules: api_sessions.py (CRUD/search/export/import), api_files.py
+    (browser/editor/upload), api_misc.py (stats/health/update/models/projects/
+    task/plugins/skills/terminal/ws/lsp). Registered via app.include_router at
+    the end of agent.py; orphan imports (subprocess/WebSocket/glob) cleaned.
+(2) IMPORTANT special case: running python agent.py executes the module as
+    __main__, so import agent inside api_* would reload a FRESH copy of
+    agent.py -> circular ImportError at the include_router line. Fix: at the
+    top of agent.py, when __name__=="__main__" and "agent" not in sys.modules,
+    register sys.modules["agent"] = sys.modules["__main__"]. Verified with a
+    real server start (bind error 10048 was the old process; second attempt
+    healthy).
+(3) Mutating globals (WORK_DIR/SESSIONS_DIR change on switch_project): api_*
+    modules read them dynamically via import agent as _agent (from-import
+    would capture a stale copy). Functions (_db, load_session, ...) resolve
+    their globals inside agent.py at call time - unaffected.
+(4) Tests updated: test_health_endpoint/test_update_check now call
+    api_misc.health()/update_check(), test_session_search -> api_sessions.
+    83/83, CLI live ("4"), server restarted (/health 200, session CRUD probe
+    via HTTP ok).

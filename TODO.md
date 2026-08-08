@@ -113,6 +113,13 @@ Kimi 2: 8.3/10 → DeepSeek 2: 8.5/10 → DeepSeek 3: 8.6/10 → Kimi 3: 8.7/10
 - [x] Поведение идентично (побайтовый перенос веток); 83/83 тестов, CLI live «4»
 - Предел (поведение модели, не кода): полный цикл «исправь баг + прогони тесты» требует follow-up «yes» на CONFIRM (bash) — по дизайну
 
+## Этап 16. Вынос роутов из agent.py (2026-08-08) — СДЕЛАНО
+- [x] agent.py (883 стр.) → api_sessions.py (CRUD/поиск/экспорт/импорт сессий), api_files.py (файл-браузер/редактор/upload), api_misc.py (stats/health/update/models/projects/task/plugins/skills/terminal/ws/lsp); в agent.py остались app, /, static, /api/chat(+cancel), сессии-хранилище, память, проекты, pending/cancel state (~470 стр.)
+- [x] include_router в конце agent.py; вычищены осиротевшие импорты (subprocess/WebSocket/glob)
+- [x] `python agent.py` (запуск как __main__) — модуль регистрируется в sys.modules как «agent» (иначе роутеры импортируют свежую копию → циклический ImportError); проверено реальным стартом сервера
+- [x] Мутируемые глобалы (WORK_DIR/SESSIONS_DIR после switch_project) в роутерах — динамически через import agent as _agent (копия-на-импорт устаревала бы)
+- [x] Тесты health/update_check/session_search перенесены на api_misc/api_sessions; 83/83, CLI live, сервер перезапущен на новой структуре (/health 200)
+
 ## Собственные идеи (низкий приоритет)
 - [x] Native tool calling — СДЕЛАНО (Этап 10)
 - [x] Desktop App — СДЕЛАНО как Этап 11 (pywebview; Tauri требует Rust/MSVC тулчейн — не установлен)

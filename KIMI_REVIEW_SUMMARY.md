@@ -11,12 +11,15 @@
 
 ## Архитектура (3 слоя)
 HTML/CLI UI --HTTP/SSE--> FastAPI (`agent.py`) --> agent loop (LLM → parse → tool → LLM, max 12 итераций)
---> Ollama 127.0.0.1:11434. Файлы: `agent.py` (сервер+цикл, ~1030 стр.), `tools/` — пакет
-(`_state.py` — конфиг+глобалы+init_config с синхронизацией копий; `llm.py` — Ollama/stream/native/fallback;
-`exec.py` — validate/execute/bash-обёртки; `backup.py`, `plugins.py`, `audit.py`, `paths.py`,
-`__init__.py` — фасад-реэкспорт; был монолитом tools.py ~1350 стр.), `rag.py` (гибридный поиск
-BM25+эмбеддинги, FAISS/numpy), `ui.py` (HTML, ~20KB) + `static/app.js` (JS, 30KB), `lsp.py`,
-`mcp_server.py`, `mcp_client.py`, плагины `.agent_plugins/*.py`, скиллы `.agent_skills/`.
+--> Ollama 127.0.0.1:11434. Файлы: `agent.py` (сервер: app/роуты чата, state, сессии-хранилище, память,
+проекты; ~470 стр.), `api_sessions.py` (CRUD/поиск/экспорт/импорт сессий), `api_files.py`
+(файл-браузер/редактор/upload), `api_misc.py` (stats/health/update/models/projects/terminal/ws/skills),
+`tools/` — пакет (`_state.py` — конфиг+глобалы+init_config с синхронизацией копий; `llm.py` —
+Ollama/stream/native/fallback; `exec.py` — диспетчер 26 per-tool хендлеров `_tool_*`; `backup.py`,
+`plugins.py`, `audit.py`, `paths.py`, `__init__.py` — фасад-реэкспорт; был монолитом tools.py ~1350 стр.),
+`rag.py` (гибридный поиск BM25+эмбеддинги, FAISS/numpy), `ui.py` (HTML, ~20KB) + `static/app.js`
+(JS, 30KB), `lsp.py`, `mcp_server.py`, `mcp_client.py`, плагины `.agent_plugins/*.py`,
+скиллы `.agent_skills/`.
 
 ## Оценки внешних ревьюверов
 - Kimi: **8.3/10** (оценка 2, 2026-08-05; P1: Docker > рефакторинг монолитов; whitelist bash уже был — ревьювер не увидел)
@@ -106,6 +109,19 @@ BM25+эмбеддинги, FAISS/numpy), `ui.py` (HTML, ~20KB) + `static/app.js`
     requests/DDGS — ленивые импорты. Замечание: `tools.WORK_DIR = x` больше не распространяется
     на подмодули — только tools.init_config(WORK_DIR=x) (обновлён test_git_snapshot_restore).
     Проверено: 83/83, CLI live, сервер перезапущен на новой структуре.
+29. **Этап 15 (`5fe99eb`) — разбивка _execute_tool_inner (366 стр.)**: диспетчер `_TOOL_DISPATCH`
+    из 26 хендлеров `_tool_*` в tools/exec.py (read/web, write, edit, bash, glob, grep, list, diff,
+    commit, undo, verify, search, snapshot, restore, websearch, question, skill, patch, task, todo,
+    lsp, testgen, db_query, deps, mcp) + fallback на плагины. Поведение побайтово идентично
+    (83/83, CLI live). Открытый вопрос: «длинная задача + цепочка тулов» на CONFIRM (bash) —
+    follow-up «yes» по дизайну.
+30. **Этап 16 — вынос роутов из agent.py**: добавлены api_sessions.py / api_files.py /
+    api_misc.py (APIRouter), в agent.py — include_router в конце + импорты-сироты вычищены.
+    Спецслучай: `python agent.py` (а не `import agent`) — __main__ регистрируется в sys.modules
+    как `agent` (иначе роутеры импортируют свежую копию модуля → ImportError/цикл). Мутируемые
+    глобалы (WORK_DIR/SESSIONS_DIR при switch_project) в роутерах читаются динамически через
+    `import agent as _agent` (копия-на-импорт устаревала бы). Тесты health/update_check/
+    session_search перенесены на api_misc/api_sessions. 83/83, CLI live, сервер перезапущен.
 
 Из рекомендаций оценок 2-3 реализовано: few-shot, [DONE]-маркер, один тул за раз, статистика тулов,
 пост-обработка JSON, Docker-песочница, code detector, Cache-Control, динамический контекст,
@@ -115,7 +131,6 @@ native tool calling, desktop (pywebview). «Таймаут после [CONFIRM]�
 после CONFIRM цикл завершается break по дизайну (юзер пишет «yes» → auto-exec pending без вызова модели).
 
 ## Что осталось (P2)
-- Рефакторинг: agent.py (~880 стр. FastAPI) — вынос роутов; _execute_tool_inner (366 стр.) — разбивка
 - TOOL_STATS в system prompt (per-session stats — частично закрыт через sess_stats в _dynamic_context)
 - CodeMirror 6 / Monaco; AST multi-file edit (parso/tree-sitter)
 - Tauri desktop (ждёт установки Rust/MSVC — pywebview уже закрывает потребность)

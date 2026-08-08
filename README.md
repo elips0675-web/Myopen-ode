@@ -112,11 +112,15 @@ python agent.py
 ## Архитектура
 
 ```
-agent.py   — FastAPI сервер, endpoints, agent loop
-tools/     — пакет инструментов: _state.py (конфиг), llm.py (Ollama/native/fallback),
-             exec.py (validate/execute/bash), backup.py, plugins.py, audit.py, paths.py
-rag.py     — индексация и семантический поиск с дисковым кешем
-ui.py      — HTML UI (встроенный, без зависимостей)
+agent.py          — FastAPI app, /api/chat (SSE), сессии/память/проекты, state
+api_sessions.py   — сессии: CRUD, поиск, экспорт/импорт
+api_files.py      — файловый браузер/редактор, upload
+api_misc.py       — stats, health, update, models, projects, terminal (SSE/WS), skills
+tools/            — пакет инструментов: _state.py (конфиг), llm.py (Ollama/native/fallback),
+                     exec.py (validate/execute/dispatch 26 tools), backup.py, plugins.py,
+                     audit.py, paths.py
+rag.py            — индексация и семантический поиск с дисковым кешем
+ui.py             — HTML UI (встроенный, без зависимостей)
 ```
 
 ## API endpoints
@@ -294,11 +298,15 @@ python agent.py
 ## Architecture
 
 ```
-agent.py   — FastAPI server, endpoints, agent loop
-tools/     — tool package: _state.py (config), llm.py (Ollama/native/fallback),
-             exec.py (validate/execute/bash), backup.py, plugins.py, audit.py, paths.py
-rag.py     — code indexing and semantic search with disk cache
-ui.py      — HTML UI (inline, zero dependencies)
+agent.py          — FastAPI app, /api/chat (SSE), sessions/memory/projects, state
+api_sessions.py   — sessions: CRUD, search, export/import
+api_files.py      — file browser/editor, upload
+api_misc.py       — stats, health, update, models, projects, terminal (SSE/WS), skills
+tools/            — tool package: _state.py (config), llm.py (Ollama/native/fallback),
+                     exec.py (validate/execute/dispatch of 26 tools), backup.py, plugins.py,
+                     audit.py, paths.py
+rag.py            — code indexing and semantic search with disk cache
+ui.py             — HTML UI (inline, zero dependencies)
 ```
 
 ## Recommended Models

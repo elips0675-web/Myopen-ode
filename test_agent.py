@@ -275,8 +275,8 @@ def test_bash_docker_fallback():
 
 def test_health_endpoint():
     """GET /health returns status/model/sessions/rag_chunks without crashing."""
-    import agent as agent_mod
-    h = agent_mod.health()
+    import api_misc
+    h = api_misc.health()
     assert h["status"] == "ok", h
     assert h["model"] and h["workspace"], h
     assert isinstance(h["rag_chunks"], int), h
@@ -400,8 +400,8 @@ def test_diff_preview():
 
 def test_update_check():
     """GET /api/update returns current HEAD and knows when behind origin."""
-    import agent as agent_mod
-    data = agent_mod.update_check()
+    import api_misc
+    data = api_misc.update_check()
     assert isinstance(data, dict) and data.get("ok") in (True, False), data
     if data.get("ok"):
         assert data["current"] and len(data["current"]) >= 7, data
@@ -1233,11 +1233,12 @@ def test_session_search():
     agent_mod.save_session(sid, "Search me",
         [{"role": "user", "content": "Как работает потоковый SSE в агенте?"}])
     try:
-        res = agent_mod.search_sessions(q="потоковый")
+        import api_sessions
+        res = api_sessions.search_sessions(q="потоковый")
         assert any(r["id"] == sid for r in res), f"not found: {res}"
         r = next(r for r in res if r["id"] == sid)
         assert r["snippets"] and "потоковый" in r["snippets"][0]
-        assert agent_mod.search_sessions(q="несуществующеесловоxyz") == []
+        assert api_sessions.search_sessions(q="несуществующеесловоxyz") == []
     finally:
         agent_mod.delete_session_db(sid)
     print("  [OK] session full-text search")
