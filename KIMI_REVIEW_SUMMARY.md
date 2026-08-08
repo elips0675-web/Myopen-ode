@@ -266,6 +266,19 @@ Ollama/stream/native/fallback; `exec.py` — диспетчер 26 per-tool хе
     парсинг 12288/5120 → free 7168; отсутствие → ok=False). 95/95 ×2.
     Live: /api/vram = {total 12288, used 9430, ok:true} — qwen3:8b грузит
     карту. Сервер перезапущен. Остались P2: task-level router, plan tree UI.
+43. **Этап 30 — Task-level router** (2026-08-08, P2 #7): tools/llm.py
+    `pick_task_model(task, base)` — zero-shot классификатор (один лёгкий
+    вызов PLANNER_MODEL, temperature 0: bugfix/refactor/tests/chat/other)
+    ВЫБИРАЕТ модель до цикла: bugfix/refactor/tests → qwen3:8b,
+    chat → qwen2.5-coder:3b. Правила: явный AI_MODEL всегда побеждает;
+    юзер-выбранная модель не трогается (req.model — приоритет); короткие
+    запросы (<20 симв.) и «уже qwen3:8b» не классифицируются; целевая
+    модель не установлена (кэш /api/tags, TTL 60 с) → дефолт. Подключено
+    в /api/chat (chosen_model до run_agent_loop) и CLI (myopencode.py).
+    Тест test_task_router (6 сценариев; короткий/недоступная/явный AI_MODEL).
+    Баг в тесте: qwen2.5-coder:3b НЕ установлена на машине — ветка chat
+    тестируется с подменой списка установленных. 96/96 ×2, CLI live «10»,
+    сервер перезапущен. Остался P2: plan tree UI.
 
 Из рекомендаций оценок 2-3 реализовано: few-shot, [DONE]-маркер, один тул за раз, статистика тулов,
 пост-обработка JSON, Docker-песочница, code detector, Cache-Control, динамический контекст,

@@ -154,7 +154,7 @@ Kimi 2: 8.3/10 → DeepSeek 2: 8.5/10 → DeepSeek 3: 8.6/10 → Kimi 3: 8.7/10 
 - [x] Docker-песочница по умолчанию при наличии Docker + предупреждение в логе (DS4) — Этап 26 (автодетект docker version при старте + лог-совет; DOCKER_SANDBOX=1 синоним BASH_DOCKER=1; =0 отключает; локальный shell не заменяется автоматически)
 ### P2
 - [x] Tauri desktop ✓ (этап 20)
-- [ ] Task-level model router — классификатор задачи выбирает модель до цикла
+- [x] Task-level model router — классификатор задачи (zero-shot 1.5b) выбирает модель до цикла — Этап 30 (pick_task_model; AI_MODEL/юзер-выбор побеждают; короткие — дефолт)
 - [ ] Plan tree UI — дерево шагов pending/done/error
 - [ ] ARCHITECTURE.md с Mermaid-диаграммой + примеры тулов (DS4)
 - [x] AST-рефакторинг тулы: rename_symbol / extract_function / inline_variable (DS4) — Этап 28 (ast-узлы, syntax-guard, backup+git; live rename total→sum_total)

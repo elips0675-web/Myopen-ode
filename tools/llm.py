@@ -13,6 +13,79 @@ def _cache_key(messages, model):
     body = json.dumps(messages, ensure_ascii=False, sort_keys=True)
     return hashlib.md5((model + body).encode()).hexdigest()[:24]
 
+
+_TASK_MODEL_MAP = {
+    "bugfix": "qwen3:8b",
+    "refactor": "qwen3:8b",
+    "tests": "qwen3:8b",
+    "chat": "qwen2.5-coder:3b",
+}
+_MODELS_CACHE = {"at": 0, "list": None}
+
+
+def _installed_models():
+    """Cached list of installed Ollama models (TTL 60s); empty on failure."""
+    now = time.time()
+    if _MODELS_CACHE["list"] is not None and now - _MODELS_CACHE["at"] < 60:
+        return _MODELS_CACHE["list"]
+    try:
+        r = requests.get(f"{OLLAMA_URL}/api/tags", timeout=5)
+        lst = [m.get("name", "") for m in r.json().get("models", [])]
+    except Exception:
+        lst = []
+    _MODELS_CACHE.update({"at": now, "list": lst})
+    return lst
+
+
+def pick_task_model(task_text, base_model, classify=None):
+    """Stage 30: task-level model router (DS4 P2 #7). A zero-shot classifier
+    (PLANNER_MODEL, one light call) picks the strongest model BEFORE the loop:
+    bugfix/refactor/tests -> qwen3:8b, chat -> qwen2.5-coder:3b. Rules:
+    explicit AI_MODEL always wins; the user-picked model is never overridden;
+    short chats stay on the default model; if the target model is not
+    installed, the default is kept. classify is injectable for tests."""
+    import os as _os
+    from ._state import PLANNER_MODEL
+    if _os.environ.get("AI_MODEL"):
+        return base_model
+    t = (task_text or "").strip()
+    if not t or len(t) < 20 or base_model == "qwen3:8b":
+        return base_model
+    if classify is None:
+        classify = _classify_task
+    try:
+        cat = classify(t, PLANNER_MODEL) or ""
+        target = _TASK_MODEL_MAP.get(cat.strip().lower())
+        if not target or target == base_model:
+            return base_model
+        if target not in _installed_models():
+            return base_model
+        return target
+    except Exception:
+        return base_model
+
+
+def _classify_task(task_text, planner_model, timeout=20):
+    """One zero-shot call: answer with exactly one word from
+    bugfix|refactor|tests|chat|other."""
+    import requests as _r
+    prompt = ("Classify the user request into exactly one word: "
+              "bugfix, refactor, tests, chat, other.\n\nUser request: "
+              + (task_text or "")[:400])
+    try:
+        resp = _r.post(f"{OLLAMA_URL}/api/chat", json={
+            "model": planner_model,
+            "messages": [{"role": "user", "content": prompt}],
+            "stream": False, "options": {"temperature": 0},
+        }, timeout=timeout)
+        text = (resp.json().get("message", {}).get("content") or "")[:60].lower()
+        for w in ("bugfix", "refactor", "tests", "chat", "other"):
+            if w in text:
+                return w
+    except Exception:
+        pass
+    return "other"
+
 def stream_ollama(messages, model=None, on_chunk=None):
     """Stream a chat completion from Ollama. on_chunk(text_fragment) is called
     for every fragment as it arrives; returns the full text (think tags stripped)."""

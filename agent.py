@@ -415,11 +415,17 @@ async def chat(req: ChatReq):
     mem_text = memory_prompt()
     sys_content = SYSTEM_PROMPT + mem_text
     msgs = [{"role": "system", "content": sys_content}] + session_msgs + req.messages
+    first_text = next((m.get("content", "") for m in req.messages
+                       if m.get("role") == "user"), "") or ""
+    chosen_model = req.model or None
+    if not chosen_model:
+        from tools.llm import pick_task_model as _ptm
+        chosen_model = _ptm(first_text, MODEL)
     q = asyncio.Queue()
     loop = asyncio.get_running_loop()
     def emit(ev):
         loop.call_soon_threadsafe(q.put_nowait, ev)
-    task = asyncio.create_task(asyncio.to_thread(run_agent_loop, msgs, req.session_id, emit, req.model or None))
+    task = asyncio.create_task(asyncio.to_thread(run_agent_loop, msgs, req.session_id, emit, chosen_model or None))
     if req.session_id:
         _cancel_clear(req.session_id)
     async def gen():

@@ -768,3 +768,16 @@ UPDATE (2026-08-08) - stage 29 done (P2 #11 VRAM indicator), 95/95 x2:
 - Live: /api/vram {total_mb:12288, used_mb:9430, ok:true}.
 - Server restarted (health 200).
 Remaining P2: (7) task-level router, (8) plan tree UI.
+
+UPDATE (2026-08-08) - stage 30 done (P2 #7 task-level router), 96/96 x2:
+- tools/llm.py pick_task_model(task, base): zero-shot classify via PLANNER_MODEL
+  (1 call, temperature 0) BEFORE the loop; bugfix/refactor/tests -> qwen3:8b,
+  chat -> qwen2.5-coder:3b. Explicit AI_MODEL wins; req.model (user pick) is
+  never overridden; tasks <20 chars or base==qwen3:8b skip classification;
+  target not installed (cached /api/tags, 60s TTL) -> default kept.
+- Wired into /api/chat (chosen_model computed before run_agent_loop) and CLI
+  (myopencode.py passes model= to the loop).
+- Test test_task_router (6 cases; note qwen2.5-coder:3b NOT installed on this
+  machine - chat branch tested with mocked installed list).
+- Live: CLI answered '10'. Server restarted (health 200).
+Remaining P2: (8) plan tree UI.

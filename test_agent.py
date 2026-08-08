@@ -2001,6 +2001,45 @@ def test_vram_indicator():
         api_misc._VRAM_CACHE.clear(); api_misc._VRAM_CACHE.update(old_cache)
     print("  [OK] VRAM indicator: nvidia-smi parsed, graceful without GPU")
 
+def test_task_router():
+    """Stage 30: pick_task_model classifies before the loop; explicit AI_MODEL
+    and short chats keep the default; missing target model keeps default."""
+    import tools.llm as llm
+    import os as _os
+    old_env = _os.environ.pop("AI_MODEL", None)
+    old_inst = llm._installed_models
+    llm._installed_models = lambda: ["qwen2.5-coder:7b", "qwen3:8b"]
+    try:
+        base = "qwen2.5-coder:7b"
+        assert llm.pick_task_model("short", base) == base, "short -> default"
+        assert llm.pick_task_model("fix this bug in main.py", base,
+                                   classify=lambda t, m: "bugfix") == "qwen3:8b"
+        assert llm.pick_task_model("write tests for module x", base,
+                                   classify=lambda t, m: "tests") == "qwen3:8b"
+        llm._installed_models = lambda: ["qwen2.5-coder:7b", "qwen3:8b", "qwen2.5-coder:3b"]
+        assert llm.pick_task_model("explain this code please", base,
+                                   classify=lambda t, m: "chat") == "qwen2.5-coder:3b"
+        llm._installed_models = lambda: ["qwen2.5-coder:7b"]
+        assert llm.pick_task_model("explain this code please", base,
+                                   classify=lambda t, m: "chat") == base, \
+            "uninstalled target -> default"
+        assert llm.pick_task_model("fix this bug in main.py", base,
+                                   classify=lambda t, m: "bugfix") == base, \
+            "missing target -> default"
+        assert llm.pick_task_model("just say hi", "qwen3:8b") == "qwen3:8b", \
+            "already strong model stays"
+        _os.environ["AI_MODEL"] = "deepseek-coder-v2:16b"
+        assert llm.pick_task_model("fix this bug in main.py", base,
+                                   classify=lambda t, m: "bugfix") == base, \
+            "explicit AI_MODEL wins"
+    finally:
+        llm._installed_models = old_inst
+        if old_env is None:
+            _os.environ.pop("AI_MODEL", None)
+        else:
+            _os.environ["AI_MODEL"] = old_env
+    print("  [OK] task-level router: classify->model, AI_MODEL/short/missing win")
+
 def test_cross_platform():
     """Cross-platform safety: no hard-coded Windows paths, CREATE_NO_WINDOW
     guarded, core modules importable on any OS (also runs in CI matrix)."""
@@ -2028,7 +2067,7 @@ if __name__ == "__main__":
     if _native_supported(_agent_main.MODEL):
         _agent_main.MODEL = "qwen2.5-coder:7b"
         print("  [test] default MODEL is native-capable -> forced to qwen2.5-coder:7b (legacy path)")
-    tests = [test_cross_platform, test_vram_indicator, test_ast_refactor_tools, test_auto_pick_model, test_docker_sandbox_flag, test_git_auto_commit, test_compact_prompt_after_iterations,
+    tests = [test_cross_platform, test_task_router, test_vram_indicator, test_ast_refactor_tools, test_auto_pick_model, test_docker_sandbox_flag, test_git_auto_commit, test_compact_prompt_after_iterations,
              test_auto_confirm_safe, test_read, test_read_absolute, test_read_url, test_list, test_glob,
              test_write_and_undo, test_edit, test_edit_guard_ambiguous, test_edit_guard_fuzzy_hint,
              test_syntax_guard_write, test_patch_multi_file, test_bash, test_verify_py, test_verify_json,

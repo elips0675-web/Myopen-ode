@@ -13,6 +13,8 @@ os.environ.setdefault("PYTHONUTF8", "1")
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from agent import run_agent_loop  # noqa: E402
+from tools.llm import pick_task_model  # noqa: E402
+from tools._state import MODEL  # noqa: E402
 
 
 def main(argv=None):
@@ -21,7 +23,8 @@ def main(argv=None):
         print("Usage: python -m myopencode \"<task>\"", file=sys.stderr)
         return 2
     task = " ".join(argv)
-    out = run_agent_loop([{"role": "user", "content": task}], None)
+    model = pick_task_model(task, MODEL)
+    out = run_agent_loop([{"role": "user", "content": task}], None, model=model)
     if out:
         print("\n" + out)
     return 0
