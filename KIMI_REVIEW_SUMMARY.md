@@ -115,7 +115,7 @@ Ollama/stream/native/fallback; `exec.py` — диспетчер 26 per-tool хе
     lsp, testgen, db_query, deps, mcp) + fallback на плагины. Поведение побайтово идентично
     (83/83, CLI live). Открытый вопрос: «длинная задача + цепочка тулов» на CONFIRM (bash) —
     follow-up «yes» по дизайну.
-30. **Этап 16 — вынос роутов из agent.py**: добавлены api_sessions.py / api_files.py /
+30. **Этап 16 (`30fd2c6`) — вынос роутов из agent.py**: добавлены api_sessions.py / api_files.py /
     api_misc.py (APIRouter), в agent.py — include_router в конце + импорты-сироты вычищены.
     Спецслучай: `python agent.py` (а не `import agent`) — __main__ регистрируется в sys.modules
     как `agent` (иначе роутеры импортируют свежую копию модуля → ImportError/цикл). Мутируемые
