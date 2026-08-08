@@ -114,6 +114,24 @@ def test_dynamic_context_error_status():
     assert dyn and "result: error" in dyn[-1]["content"], f"error status missing: {dyn}"
     print("  [OK] dynamic context reports error status")
 
+def test_dynamic_context_global_stats():
+    """Global (all-session) TOOL_STATS with repeated failures appear in the
+    dynamic context so the model can self-correct argument patterns."""
+    from core.agent_loop import _dynamic_context
+    stats = {"read": {"calls": 20, "errors": 7},
+             "edit": {"calls": 5, "errors": 1},
+             "bash": {"calls": 2, "errors": 2},
+             "write": {"calls": 1, "errors": 1}}
+    c = _dynamic_context("read", "Error: no such file", 2, sess_stats=None,
+                         project="proj", tool_stats=stats)
+    assert "Global tool stats (all sessions):" in c, c
+    assert "read: 7 error(s) of 20 call(s)" in c, c
+    assert "write:" not in c, f"single-failure tool must be excluded: {c}"
+    assert "bash: 2 error(s) of 2 call(s)" in c, c
+    c2 = _dynamic_context("list", "ok", 0, tool_stats={})
+    assert "Global tool stats" not in c2, c2
+    print("  [OK] global tool stats in dynamic context (repeated failures only)")
+
 def test_tool_error_fewshot():
     """After a tool error + prose reply, the nudge must include a concrete
     fix example (tried -> error -> corrected tool), not just 'fix the JSON'."""
@@ -1652,7 +1670,7 @@ if __name__ == "__main__":
              test_bash_docker_mode, test_bash_docker_fallback,
              test_parse_tool_json_lenient, test_tool_stats,
              test_system_prompt_rules, test_dynamic_context,
-             test_dynamic_context_error_status, test_tool_error_fewshot,
+             test_dynamic_context_error_status, test_dynamic_context_global_stats, test_tool_error_fewshot,
              test_bash_docker_flags, test_health_endpoint, test_vendor_static,
              test_json_schema_format, test_git_snapshot_restore, test_diff_preview,
              test_update_check, test_rag_folder_scope, test_mcp_client,

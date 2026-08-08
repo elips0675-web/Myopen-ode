@@ -520,3 +520,14 @@ UPDATE (2026-08-08) - stage 16: agent.py route split (83/83):
     api_misc.health()/update_check(), test_session_search -> api_sessions.
     83/83, CLI live ("4"), server restarted (/health 200, session CRUD probe
     via HTTP ok).
+
+UPDATE (2026-08-08) - stage 17: TOOL_STATS in system prompt (84/84):
+(1) _dynamic_context now appends "Global tool stats (all sessions):" - top-3
+    tools with repeated failures (calls >= 2, sorted by error count) + the
+    same glob/list advice. Single-failure tools are excluded (noise).
+(2) Stats resolved lazily via import tools inside _dynamic_context - CLI
+    and tests don't pass anything; optional tool_stats= kwarg keeps the
+    unit test network-free. Per-session "Tool errors this session" kept.
+(3) New test: test_dynamic_context_global_stats (asserts top-3 + exclusion
+    of single-failure tools). 84/84, CLI live ("4"). P2 left: CodeMirror 6/
+    Monaco, AST multi-file edit, Tauri (blocked on Rust/MSVC).

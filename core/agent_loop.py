@@ -25,10 +25,13 @@ VALID_TOOLS = ("read", "write", "edit", "bash", "glob", "grep", "list", "web",
                "snapshot", "restore")
 
 
-def _dynamic_context(tool_name, tool_text, it, sess_stats=None, project="workspace"):
+def _dynamic_context(tool_name, tool_text, it, sess_stats=None, project="workspace",
+                     tool_stats=None):
     """Short orientation block for the model: which project, what was the
     last tool action and whether it succeeded, plus per-session tool errors.
-    7B models lose track of context after 3-4 iterations — this anchors them."""
+    7B models lose track of context after 3-4 iterations — this anchors them.
+    tool_stats (global, all sessions) is resolved lazily via `import tools`
+    so callers (CLI, tests) don't need to pass it."""
     parts = [f"You are working in project: {project} (iteration {it + 1})"]
     if tool_name:
         status = "error" if tool_text.startswith(("Error:", "Blocked:")) else "ok"
@@ -40,6 +43,22 @@ def _dynamic_context(tool_name, tool_text, it, sess_stats=None, project="workspa
             for name, s in sorted(errs.items())[:3]:
                 lines.append(f"- {name}: {s['errors']} error(s) of {s['calls']} call(s)")
             parts.append("Tool errors this session:\n" + "\n".join(lines)
+                         + "\nAdvice: fix the arguments — use glob or list to find the real path "
+                           "before read/edit/write.")
+    if tool_stats is None:
+        try:
+            import tools as _tools_mod
+            tool_stats = _tools_mod.TOOL_STATS
+        except Exception:
+            tool_stats = None
+    if tool_stats:
+        gerrs = {n: s for n, s in tool_stats.items()
+                 if s.get("errors", 0) > 0 and s.get("calls", 0) >= 2}
+        if gerrs:
+            lines = []
+            for name, s in sorted(gerrs.items(), key=lambda kv: -kv[1]["errors"])[:3]:
+                lines.append(f"- {name}: {s['errors']} error(s) of {s['calls']} call(s)")
+            parts.append("Global tool stats (all sessions):\n" + "\n".join(lines)
                          + "\nAdvice: fix the arguments — use glob or list to find the real path "
                            "before read/edit/write.")
     return "\n".join(parts) + "\n"

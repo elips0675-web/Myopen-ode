@@ -120,6 +120,11 @@ Kimi 2: 8.3/10 → DeepSeek 2: 8.5/10 → DeepSeek 3: 8.6/10 → Kimi 3: 8.7/10
 - [x] Мутируемые глобалы (WORK_DIR/SESSIONS_DIR после switch_project) в роутерах — динамически через import agent as _agent (копия-на-импорт устаревала бы)
 - [x] Тесты health/update_check/session_search перенесены на api_misc/api_sessions; 83/83, CLI live, сервер перезапущен на новой структуре (/health 200)
 
+## Этап 17. TOOL_STATS в system prompt (2026-08-08) — СДЕЛАНО
+- [x] _dynamic_context: блок «Global tool stats (all sessions)» — топ-3 тула с повторяющимися ошибками (>=2 вызовов, сортировка по числу ошибок) + advice (use glob or list); одиночные сбои не мусорят контекст
+- [x] Ленивое резолвление TOOL_STATS через import tools (CLI/тесты не передают); параметр tool_stats= для чистых unit-тестов
+- [x] Per-session блок «Tool errors this session» сохранён; тест test_dynamic_context_global_stats (в т.ч. исключение одиночных сбоев); 84/84, CLI live
+
 ## Собственные идеи (низкий приоритет)
 - [x] Native tool calling — СДЕЛАНО (Этап 10)
 - [x] Desktop App — СДЕЛАНО как Этап 11 (pywebview; Tauri требует Rust/MSVC тулчейн — не установлен)

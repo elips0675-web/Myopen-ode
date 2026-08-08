@@ -122,6 +122,12 @@ Ollama/stream/native/fallback; `exec.py` — диспетчер 26 per-tool хе
     глобалы (WORK_DIR/SESSIONS_DIR при switch_project) в роутерах читаются динамически через
     `import agent as _agent` (копия-на-импорт устаревала бы). Тесты health/update_check/
     session_search перенесены на api_misc/api_sessions. 83/83, CLI live, сервер перезапущен.
+31. **Этап 17 — TOOL_STATS в system prompt**: `_dynamic_context` получил блок «Global tool
+    stats (all sessions)» — топ-3 тула с повторяющимися ошибками (>=2 вызовов, иначе
+    одиночный сбой не мусорит контекст), сортировка по числу ошибок, тот же advice
+    (use glob or list). Статистика резолвится лениво через `import tools` — CLI/тесты
+    ничего не передают; параметр tool_stats= позволяет чистый unit-тест без сети.
+    Per-session блок («Tool errors this session») сохранён. 84/84, CLI live.
 
 Из рекомендаций оценок 2-3 реализовано: few-shot, [DONE]-маркер, один тул за раз, статистика тулов,
 пост-обработка JSON, Docker-песочница, code detector, Cache-Control, динамический контекст,
@@ -131,7 +137,6 @@ native tool calling, desktop (pywebview). «Таймаут после [CONFIRM]�
 после CONFIRM цикл завершается break по дизайну (юзер пишет «yes» → auto-exec pending без вызова модели).
 
 ## Что осталось (P2)
-- TOOL_STATS в system prompt (per-session stats — частично закрыт через sess_stats в _dynamic_context)
 - CodeMirror 6 / Monaco; AST multi-file edit (parso/tree-sitter)
 - Tauri desktop (ждёт установки Rust/MSVC — pywebview уже закрывает потребность)
 - JSON Schema constrained output — экспериментально доступен (AI_JSON_FORMAT=1)
