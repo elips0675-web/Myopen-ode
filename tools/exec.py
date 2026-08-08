@@ -271,6 +271,175 @@ def _tool_edit(args):
     if gc: msg += f"\n{gc}"
     return msg
 
+def _ast_rename_symbol(args):
+    """Stage 28: rename a Python symbol (function/class/variable/param) via
+    AST node positions — no regex, no substring matches."""
+    err = ensure_safe_path(args["path"])
+    if err: return err
+    p = resolve(args["path"])
+    if not str(p).endswith(".py"):
+        return "Error: rename_symbol supports Python (.py) files only"
+    if not p.exists():
+        return f"Error: {p} not found" + (_similar_files(args["path"]) or "")
+    old, new = args.get("old_name", ""), args.get("new_name", "")
+    if not old or not new:
+        return "Error: old_name and new_name are required"
+    if old == new:
+        return "Error: old_name and new_name are identical"
+    if not new.isidentifier():
+        return f"Error: '{new}' is not a valid Python identifier"
+    src = p.read_text("utf-8")
+    try:
+        tree = ast.parse(src)
+    except SyntaxError as e:
+        return f"Error: source file has syntax errors: {e}"
+    hits = []
+    old_b = old.encode("utf-8")
+    src_lines = src.splitlines(keepends=True)
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.Name, ast.arg)):
+            if getattr(node, "id", None) == old:
+                hits.append((node.lineno, node.col_offset, node.col_offset + len(old_b)))
+        elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            if node.name == old:
+                # py3.14+: col_offset points at 'def'/'class', find the name
+                ln = src_lines[node.lineno - 1].encode("utf-8")
+                pos = ln.find(old_b, node.col_offset)
+                if pos >= 0:
+                    hits.append((node.lineno, pos, pos + len(old_b)))
+    if not hits:
+        return f"Error: symbol '{old}' not found in {p}"
+    lines = src.splitlines(keepends=True)
+    applied = 0
+    for lineno, col, end in sorted(hits, reverse=True):
+        line = lines[lineno - 1]
+        b = line.encode("utf-8")
+        if 0 <= col <= end <= len(b):
+            lines[lineno - 1] = (b[:col] + new.encode("utf-8") + b[end:]).decode("utf-8")
+            applied += 1
+    new_src = "".join(lines)
+    try:
+        ast.parse(new_src)
+    except SyntaxError as e:
+        return f"Error: renamed source fails syntax check: {e}"
+    rel = str(p.relative_to(_s.WORK_DIR.resolve())) if _s.WORK_DIR in p.parents else str(p)
+    backup(rel)
+    p.write_text(new_src, "utf-8")
+    gc = _git_auto_commit(rel, "rename_symbol")
+    return f"renamed '{old}' -> '{new}' in {p} ({applied} occurrence(s))" + (f"\n{gc}" if gc else "")
+
+
+def _ast_extract_function(args):
+    """Stage 28: extract a line range into a new function and replace the
+    range with a call. Params and call args are explicit (model supplies
+    them) so the result is predictable."""
+    err = ensure_safe_path(args["path"])
+    if err: return err
+    p = resolve(args["path"])
+    if not str(p).endswith(".py"):
+        return "Error: extract_function supports Python (.py) files only"
+    if not p.exists():
+        return f"Error: {p} not found"
+    name = args.get("name", "")
+    params = args.get("params") or []
+    call_args = args.get("call_args") or []
+    if not name or not name.isidentifier():
+        return "Error: name must be a valid Python identifier"
+    if any(not (isinstance(x, str) and x.isidentifier()) for x in params):
+        return "Error: params must be valid identifiers"
+    lines = p.read_text("utf-8").splitlines(keepends=True)
+    ls, le = args.get("line_start"), args.get("line_end")
+    if not isinstance(ls, int) or not isinstance(le, int) or ls < 1 or le < ls or le > len(lines):
+        return f"Error: invalid line range {ls}..{le} (file has {len(lines)} lines)"
+    body = lines[ls - 1:le]
+    indent = len(body[0]) - len(body[0].lstrip(" \t"))
+    prefix = body[0][:indent]
+    base_indent = " " * indent
+    stripped = []
+    for ln in body:
+        if ln.strip():
+            stripped.append(ln[indent:] if len(ln) > indent else ln.lstrip(" \t"))
+        else:
+            stripped.append("\n")
+    head = stripped[0]
+    if head.startswith("def ") or head.startswith("class ") or head.startswith("async def "):
+        return "Error: range starts with a def/class — extract only executable statements"
+    def_text = f"def {name}({', '.join(params)}):\n" + "".join(("    " + ln if ln.strip() else ln) for ln in stripped)
+    if not def_text.endswith("\n"):
+        def_text += "\n"
+    call_text = f"{base_indent}{name}({', '.join(call_args)})\n"
+    new_lines = lines[:ls - 1] + [call_text] + lines[le:]
+    if new_lines and new_lines[-1] and not new_lines[-1].endswith("\n"):
+        new_lines[-1] += "\n"
+    new_lines += [def_text]
+    new_src = "".join(new_lines)
+    try:
+        ast.parse(new_src)
+    except SyntaxError as e:
+        return f"Error: extracted source fails syntax check: {e}"
+    rel = str(p.relative_to(_s.WORK_DIR.resolve())) if _s.WORK_DIR in p.parents else str(p)
+    backup(rel)
+    p.write_text(new_src, "utf-8")
+    gc = _git_auto_commit(rel, "extract_function")
+    return f"extracted lines {ls}..{le} into def {name}({', '.join(params)}) in {p}" + (f"\n{gc}" if gc else "")
+
+
+def _ast_inline_variable(args):
+    """Stage 28: inline a simple `var = expr` assignment: remove the line and
+    replace later uses of var with the expression text."""
+    err = ensure_safe_path(args["path"])
+    if err: return err
+    p = resolve(args["path"])
+    if not str(p).endswith(".py"):
+        return "Error: inline_variable supports Python (.py) files only"
+    if not p.exists():
+        return f"Error: {p} not found"
+    var = args.get("var_name", "")
+    line_no = args.get("line_number")
+    if not var or not isinstance(line_no, int):
+        return "Error: var_name and line_number are required"
+    src = p.read_text("utf-8")
+    try:
+        tree = ast.parse(src)
+    except SyntaxError as e:
+        return f"Error: source file has syntax errors: {e}"
+    assign = None
+    for node in tree.body:
+        if isinstance(node, ast.Assign) and node.lineno == line_no \
+           and len(node.targets) == 1 and isinstance(node.targets[0], ast.Name) \
+           and node.targets[0].id == var:
+            assign = node
+            break
+    if assign is None:
+        return f"Error: no top-level '{var} = ...' on line {line_no}"
+    expr_text = ast.get_source_segment(src, assign.value)
+    if not expr_text:
+        return "Error: could not extract expression text"
+    uses = []
+    targets = {id(t) for t in ast.walk(assign) if isinstance(t, ast.Name)}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Name) and node.id == var and node is not assign.targets[0]:
+            if node.lineno > line_no and node.lineno != assign.lineno:
+                uses.append((node.lineno, node.col_offset, node.end_col_offset))
+    lines = src.splitlines(keepends=True)
+    lines[line_no - 1] = ""
+    for lineno, col, end in sorted(uses, reverse=True):
+        ln = lines[lineno - 1]
+        b = ln.encode("utf-8")
+        if 0 <= col <= end <= len(b):
+            lines[lineno - 1] = (b[:col] + expr_text.encode("utf-8") + b[end:]).decode("utf-8")
+    new_src = "".join(lines)
+    try:
+        ast.parse(new_src)
+    except SyntaxError as e:
+        return f"Error: inlined source fails syntax check: {e}"
+    rel = str(p.relative_to(_s.WORK_DIR.resolve())) if _s.WORK_DIR in p.parents else str(p)
+    backup(rel)
+    p.write_text(new_src, "utf-8")
+    gc = _git_auto_commit(rel, "inline_variable")
+    return f"inlined '{var}' from line {line_no} in {p} ({len(uses)} use(s))" + (f"\n{gc}" if gc else "")
+
+
 def _tool_bash(args):
     cmd = args["cmd"]
     blocked = check_bash(cmd)
@@ -667,6 +836,9 @@ _TOOL_DISPATCH = {
     "db_query": _tool_db_query,
     "deps": _tool_deps,
     "mcp": _tool_mcp,
+    "rename_symbol": _ast_rename_symbol,
+    "extract_function": _ast_extract_function,
+    "inline_variable": _ast_inline_variable,
 }
 
 def _execute_tool_inner(name, args):

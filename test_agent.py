@@ -1940,6 +1940,38 @@ def test_docker_sandbox_flag():
                 _os.environ[k] = v
     print("  [OK] docker sandbox: DOCKER_SANDBOX=1 -> docker run, else local")
 
+def test_ast_refactor_tools():
+    """Stage 28: rename_symbol / extract_function / inline_variable."""
+    from tools import execute_tool as ex
+    f = TMP / "ast_refactor_demo.py"
+    f.write_text("def foo(x):\n    y = foo(x + 1)\n    return y\n\nprint(foo(5))\n", "utf-8")
+    r = ex("rename_symbol", {"path": str(f), "old_name": "foo", "new_name": "bar"})
+    assert "renamed" in r, f"rename failed: {r}"
+    s = f.read_text("utf-8")
+    assert "def bar(x):" in s and "y = bar(x + 1)" in s and "print(bar(5))" in s and "foo" not in s, s
+
+    r = ex("rename_symbol", {"path": str(f), "old_name": "nope", "new_name": "x"})
+    assert "not found" in r, f"missing symbol must error: {r}"
+    r = ex("rename_symbol", {"path": str(TMP / "ast_refactor_demo.txt"), "old_name": "a", "new_name": "b"})
+    assert "Python (.py) files only" in r, f"non-py must error: {r}"
+
+    f2 = TMP / "ast_extract_demo.py"
+    f2.write_text("total = 0\nfor i in range(3):\n    total += i\ntotal *= 2\nprint(total)\n", "utf-8")
+    r = ex("extract_function", {"path": str(f2), "name": "calc",
+                                "line_start": 3, "line_end": 3,
+                                "params": ["total", "i"], "call_args": ["total", "i"]})
+    assert "extracted" in r, f"extract failed: {r}"
+    s2 = f2.read_text("utf-8")
+    assert "def calc(total, i):" in s2 and "calc(total, i)" in s2, s2
+
+    f3 = TMP / "ast_inline_demo.py"
+    f3.write_text("x = 2 * 3\nprint(x)\nprint(x + 1)\n", "utf-8")
+    r = ex("inline_variable", {"path": str(f3), "var_name": "x", "line_number": 1})
+    assert "inlined" in r, f"inline failed: {r}"
+    s3 = f3.read_text("utf-8")
+    assert "x = 2 * 3" not in s3 and "print(2 * 3)" in s3 and "print(2 * 3 + 1)" in s3, s3
+    print("  [OK] AST refactor: rename_symbol / extract_function / inline_variable")
+
 def test_cross_platform():
     """Cross-platform safety: no hard-coded Windows paths, CREATE_NO_WINDOW
     guarded, core modules importable on any OS (also runs in CI matrix)."""
@@ -1967,7 +1999,7 @@ if __name__ == "__main__":
     if _native_supported(_agent_main.MODEL):
         _agent_main.MODEL = "qwen2.5-coder:7b"
         print("  [test] default MODEL is native-capable -> forced to qwen2.5-coder:7b (legacy path)")
-    tests = [test_cross_platform, test_auto_pick_model, test_docker_sandbox_flag, test_git_auto_commit, test_compact_prompt_after_iterations,
+    tests = [test_cross_platform, test_ast_refactor_tools, test_auto_pick_model, test_docker_sandbox_flag, test_git_auto_commit, test_compact_prompt_after_iterations,
              test_auto_confirm_safe, test_read, test_read_absolute, test_read_url, test_list, test_glob,
              test_write_and_undo, test_edit, test_edit_guard_ambiguous, test_edit_guard_fuzzy_hint,
              test_syntax_guard_write, test_patch_multi_file, test_bash, test_verify_py, test_verify_json,

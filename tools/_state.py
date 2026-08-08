@@ -125,6 +125,9 @@ TOOL_SCHEMAS = {
     "db_query": {"required": ["query"]},
     "deps": {},
     "mcp": {"required": ["server", "call"]},
+    "rename_symbol": {"required": ["path", "old_name", "new_name"], "description": "rename a Python symbol via AST (functions/classes/variables/params); exact-name matches only, syntax-checked"},
+    "extract_function": {"required": ["path", "name", "line_start", "line_end", "params", "call_args"], "description": "extract lines into a new function; params and call_args are explicit lists the model supplies"},
+    "inline_variable": {"required": ["path", "var_name", "line_number"], "description": "inline a top-level 'var = expr' assignment, replacing later uses"},
     "snapshot": {"required": [], "description": "git pre-backup of all changes (tracked diff + untracked copies)"},
     "restore": {"required": [], "description": "restore all changes from the last snapshot (git checkout + re-apply tracked diff + sync untracked)"},
 }

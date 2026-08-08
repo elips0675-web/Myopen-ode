@@ -240,6 +240,24 @@ Ollama/stream/native/fallback; `exec.py` — диспетчер 26 per-tool хе
     bash_guard: без флага → None/локально; =1 → docker run; =0 → локально).
     93/93 ×2, сервер перезапущен (docker на машине отсутствует — детект
     молча вернул False).
+41. **Этап 28 — AST-рефакторинг тулы** (2026-08-08, P2 #10): в tools/exec.py
+    три тула (зарегистрированы в _TOOL_DISPATCH + TOOL_SCHEMAS):
+    (1) `rename_symbol` — поиск узлов ast.Name/arg/def/class с ТОЧНЫМ именем,
+    замена по позициям с конца (байтовые смещения UTF-8), syntax-проверка
+    результата перед записью, backup + git_auto_commit;
+    (2) `extract_function` — вырезание строк line_start..line_end в новую
+    функцию (params/call_args задаёт модель явно), диапазон заменяется
+    вызовом, функция в конец файла;
+    (3) `inline_variable` — top-level `var = expr` на line_number: удаление
+    строки + замена ПОЗДНИХ вхождений var на текст выражения (ast.Name).
+    ВАЖНО (py3.14): col_offset у FunctionDef/ClassDef указывает на 'def'/
+    'class', а НЕ на имя → позиция имени ищется line.find() от col_offset;
+    end_col_offset у FunctionDef — конец ВСЕГО блока (не имени). Тест
+    test_ast_refactor_tools (rename с проверкой отсутствия 'foo' в файле,
+    ошибки для не-.py и отсутствующего символа; extract с синтаксисом;
+    inline двух использований). 94/94, CLI live: модель переименовала
+    total → sum_total (def sum_total, print(sum_total)) — файл корректен.
+    Сервер перезапущен.
 
 Из рекомендаций оценок 2-3 реализовано: few-shot, [DONE]-маркер, один тул за раз, статистика тулов,
 пост-обработка JSON, Docker-песочница, code detector, Cache-Control, динамический контекст,

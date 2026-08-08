@@ -743,3 +743,18 @@ UPDATE (2026-08-08) - stage 26 done (P1 #6 Docker), 93/93 x2:
 - Server restarted (health 200).
 All P1 (DS4) items done. Next: P2 - (7) task-level router, (8) plan tree UI,
 (9) ARCHITECTURE.md, (10) AST refactor tools, (11) VRAM indicator.
+
+UPDATE (2026-08-08) - stage 28 done (P2 #10 AST refactor tools), 94/94:
+- tools/exec.py: rename_symbol / extract_function / inline_variable,
+  registered in _TOOL_DISPATCH and TOOL_SCHEMAS.
+- rename_symbol: exact ast.Name/arg/def/class matches, byte-offset edits
+  applied from the end, ast.parse guard before write, backup + git_auto_commit.
+  NOTE py3.14: FunctionDef/ClassDef col_offset points at 'def'/'class' NOT
+  the name (line.find from col_offset); end_col_offset = end of whole block.
+- extract_function: explicit params/call_args from the model; dedents body by
+  base indent; function appended at EOF.
+- inline_variable: removes 'var = expr' line, replaces later ast.Name uses
+  with source segment of expr.
+- Live CLI: model renamed total->sum_total via rename_symbol (file correct).
+- Server restarted (health 200).
+Remaining P2: (7) task-level router, (8) plan tree UI, (11) VRAM indicator.
