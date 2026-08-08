@@ -1,6 +1,6 @@
 # My OpenCode v2 — Сводка для внешнего анализа (Kimi)
 
-Дата: 2026-08-08 · Тесты: **83/83 unit + мультимодельный live-набор (qwen2.5-coder:7b, qwen3:8b, deepseek-coder-v2:16b)** · Сервер: `python agent.py` → http://localhost:8765
+Дата: 2026-08-08 · Тесты: **86/86 unit + мультимодельный live-набор (qwen2.5-coder:7b, qwen3:8b, deepseek-coder-v2:16b)** · Сервер: `python agent.py` → http://localhost:8765
 Репозиторий: github.com/elips0675-web/Myopen-ode (master, работает локально, Windows, Python 3.14)
 
 ## Что это
@@ -26,6 +26,7 @@ Ollama/stream/native/fallback; `exec.py` — диспетчер 26 per-tool хе
 - DeepSeek: **8.5/10** (оценка 2, 2026-08-05; few-shot = −30-40% галлюцинаций на 7B; Docker №1, xterm.js №2)
 - DeepSeek: **8.6/10** (оценка 3, 2026-08-06; приоритеты: динамический контекст > интеграционные тесты > xterm.js > рефакторинг > few-shot на ошибке; +0.5 до 9.1 даст: интеграционные тесты + xterm.js + динамический контекст + восстановление сессии)
 - Kimi: **8.7/10** (оценка 3, 2026-08-06; «самый зрелый open-source агент на 7B»; до 9/10: рефакторинг монолитов, динамический контекст, few-shot при ошибках, USER_GUIDE.md; до 9.5/10: xterm.js+WS, живой интеграционный тест, RAG-сегментация, CLI-режим)
+- Внешний ревьювер: **8.8/10** (оценка 4, 2026-08-08; план до 9.5: P1 — AST-based edit guard, git-auto-branch, prompt KV-cache; P2 — task-level router, plan tree UI, Tauri [уже сделан этапом 20]; P3 — self-healing loop, multi-turn RAG)
 
 ## Сессия 2026-08-05 (коммиты 2480a59..c2aea27, все запушены)
 1. **Живой стриминг**: `stream_ollama()` отдаёт текст по мере генерации → UI печатает с ~2.6s
@@ -172,6 +173,68 @@ native tool calling, desktop (pywebview). «Таймаут после [CONFIRM]�
 ## Что осталось (P2)
 - закрыто: Tauri desktop ✓ (этап 20), JSON Schema constrained output ✓ (AI_JSON_FORMAT=1),
   UI-динамика ✓ (индикатор «думает», RAG-прогресс, audit-просмотр)
+
+## Оценка 4 — 8.8/10 (внешний ревьювер, 2026-08-08)
+
+«Проект — самый зрелый open-source локальный агент на 7B. От 8.8 до 9.5 — не количество фич,
+а полировка крайних случаев (fuzzy edit, git-native, prompt cache). Осталось ~3-4 спринта.»
+
+| Ось | Балл | До 9.5 |
+|---|---|---|
+| Архитектура | 9.0 | DI-контейнер, абстракции для RAG/DB |
+| Код/тесты | 9.5 | уже на уровне |
+| Безопасность | 8.5 | AST-анализ python/node инъекций, git-auto-branch |
+| AI/модели | 8.0 | prompt caching, task-level router, AST edit |
+| UX/UI | 8.0 | agentic plan tree, AST multi-file, Tauri ✓ |
+| Доки/процесс | 9.0 | уже на уровне |
+
+Сильные стороны (цитаты): рефакторинг монолитов (agent.py 883→470, tools.py→tools/, core/) —
+production-grade решения циклических импортов (deps-инъекция, ленивые импорты, sys.modules["agent"]);
+«больше инфраструктуры качества, чем у 90% open-source агентов»; 4 интерфейса (CLI/Web/Desktop/MCP)
+к одному ядру; ensure_safe_path + symlink-safe resolve; anti-loop + few-shot nudge; lenient JSON
+«must-have для 7B, реализован качественно»; Docker-дизайн правильный (opt-in, whitelist+контейнер,
+fallback; дефолтом для локального агента не делать); гибрид native vs legacy — «единственно
+рациональная стратегия»; AGENTS.md-дисциплина, bilingual README, context.txt — «уровень коммерческого продукта».
+
+Что снижает оценку (и наши ответы):
+- **agent.py ~470 стр. с глобалами** — нужен AgentApp-класс/DI. (В работе: спринт по абстракциям.)
+- **RAG/LLM-кеш без интерфейсов** — замена FAISS/SQLite потребует правки по дереву.
+- **Prompt перегружен** (правила 1-21 + EXAMPLES + VALID/INVALID + контекст + stats) — близко
+  к prompt engineering ceiling; рекомендация: структурный prompt (XML-теги) или constrained decoding
+  (Ollama format — AI_JSON_FORMAT=1 уже есть, экспериментальный).
+- **Нет семантической валидации аргументов** (read path — «looks like a directory» ДО выполнения).
+- **Нет fuzzy-маtcher для edit** («old text найден N раз, уточни»).
+- **Lenient JSON не ловит unquoted string values** (`{"tool": write, "path": test.py}`).
+- **python -c/node -e проверяются рекурсивно только по ключевым словам** — нужен ast.parse.
+- **Нет rate limiting на /api/chat** (если порт открыт в LAN — тривиальный DoS).
+- **Rollback вне git-репозитория** — сейчас .agent_backups/ + ручной undo; лучше auto-branch.
+- **TOOL_STATS** — «корреляция ≠ причинность», лучше мнемоника «You often make errors with: edit
+  (wrong old text), read (invented paths)» вместо сырых счётчиков.
+- **Нет prompt KV-cache** — правила 1-21 ~2K токенов каждый раз (system как первый message
+  кешируется KV-cache Ollama).
+- **Роутер только на уровне итераций** — нужен task-level (bugfix→qwen3, refactor→16b, chat→3b).
+- **Нет AST-aware multi-file edit** (rename function X в N файлах сам, без exact old/new).
+- **Нет agentic plan tree в UI** (чекбоксы pending/done/error, как Cursor Composer).
+- **pywebview ~300MB RAM** — Tauri ~50MB (уже сделан, этап 20).
+
+## План до 9.5/10 (по оценке 4) — статус
+### P1 (критично для production)
+- [ ] **AST-based edit guard** — перед apply: старый текст уникален или fuzzy-совпадает 90%+,
+      иначе warning «old text found N times» (уберёт ~50% «edit failed» в live)
+- [ ] **Git-auto-branch** — сессия = ветка, write/edit/patch = auto-commit, undo = git reset
+      (сейчас .agent_backups/ + ручной undo)
+- [ ] **Prompt KV-cache** — compressed system prompt после 3-й итерации (суммаризация правил)
+### P2 (отличие от «зрелого прототипа»)
+- [x] **Tauri desktop** — этап 20 (`dd45746`), WebView2 ~50MB против ~300MB pywebview
+- [ ] **Task-level model router** — классификатор задачи (zero-shot 1.5b) выбирает модель до цикла
+- [ ] **Plan tree UI** — визуальное дерево шагов (pending/done/error)
+### P3 (10/10)
+- [ ] **Self-healing loop** — 2 ошибки одним тулом → агент сам меняет стратегию (edit → read→write)
+- [ ] **Multi-turn RAG** — «RAG over plan»: сначала найти все затронутые файлы, потом редактировать
+
+Отметки по оценке: structural prompt (XML-теги) и constrained decoding — заморозка правил 1-21 +
+AI_JSON_FORMAT=1 уже частично покрывают; семантическая валидация путей — видит «директорию» на
+уровне ФС (аналогичные подсказки), unquoted values — кандидат в lenient-парсер.
 
 ## Известные пределы (поведение модели, не кода)
 - Полный цикл «исправь баг + прогони тесты» требует follow-up «yes» на [CONFIRM] (деструктивные операции — по дизайну)

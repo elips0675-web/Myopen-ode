@@ -9,10 +9,10 @@
 - [x] Спринт (2026-08-07): per-session tool-errors → advice в динамический контекст; модель-роутер (2+ пустые итерации → fallback на основную); RAG_STATUS + /api/rag/status + индикатор в UI; /api/audit + просмотр лога в UI; CLI python -m myopencode; crash recovery (checkpoint каждые 2 итерации + interrupted-маркер)
 
 ## Оценки внешних ревьюверов (2026-08)
-Kimi 2: 8.3/10 → DeepSeek 2: 8.5/10 → DeepSeek 3: 8.6/10 → Kimi 3: 8.7/10
+Kimi 2: 8.3/10 → DeepSeek 2: 8.5/10 → DeepSeek 3: 8.6/10 → Kimi 3: 8.7/10 → Внешний: 8.8/10
 Путь к 9/10: рефакторинг монолитов ✓, динамический контекст ✓, few-shot при ошибках ✓, USER_GUIDE.md ✓
 Путь к 9.5/10: xterm.js+WS ✓, интеграционные тесты ✓, RAG-сегментация по папкам ✓, CLI-режим ✓ (этапы 8–9)
-Следующая цель (10/10): native tool calling, Tauri-десктоп, GPU embeddings, deepseek-coder-v2:16b
+Следующая цель (10/10): native tool calling ✓, Tauri-десктоп ✓ (этап 20), GPU embeddings ✓ (не требуется), deepseek-coder-v2:16b ✓
 
 ## ДОДЕЛАТЬ — сводка по всем оценкам (приоритет по консенсусу ревьюверов)
 
@@ -143,6 +143,19 @@ Kimi 2: 8.3/10 → DeepSeek 2: 8.5/10 → DeepSeek 3: 8.6/10 → Kimi 3: 8.7/10
 - [x] Сборка cargo build 2m16s → target/debug/myopencode.exe; запуск окна подтверждён (3 WebView2-процесса, процесс жив); scripts/run_tauri.bat — сборка при первом запуске + инструкция установки тулчейна
 - [x] Pywebview сохранён как fallback (desktop.py не тронут); USER_GUIDE — таблица двух способов запуска
 - [x] 86/86, CLI live («21»), сервер перезапущен (/health 200); KIMI P2 закрыт (Tauri ✓)
+
+## План до 9.5/10 (оценка 8.8, 2026-08-08)
+### P1 (критично для production)
+- [ ] AST-based edit guard — уникальность/fuzzy-совпадение old text (warning «found N times»)
+- [ ] Git-auto-branch — сессия = ветка, write/edit/patch = auto-commit, undo = git reset
+- [ ] Prompt KV-cache — compressed system prompt после 3-й итерации
+### P2
+- [x] Tauri desktop ✓ (этап 20)
+- [ ] Task-level model router — классификатор задачи выбирает модель до цикла
+- [ ] Plan tree UI — дерево шагов pending/done/error
+### P3
+- [ ] Self-healing loop — 2 ошибки одним тулом → смена стратегии (edit → read→write)
+- [ ] Multi-turn RAG — «RAG over plan»: найти все затронутые файлы → редактировать
 
 ## Собственные идеи (низкий приоритет)
 - [x] Native tool calling — СДЕЛАНО (Этап 10)
