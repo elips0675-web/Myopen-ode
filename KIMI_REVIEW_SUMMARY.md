@@ -138,7 +138,7 @@ Ollama/stream/native/fallback; `exec.py` — диспетчер 26 per-tool хе
     files-вызов (required path/diff не обязательны при files) и валидирует
     каждый diff; legacy path+diff не тронут. 86/86, CLI live, сервер
     перезапущен.
-33. **Этап 19 — CodeMirror 6 вместо CodeMirror 5**: собран офлайн-бандл
+33. **Этап 19 (`b12689d`) — CodeMirror 6 вместо CodeMirror 5**: собран офлайн-бандл
     (esbuild, IIFE, 601KB) в `static/vendor/cm6.bundle.js` — codemirror@6 +
     lang-python/lang-javascript/lang-json/lang-html + theme-one-dark +
     autocomplete/lint API; 15 CM5-скриптов из ui.py заменены одним тегом,
