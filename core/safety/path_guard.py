@@ -13,8 +13,34 @@ def resolve(path, work_dir):
     return Path(work_dir) / path
 
 
+def extra_roots():
+    """Additional allowed roots OUTSIDE the workspace (EXTRA_ROOTS env,
+    ';' or '|' separated, e.g. EXTRA_ROOTS="E:\\test mycode;D:\\data").
+    The agent can then read/write files in those folders too — useful for
+    'create an app in folder X' requests without switching the project."""
+    raw = os.environ.get("EXTRA_ROOTS", "")
+    roots = []
+    for r in raw.replace("|", ";").split(";"):
+        r = r.strip().strip('"')
+        if r:
+            try:
+                roots.append(Path(r).resolve())
+            except Exception:
+                pass
+    return roots
+
+
+def allow_outside():
+    """ALLOW_OUTSIDE=1 lifts the workspace jail completely (dangerous:
+    the model may touch any path the OS user can). Local single-user use
+    only."""
+    return os.environ.get("ALLOW_OUTSIDE", "") == "1"
+
+
 def ensure_safe_path(path, work_dir):
-    """Resolve path and verify it stays within WORK_DIR to prevent directory traversal."""
+    """Resolve path and verify it stays within WORK_DIR to prevent directory
+    traversal. EXTRA_ROOTS adds allowed roots outside the workspace;
+    ALLOW_OUTSIDE=1 lifts the jail entirely."""
     if not path or not isinstance(path, str):
         return "Error: path must be a non-empty string"
     if path.startswith(("/path/to", "/tmp", "/var", "/usr", "/home",
@@ -24,11 +50,18 @@ def ensure_safe_path(path, work_dir):
                 f"Do NOT give tutorials — retry with a correct path.")
     p = resolve(path, work_dir).resolve()
     wk = Path(work_dir).resolve()
-    if wk not in p.parents and p != wk:
-        return (f"Error: path '{path}' is outside workspace '{work_dir}'. "
-                f"Use RELATIVE paths inside the workspace (use list/glob to see files). "
-                f"Do NOT give tutorials — retry with a correct path.")
-    return None
+    if wk in p.parents or p == wk:
+        return None
+    if allow_outside():
+        return None
+    for root in extra_roots():
+        if root in p.parents or p == root:
+            return None
+    hint = (" Set EXTRA_ROOTS='<folder>' (e.g. EXTRA_ROOTS='E:\\test mycode') to allow "
+            "working outside the workspace, or switch the project.") if path.startswith(("C:", "D:", "E:", "F:")) else ""
+    return (f"Error: path '{path}' is outside workspace '{work_dir}'. "
+            f"Use RELATIVE paths inside the workspace (use list/glob to see files)."
+            f"{hint} Do NOT give tutorials — retry with a correct path.")
 
 
 def similar_files(path, work_dir, limit=5):

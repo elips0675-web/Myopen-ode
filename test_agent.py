@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Smoke tests for agent tool loop."""
-import json, sys, os, tempfile, time
+import json, sys, os, tempfile, time, shutil
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from tools import execute_tool, backup, undo, verify_file, resolve, init_config, init_backup, validate_tool
@@ -2188,6 +2188,33 @@ def test_rate_limit():
         ag._RATE_HITS, ag._RATE_INFLIGHT = orig_hits, orig_inf
     print("  [OK] rate limit: window block, burst cap, disable, per-IP isolation")
 
+def test_extra_roots():
+    """Stage 38: EXTRA_ROOTS allows working OUTSIDE the workspace (e.g.
+    'create an app in E:\\test mycode'); ALLOW_OUTSIDE=1 lifts the jail."""
+    import core.safety.path_guard as pg
+    out = tempfile.mkdtemp(prefix="mycode_extra_")
+    oe = os.environ.get("EXTRA_ROOTS")
+    oa = os.environ.get("ALLOW_OUTSIDE")
+    try:
+        os.environ.pop("EXTRA_ROOTS", None); os.environ.pop("ALLOW_OUTSIDE", None)
+        assert "outside workspace" in pg.ensure_safe_path(os.path.join(out, "a.txt"), str(WORK_DIR))
+        os.environ["EXTRA_ROOTS"] = out
+        assert pg.ensure_safe_path(os.path.join(out, "a.txt"), str(WORK_DIR)) is None
+        r = execute_tool("write", {"path": os.path.join(out, "a.txt"), "content": "hi"})
+        assert "Written" in r and Path(out, "a.txt").read_text() == "hi", r
+        os.environ.pop("EXTRA_ROOTS", None)
+        assert "outside workspace" in pg.ensure_safe_path(os.path.join(out, "b.txt"), str(WORK_DIR))
+        os.environ["ALLOW_OUTSIDE"] = "1"
+        assert pg.ensure_safe_path(os.path.join(out, "b.txt"), str(WORK_DIR)) is None
+        assert pg.ensure_safe_path("/etc/passwd", str(WORK_DIR)) is not None  # invented block stays
+    finally:
+        if oe is None: os.environ.pop("EXTRA_ROOTS", None)
+        else: os.environ["EXTRA_ROOTS"] = oe
+        if oa is None: os.environ.pop("ALLOW_OUTSIDE", None)
+        else: os.environ["ALLOW_OUTSIDE"] = oa
+        shutil.rmtree(out, ignore_errors=True)
+    print("  [OK] EXTRA_ROOTS / ALLOW_OUTSIDE: outside-workspace writes")
+
 def test_cross_platform():
     """Cross-platform safety: no hard-coded Windows paths, CREATE_NO_WINDOW
     guarded, core modules importable on any OS (also runs in CI matrix)."""
@@ -2215,7 +2242,7 @@ if __name__ == "__main__":
     if _native_supported(_agent_main.MODEL):
         _agent_main.MODEL = "qwen2.5-coder:7b"
         print("  [test] default MODEL is native-capable -> forced to qwen2.5-coder:7b (legacy path)")
-    tests = [test_cross_platform, test_plan_tree_events, test_self_healing_advice, test_rag_over_plan, test_task_router, test_vram_indicator, test_ast_refactor_tools, test_auto_pick_model, test_docker_sandbox_flag, test_git_auto_commit, test_compact_prompt_after_iterations, test_rate_limit, test_path_dir_hint, test_unquoted_json_values,
+    tests = [test_cross_platform, test_plan_tree_events, test_self_healing_advice, test_rag_over_plan, test_extra_roots, test_task_router, test_vram_indicator, test_ast_refactor_tools, test_auto_pick_model, test_docker_sandbox_flag, test_git_auto_commit, test_compact_prompt_after_iterations, test_rate_limit, test_path_dir_hint, test_unquoted_json_values,
              test_auto_confirm_safe, test_read, test_read_absolute, test_read_url, test_list, test_glob,
              test_write_and_undo, test_edit, test_edit_guard_ambiguous, test_edit_guard_fuzzy_hint,
              test_syntax_guard_write, test_patch_multi_file, test_bash, test_verify_py, test_verify_json,

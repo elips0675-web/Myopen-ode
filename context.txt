@@ -873,3 +873,17 @@ UPDATE (2026-08-08) - non-eval important items done (stages 35-37), 1f8413f, 102
 - TODO.md: new section 'Вне оценок (закрыто 35-37)' + 'Осталось (10/10)':
   DI container, RAG/DB abstractions, Whisper server, external 9.5 re-eval.
 - KIMI_REVIEW_SUMMARY.md/README updated. Awaiting re-evaluation claim 9.5.
+
+UPDATE (2026-08-08) - Stage 38: EXTRA_ROOTS / ALLOW_OUTSIDE (outside-workspace support):
+- Reason: user asked the :8765 agent to 'create a dating app in E:\test mycode';
+  path-jail blocked it (folder outside workspace). Now:
+- EXTRA_ROOTS='folder1;folder2' (env, also '|' separated, quotes stripped) -
+  additional allowed roots; agent can read/write there without switching project.
+- ALLOW_OUTSIDE=1 lifts the jail entirely (dangerous, local single-user only).
+- Invented-path block (/path/to, /tmp, C:\Windows...) stays active regardless.
+- ensure_safe_path error for absolute Windows paths now hints how to enable.
+- backup()/git_auto_commit() already safe for external files (tested).
+- Tests +1 (test_extra_roots) -> 103/103. LIVE: server restarted WITH
+  EXTRA_ROOTS='E:\test mycode'; via /api/chat the agent created
+  E:\test mycode\probe_live.txt (write confirmed 'yes') - works.
+- Server currently running with EXTRA_ROOTS set (restart needed after reboot).
