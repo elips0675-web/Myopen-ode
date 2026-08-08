@@ -286,13 +286,21 @@ function send(){
   am('u',fm(txt));ms.push({role:'user',content:txt});
   var m=$('chm').value||'deepseek-r1:7b';sd=1;$('snd').disabled=1;$('cnl').style.display='inline-block';ac=new AbortController();
     var fl='',be=am('a','<span class="sp"></span>');$('st2').textContent='thinking...';
-    var tl=null,tlCount=0;
+    var tl=null,tlCount=0,planEl=null;
     function toolLine(name,args,result){
       if(!tl){tl=document.createElement('div');tl.className='tline';be.parentNode.appendChild(tl)}
       var short=(args&&(args.path||args.cmd||args.pattern||args.query))?' '+(args.path||args.cmd||args.pattern||args.query).toString().slice(0,60):'';
       tl.innerHTML='<span class="tldone">&#10003;</span> <b>'+esc(name)+'</b>'+esc(short);
       if(result&&result.toString().toLowerCase().includes('error'))tl.className='tline terr';
       tlCount++;
+    }
+    function planTree(steps){
+      if(!planEl){planEl=document.createElement('div');planEl.className='plantree';be.parentNode.appendChild(planEl)}
+      planEl.innerHTML='<b style="font-size:11px">Plan</b>'+steps.map(function(s){
+        var ic=s.status=='done'?'&#10003;':(s.status=='error'?'&#10007;':'&#9675;');
+        var cl=s.status=='done'?'pldone':(s.status=='error'?'plerr':'plpend');
+        return '<div class="plstep '+cl+'"><span class="plicon">'+ic+'</span> '+esc(s.text)+'</div>';
+      }).join('');
     }
     function diffHtml(diff){
       var out='',rows=diff.split('\n');
@@ -323,6 +331,7 @@ function send(){
           if(d.tool.type=='status')$('st2').textContent=d.tool.msg;
           else if(d.tool.type=='tool')toolLine(d.tool.name,d.tool.args,d.tool.result);
           else if(d.tool.type=='diff')diffLine(d.tool.path,d.tool.diff);
+          else if(d.tool.type=='plan')planTree(d.tool.steps||[]);
         }
       }catch(e){}}});
       be.innerHTML=fm(fl)||'<span class="sp"></span>';rd2()

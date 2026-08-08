@@ -5,6 +5,27 @@ import json
 import re
 
 from tools import execute_tool, validate_tool
+from tools import _state as _s
+
+
+def _plan_mark(ctx, result):
+    """Stage 31: plan tree UI — after each executed tool, mark the first
+    pending plan step as done (or error when the tool failed) and emit an
+    updated {type:'plan'} event so the UI can re-render the tree."""
+    try:
+        with _s.PLAN_LOCK:
+            if not _s.PLAN_STEPS:
+                return
+            failed = isinstance(result, str) and result.startswith("Error")
+            for st in _s.PLAN_STEPS:
+                if st["status"] == "pending":
+                    st["status"] = "error" if failed else "done"
+                    break
+            else:
+                return
+            ctx["emit"]({"type": "plan", "steps": list(_s.PLAN_STEPS)})
+    except Exception:
+        pass
 
 
 def _sess_record(stats, name, result):
@@ -127,6 +148,9 @@ def execute_tool_block(idx, tc, ctx):
             calls.append(name)
             return entries, calls, False
         plan_text = "\n".join(f"  {i+1}. {s}" for i, s in enumerate(steps))
+        with _s.PLAN_LOCK:
+            _s.PLAN_STEPS = [{"text": s, "status": "pending"} for s in steps]
+            ctx["emit"]({"type": "plan", "steps": list(_s.PLAN_STEPS)})
         full[0] += f"\n[PLAN]\n{plan_text}\n\nReply 'yes' to execute plan.\n"
         msgs.append({"role": "assistant", "content": content})
         msgs.append({"role": "user", "content": f"Plan proposed:\n{plan_text}\nReply 'yes' to execute."})
@@ -142,6 +166,7 @@ def execute_tool_block(idx, tc, ctx):
             entries.append(f"[tool:{name}] {r[:2000]}")
             calls.append(name)
             state["last_result_name"], state["last_result_text"] = name, r[:2000]
+            _plan_mark(ctx, r)
         elif last in ("yes", "y", "go a", "да", "ok", "cont", "proc", "do i"):
             r = execute_tool(name, tc)
             _sess_record(ctx["sess_stats"], name, r)
@@ -149,6 +174,7 @@ def execute_tool_block(idx, tc, ctx):
             entries.append(f"[tool:{name}] {r[:2000]}")
             calls.append(name)
             state["last_result_name"], state["last_result_text"] = name, r[:2000]
+            _plan_mark(ctx, r)
         else:
             ask = f"Allow {name}?\nArgs: {json.dumps(tc, ensure_ascii=False)[:300]}"
             full[0] += f"\n[CONFIRM] {ask}\nReply 'yes' to proceed.\n"
@@ -166,4 +192,5 @@ def execute_tool_block(idx, tc, ctx):
     entries.append(f"[tool:{name}] {r[:2000]}")
     calls.append(name)
     state["last_result_name"], state["last_result_text"] = name, r[:2000]
+    _plan_mark(ctx, r)
     return entries, calls, False

@@ -2040,6 +2040,53 @@ def test_task_router():
             _os.environ["AI_MODEL"] = old_env
     print("  [OK] task-level router: classify->model, AI_MODEL/short/missing win")
 
+def test_plan_tree_events():
+    """Stage 31: plan emits {type:plan} events; executed tools mark the first
+    pending step done/error and re-emit; a new plan resets the tree."""
+    from core.tool_executor import execute_tool_block
+    from tools import _state as st
+    st.PLAN_STEPS = []
+    emitted = []
+
+    def mkctx(results):
+        return {
+            "msgs": [{"role": "user", "content": "go"}],
+            "content": "x", "full": [""],
+            "emit": lambda ev: emitted.append(ev),
+            "no_confirm": True, "session_id": None,
+            "sess_stats": {}, "pending_set": lambda *a: None,
+            "state": {"last_result_name": None, "last_result_text": "",
+                      "last_call_key": None, "repeats": 0},
+        }
+
+    def fake_exec(name, tc):
+        return results.pop(0)
+    import core.tool_executor as te
+    orig = te.execute_tool
+    try:
+        te.execute_tool = fake_exec
+        results = ["plan ok"]
+        ctx = mkctx(results)
+        e, c, brk = execute_tool_block(0, {"tool": "plan", "steps": ["read a", "write b"]}, ctx)
+        assert brk is True, "plan stops the loop"
+        assert len(st.PLAN_STEPS) == 2 and all(s["status"] == "pending" for s in st.PLAN_STEPS)
+        assert emitted[-1]["type"] == "plan" and len(emitted[-1]["steps"]) == 2
+
+        results = ["done ok"]
+        e, c, brk = execute_tool_block(0, {"tool": "read", "path": "a"}, mkctx(results))
+        assert st.PLAN_STEPS[0]["status"] == "done", st.PLAN_STEPS
+        assert st.PLAN_STEPS[1]["status"] == "pending"
+        assert emitted[-1]["type"] == "plan" and emitted[-1]["steps"][0]["status"] == "done"
+
+        results = ["Error: boom"]
+        e, c, brk = execute_tool_block(0, {"tool": "write", "path": "b", "content": "x"}, mkctx(results))
+        assert st.PLAN_STEPS[1]["status"] == "error", st.PLAN_STEPS
+        assert emitted[-1]["steps"][1]["status"] == "error"
+    finally:
+        te.execute_tool = orig
+        st.PLAN_STEPS = []
+    print("  [OK] plan tree: plan event, done/error marking, re-emit")
+
 def test_cross_platform():
     """Cross-platform safety: no hard-coded Windows paths, CREATE_NO_WINDOW
     guarded, core modules importable on any OS (also runs in CI matrix)."""
@@ -2067,7 +2114,7 @@ if __name__ == "__main__":
     if _native_supported(_agent_main.MODEL):
         _agent_main.MODEL = "qwen2.5-coder:7b"
         print("  [test] default MODEL is native-capable -> forced to qwen2.5-coder:7b (legacy path)")
-    tests = [test_cross_platform, test_task_router, test_vram_indicator, test_ast_refactor_tools, test_auto_pick_model, test_docker_sandbox_flag, test_git_auto_commit, test_compact_prompt_after_iterations,
+    tests = [test_cross_platform, test_plan_tree_events, test_task_router, test_vram_indicator, test_ast_refactor_tools, test_auto_pick_model, test_docker_sandbox_flag, test_git_auto_commit, test_compact_prompt_after_iterations,
              test_auto_confirm_safe, test_read, test_read_absolute, test_read_url, test_list, test_glob,
              test_write_and_undo, test_edit, test_edit_guard_ambiguous, test_edit_guard_fuzzy_hint,
              test_syntax_guard_write, test_patch_multi_file, test_bash, test_verify_py, test_verify_json,

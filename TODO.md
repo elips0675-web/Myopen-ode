@@ -155,7 +155,7 @@ Kimi 2: 8.3/10 → DeepSeek 2: 8.5/10 → DeepSeek 3: 8.6/10 → Kimi 3: 8.7/10 
 ### P2
 - [x] Tauri desktop ✓ (этап 20)
 - [x] Task-level model router — классификатор задачи (zero-shot 1.5b) выбирает модель до цикла — Этап 30 (pick_task_model; AI_MODEL/юзер-выбор побеждают; короткие — дефолт)
-- [ ] Plan tree UI — дерево шагов pending/done/error
+- [x] Plan tree UI — дерево шагов pending/done/error — Этап 31 (PLAN_STEPS + {type:plan} события, _plan_mark после тулов, JS-дерево ✓/✗/○)
 - [ ] ARCHITECTURE.md с Mermaid-диаграммой + примеры тулов (DS4)
 - [x] AST-рефакторинг тулы: rename_symbol / extract_function / inline_variable (DS4) — Этап 28 (ast-узлы, syntax-guard, backup+git; live rename total→sum_total)
 - [x] VRAM-индикатор и автовыбор модели при старте (DS4) — Этап 29 (/api/vram + бейдж в UI, 15с; автовыбор — Этап 25)

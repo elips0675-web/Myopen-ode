@@ -138,6 +138,12 @@ PLUGINS = {}
 # ─── in-memory todo store ─────────────────────────────────
 TODO_LIST = []
 
+# ─── plan tree (stage 31) ─────────────────────────────────
+# steps: [{"text": str, "status": "pending"|"done"|"error"}] — mirrored to
+# the UI via {type:"plan"} events; reset on every new plan call.
+PLAN_STEPS = []
+PLAN_LOCK = threading.Lock()
+
 # ─── audit / stats ────────────────────────────────────────
 AUDIT_LOG = None
 TOOL_STATS = {}  # name -> {"calls": int, "errors": int}

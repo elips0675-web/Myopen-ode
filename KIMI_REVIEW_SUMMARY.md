@@ -279,6 +279,18 @@ Ollama/stream/native/fallback; `exec.py` — диспетчер 26 per-tool хе
     Баг в тесте: qwen2.5-coder:3b НЕ установлена на машине — ветка chat
     тестируется с подменой списка установленных. 96/96 ×2, CLI live «10»,
     сервер перезапущен. Остался P2: plan tree UI.
+44. **Этап 31 — Plan tree UI** (2026-08-08, P2 #8, ПОСЛЕДНИЙ пункт оценок):
+    tools/_state.py PLAN_STEPS/PLAN_LOCK; core/tool_executor.py: план-ветка
+    сохраняет шаги pending и эмитит {type:"plan", steps}; `_plan_mark(ctx,r)`
+    после КАЖДОГО выполненного тула отмечает первый pending как done (или
+    error при «Error...») и переэмитит (3 ветки: auto_confirm_safe, yes,
+    generic). static/app.js `planTree(steps)` — дерево ✓/✗/○ (pldone/plerr/
+    plpend), блок под ответом; ui.py стили .plantree. Тест
+    test_plan_tree_events (мок execute_tool: plan → 2 pending + событие;
+    read → первый done; write с Error → error; сброс после плана; ctx.state
+    требует last_result_name/last_call_key). 97/97 ×2. Live CLI: план с
+    [PLAN] 2 шага + «Reply 'yes'» (стохастика шагов модели — механизм
+    работает). Сервер перезапущен. **ВСЕ пункты оценок 2–4 закрыты.**
 
 Из рекомендаций оценок 2-3 реализовано: few-shot, [DONE]-маркер, один тул за раз, статистика тулов,
 пост-обработка JSON, Docker-песочница, code detector, Cache-Control, динамический контекст,

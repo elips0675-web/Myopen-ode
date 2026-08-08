@@ -781,3 +781,20 @@ UPDATE (2026-08-08) - stage 30 done (P2 #7 task-level router), 96/96 x2:
   machine - chat branch tested with mocked installed list).
 - Live: CLI answered '10'. Server restarted (health 200).
 Remaining P2: (8) plan tree UI.
+
+UPDATE (2026-08-08) - stage 31 done (P2 #8 plan tree UI, LAST evaluation item), 97/97 x2:
+- tools/_state.py: PLAN_STEPS + PLAN_LOCK.
+- core/tool_executor.py: plan branch persists steps as pending + emits
+  {type:'plan', steps}; _plan_mark(ctx, result) called after every executed
+  tool (auto-confirm/yes/generic paths) marks first pending done/error and
+  re-emits. ctx.state needs last_result_name/last_call_key (test got it).
+- static/app.js planTree(steps): tree with check/cross/circle, styles in
+  ui.py (.plantree/.plstep/.pldone/.plerr/.plpend).
+- Test test_plan_tree_events: plan -> 2 pending + event; tool -> first done;
+  Error tool -> error; new plan resets.
+- Live CLI: model produced [PLAN] with 2 steps + 'Reply yes' (plan tool
+  works; step wording stochastic).
+- Server restarted (health 200).
+ALL evaluation items (Kimi 8.3 / DS 8.5 / DS 8.6 / Kimi 8.7 / external 8.8 /
+DS4 8.9) are implemented. Next options: new external review, 9.5 push (P3:
+self-healing loop, multi-turn RAG, voice input), or polish.

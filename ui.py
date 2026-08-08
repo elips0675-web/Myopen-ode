@@ -122,6 +122,13 @@ body[data-theme="dark"]{--bg:#0f1117;--fg:#e2e8f0;--sidebar:#161b22;--sidebar-bo
 .tline{font-family:Consolas,monospace;font-size:11px;color:var(--st-c);background:var(--code-bg);border:1px solid var(--sidebar-border);border-radius:4px;padding:3px 8px;margin:3px 0;word-break:break-all}
 .tline .tldone{color:#4ade80}
 .tline.terr{color:#f87171;border-color:rgba(248,113,113,.4)}
+.plantree{font-size:11px;color:var(--st-c);background:var(--code-bg);border:1px solid var(--sidebar-border);border-radius:4px;padding:6px 8px;margin:3px 0}
+.plantree b{font-size:11px;display:block;margin-bottom:3px}
+.plstep{padding:1px 0;word-break:break-all}
+.plicon{font-family:Consolas,monospace;margin-right:4px}
+.pldone{color:#4ade80}
+.plerr{color:#f87171}
+.plpend{color:var(--st-c)}
 </style></head><body>
 <div id="sidebar">
   <div class="logo"><svg viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>OpenCode <span>v2</span></div>
