@@ -56,6 +56,54 @@ def _empty_or_trivial(steps):
     return steps
 
 
+def _rag_over_plan(steps):
+    """Stage 33: multi-turn RAG ('RAG over plan'). Once the model proposes a
+    plan, pre-load the files it is about to touch: RAG-search each step for
+    file names, then read the top files so the execution turns start with
+    real content instead of the model guessing paths/text. AI_RAG_OVER_PLAN=0
+    disables. Returns a system-prompt block or None (best-effort, never raises)."""
+    import os as _os
+    if _os.environ.get("AI_RAG_OVER_PLAN") == "0":
+        return None
+    try:
+        from rag import rag_search
+        hits, paths = [], []
+        for step in list(steps)[:4]:
+            res = rag_search(str(step), top_k=3, hybrid=True)
+            if not isinstance(res, str) or res.startswith(("RAG not", "No embed", "RAG scoped", "RAG search error")):
+                continue
+            for line in res.splitlines():
+                m = re.match(r"^\[\d+\.\d+\]\s+(.+?):\d+", line.strip())
+                if m:
+                    p = m.group(1).strip()
+                    if p and p not in paths:
+                        paths.append(p)
+            if len(paths) >= 6:
+                break
+        if not paths:
+            return None
+        block = ["[Plan context — files this plan is likely to touch (RAG over plan). "
+                 "Use their EXACT current content for edit/old-text.]"]
+        total = 0
+        for p in paths[:6]:
+            fp = _s.WORK_DIR / p
+            try:
+                if not fp.is_file():
+                    continue
+                text = fp.read_text("utf-8", errors="ignore")[:2000]
+            except Exception:
+                continue
+            total += len(text)
+            if total > 10000:
+                break
+            block.append(f"### {p}\n{text}")
+        if len(block) == 1:
+            return None
+        return "\n\n".join(block)[:12000]
+    except Exception:
+        return None
+
+
 def execute_tool_block(idx, tc, ctx):
     """Execute ONE parsed tool block.
 
@@ -154,6 +202,14 @@ def execute_tool_block(idx, tc, ctx):
         full[0] += f"\n[PLAN]\n{plan_text}\n\nReply 'yes' to execute plan.\n"
         msgs.append({"role": "assistant", "content": content})
         msgs.append({"role": "user", "content": f"Plan proposed:\n{plan_text}\nReply 'yes' to execute."})
+        rag_ctx = _rag_over_plan(steps)
+        if rag_ctx:
+            msgs.append({"role": "system", "content": rag_ctx})
+            try:
+                ctx["emit"]({"type": "status",
+                             "msg": f"RAG over plan: pre-loaded context for {rag_ctx.count('###')} file(s)"})
+            except Exception:
+                pass
         return entries, calls, True
 
     if name in DESTRUCTIVE:

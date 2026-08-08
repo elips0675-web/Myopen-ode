@@ -2063,8 +2063,10 @@ def test_plan_tree_events():
         return results.pop(0)
     import core.tool_executor as te
     orig = te.execute_tool
+    orig_rop = te._rag_over_plan
     try:
         te.execute_tool = fake_exec
+        te._rag_over_plan = lambda steps: None  # avoid real RAG cold start
         results = ["plan ok"]
         ctx = mkctx(results)
         e, c, brk = execute_tool_block(0, {"tool": "plan", "steps": ["read a", "write b"]}, ctx)
@@ -2084,8 +2086,52 @@ def test_plan_tree_events():
         assert emitted[-1]["steps"][1]["status"] == "error"
     finally:
         te.execute_tool = orig
+        te._rag_over_plan = orig_rop
         st.PLAN_STEPS = []
     print("  [OK] plan tree: plan event, done/error marking, re-emit")
+
+def test_self_healing_advice():
+    """Stage 32: after 2+ consecutive errors of the same tool the dynamic
+    context tells the model to SWITCH STRATEGY (edit -> read -> write)."""
+    from core.agent_loop import _dynamic_context
+    base = dict(tool_stats={})
+    assert "SWITCH STRATEGY" not in _dynamic_context("edit", "Error: boom", 1, heal_count=1, **base)
+    assert "SWITCH STRATEGY" not in _dynamic_context("edit", "Error: boom", 1, **base)
+    out = _dynamic_context("edit", "Error: boom", 1, heal_tool="edit", heal_count=2, **base)
+    assert "SWITCH STRATEGY" in out and "edit" in out
+    ok = _dynamic_context("read", "ok", 1, heal_tool="edit", heal_count=0, **base)
+    assert "SWITCH STRATEGY" not in ok
+    print("  [OK] self-healing: switch-strategy advice after 2 tool errors")
+
+def test_rag_over_plan():
+    """Stage 33: plan steps -> RAG search -> pre-loaded file content block."""
+    import core.tool_executor as te
+    import rag as rag_mod
+    from tools import _state as st
+    fdir = TMP / "rag_plan" / "src"
+    fdir.mkdir(parents=True, exist_ok=True)
+    f = fdir / "mod.py"
+    f.write_text("def greet():\n    return 42\n", encoding="utf-8")
+    orig_dir = st.WORK_DIR
+    orig_search = rag_mod.rag_search
+    orig_env = os.environ.get("AI_RAG_OVER_PLAN")
+    try:
+        st.WORK_DIR = TMP / "rag_plan"
+        rel = f.relative_to(st.WORK_DIR).as_posix()
+        rag_mod.rag_search = lambda q, top_k=5, hybrid=True: (
+            f"[0.9] {rel}:1\nsome code" if "mod" in q else f"[0.5] other.py:1\nx")
+        block = te._rag_over_plan(["refactor mod.py greet"])
+        assert block and "###" in block and rel.replace("\\", "/") in block, block
+        os.environ["AI_RAG_OVER_PLAN"] = "0"
+        assert te._rag_over_plan(["refactor mod.py greet"]) is None
+    finally:
+        st.WORK_DIR = orig_dir
+        rag_mod.rag_search = orig_search
+        if orig_env is None:
+            os.environ.pop("AI_RAG_OVER_PLAN", None)
+        else:
+            os.environ["AI_RAG_OVER_PLAN"] = orig_env
+    print("  [OK] RAG over plan: plan steps -> pre-loaded file context")
 
 def test_cross_platform():
     """Cross-platform safety: no hard-coded Windows paths, CREATE_NO_WINDOW
@@ -2114,7 +2160,7 @@ if __name__ == "__main__":
     if _native_supported(_agent_main.MODEL):
         _agent_main.MODEL = "qwen2.5-coder:7b"
         print("  [test] default MODEL is native-capable -> forced to qwen2.5-coder:7b (legacy path)")
-    tests = [test_cross_platform, test_plan_tree_events, test_task_router, test_vram_indicator, test_ast_refactor_tools, test_auto_pick_model, test_docker_sandbox_flag, test_git_auto_commit, test_compact_prompt_after_iterations,
+    tests = [test_cross_platform, test_plan_tree_events, test_self_healing_advice, test_rag_over_plan, test_task_router, test_vram_indicator, test_ast_refactor_tools, test_auto_pick_model, test_docker_sandbox_flag, test_git_auto_commit, test_compact_prompt_after_iterations,
              test_auto_confirm_safe, test_read, test_read_absolute, test_read_url, test_list, test_glob,
              test_write_and_undo, test_edit, test_edit_guard_ambiguous, test_edit_guard_fuzzy_hint,
              test_syntax_guard_write, test_patch_multi_file, test_bash, test_verify_py, test_verify_json,

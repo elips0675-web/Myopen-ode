@@ -172,6 +172,7 @@ body[data-theme="dark"]{--bg:#0f1117;--fg:#e2e8f0;--sidebar:#161b22;--sidebar-bo
       <textarea id="ta" rows="1" placeholder="Ask something... /test /review /fix /doc /deploy"></textarea>
       <div id="hint-box"></div>
       <div style="display:flex;flex-direction:column;gap:4px;align-self:flex-end">
+        <button id="mic" title="Voice input (STT)" style="background:none;border:1px solid var(--inp-border);border-radius:var(--radius);padding:4px 10px;cursor:pointer;font-size:14px">🎤</button>
         <button id="snd" onclick="send()" style="height:auto;padding:4px 14px">Send</button>
         <button id="cnl" onclick="cancel()" style="display:none;height:auto;padding:4px 14px">Cancel</button>
       </div>

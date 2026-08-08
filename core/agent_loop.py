@@ -26,7 +26,7 @@ VALID_TOOLS = ("read", "write", "edit", "bash", "glob", "grep", "list", "web",
 
 
 def _dynamic_context(tool_name, tool_text, it, sess_stats=None, project="workspace",
-                     tool_stats=None):
+                     tool_stats=None, heal_tool=None, heal_count=0):
     """Short orientation block for the model: which project, what was the
     last tool action and whether it succeeded, plus per-session tool errors.
     7B models lose track of context after 3-4 iterations — this anchors them.
@@ -36,6 +36,14 @@ def _dynamic_context(tool_name, tool_text, it, sess_stats=None, project="workspa
     if tool_name:
         status = "error" if tool_text.startswith(("Error:", "Blocked:")) else "ok"
         parts.append(f"Last action: {tool_name} (result: {status})")
+    if heal_tool and heal_count >= 2:
+        # Stage 32: self-healing loop — the same tool failed twice in a row,
+        # the model must SWITCH STRATEGY instead of retrying the same call.
+        parts.append(
+            f"Tool {heal_tool} failed {heal_count} times in a row — SWITCH STRATEGY NOW. "
+            f"Do NOT retry {heal_tool} with the same or guessed arguments. "
+            "Locate the real file first (glob/grep/list), read it, then edit with the "
+            "EXACT text from the read output — or rewrite the whole file with `write`.")
     if sess_stats:
         errs = {n: s for n, s in sess_stats.items() if s.get("errors", 0) > 0}
         if errs:
@@ -133,6 +141,8 @@ def run_agent_loop(msgs, session_id, events=None, model=None, deps=None):
     active_model = None
     user_model = model
     compacted = False
+    err_tool = None
+    err_streak = 0
 
     for it in range(max_iter):
         if time.time() - start_time > max_time:
@@ -200,7 +210,8 @@ def run_agent_loop(msgs, session_id, events=None, model=None, deps=None):
             active_model = current_model
         project = deps.WORK_DIR.name or str(deps.WORK_DIR)
         dyn = {"role": "system",
-               "content": _dynamic_context(last_result_name, last_result_text, it, sess_stats, project)}
+               "content": _dynamic_context(last_result_name, last_result_text, it, sess_stats,
+                                           project, heal_tool=err_tool, heal_count=err_streak)}
         native_on = False
         native_calls = []
         try:
@@ -357,6 +368,14 @@ def run_agent_loop(msgs, session_id, events=None, model=None, deps=None):
         full += ctx["full"][0]
         last_call_key, repeats = ctx["state"]["last_call_key"], ctx["state"]["repeats"]
         last_result_name, last_result_text = ctx["state"]["last_result_name"], ctx["state"]["last_result_text"]
+
+        # Stage 32: self-healing — track consecutive errors of the same tool;
+        # after 2 in a row the dynamic context tells the model to switch strategy.
+        if last_result_text.startswith(("Error:", "Blocked:")):
+            err_streak = (err_streak + 1) if last_result_name == err_tool else 1
+            err_tool = last_result_name
+        else:
+            err_streak, err_tool = 0, None
 
         if needs_break:
             break

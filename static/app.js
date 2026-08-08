@@ -472,6 +472,30 @@ $('ta').addEventListener('keydown',function(e){
 });
 $('ta').addEventListener('input',ah);init();
 
+// ─── Voice input (Stage 34): Web Speech API (STT) ─────────
+var micBtn=$('mic');
+if(micBtn&&!(window.SpeechRecognition||window.webkitSpeechRecognition)){micBtn.style.display='none'}
+if(micBtn&&(window.SpeechRecognition||window.webkitSpeechRecognition)){
+  var rec=null,recOn=false;
+  function toggleMic(){
+    if(recOn){try{rec.stop()}catch(e){recOn=false};return}
+    if(!rec){
+      var SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+      rec=new SR();rec.lang='ru-RU';rec.interimResults=true;rec.continuous=true;
+      rec.onresult=function(e){
+        var t='';for(var i=0;i<e.results.length;i++)t+=e.results[i][0].transcript;
+        var ta=$('ta');ta.value=t;ah();
+      };
+      var reset=function(){recOn=false;micBtn.style.background='';micBtn.style.color='';};
+      rec.onend=reset;rec.onerror=reset;
+    }
+    recOn=true;micBtn.style.background='var(--cnl-btn)';micBtn.style.color='#fff';
+    try{rec.start()}catch(e){recOn=false}
+  }
+  micBtn.addEventListener('click',toggleMic);
+  micBtn.title='Voice input (STT) — click to record';
+}
+
 // ─── Terminal (xterm.js + WebSocket) ───────────────────────
 var term=null,termWs=null,termBuf='',termHist=[],termHIdx=0;
 function toggleTerm(){
