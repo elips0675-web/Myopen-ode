@@ -128,7 +128,7 @@ Ollama/stream/native/fallback; `exec.py` — диспетчер 26 per-tool хе
     (use glob or list). Статистика резолвится лениво через `import tools` — CLI/тесты
     ничего не передают; параметр tool_stats= позволяет чистый unit-тест без сети.
     Per-session блок («Tool errors this session») сохранён. 84/84, CLI live.
-32. **Этап 18 — AST syntax guard + multi-file patch**: после write/edit/patch —
+32. **Этап 18 (`440dfdf`) — AST syntax guard + multi-file patch**: после write/edit/patch —
     `_syntax_check()` (только stdlib: ast для .py с номером строки ошибки,
     json.loads для .json, node --check для .js/.ts если node установлен; прочие
     файлы пропускаются) — модель сразу видит «Syntax: OK/ERROR» и может
