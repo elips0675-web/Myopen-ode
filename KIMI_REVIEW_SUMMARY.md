@@ -440,6 +440,11 @@ AI_RAG_OVER_PLAN=0), voice input (🎤 в UI, Web Speech API STT ru-RU interim).
 read/write/edit/patch до мутаций), unquoted string values в lenient JSON
 (включая пути с точкой). Тесты 102/102 ×2. Осталось до 10/10: DI-контейнер,
 абстракции RAG/DB, Whisper-сервер, внешняя переоценка 9.5/10.]
+[Этап 38 (6afcfb9): EXTRA_ROOTS/ALLOW_OUTSIDE — работа вне workspace по
+запросу «создай приложение в E:\test mycode» (path jail расширяем);
+блок изобретённых путей сохранён; тесты 103/103; live-подтверждение через
+:8765. Осталось до 10/10: DI-контейнер, абстракции RAG/DB, Whisper-сервер,
+внешняя переоценка 9.5/10.]
 
 ## Вопросы для анализа (что хотим от Kimi)
 1. Правильна ли архитектура prompt-based tool calling для 7B-моделей? Что улучшить в system prompt теперь?

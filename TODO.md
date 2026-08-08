@@ -164,10 +164,11 @@ Kimi 2: 8.3/10 → DeepSeek 2: 8.5/10 → DeepSeek 3: 8.6/10 → Kimi 3: 8.7/10 
 - [x] Multi-turn RAG — «RAG over plan»: найти все затронутые файлы → редактировать — Этап 33 (_rag_over_plan: rag_search по шагам плана → блок «Plan context» с содержимым топ-6 файлов; AI_RAG_OVER_PLAN=0)
 - [x] Голосовой ввод (Whisper + STT) — долгосрочно — Этап 34 (кнопка 🎤 в UI, Web Speech API STT ru-RU interim; Whisper-сервер — опциональная замена при AI_STT будущей версии)
 
-## Вне оценок (закрыто этапами 35–37, 2026-08-08)
+## Вне оценок (закрыто этапами 35–38, 2026-08-08)
 - [x] Rate limiting /api/chat (LAN DoS) — Этап 35 (per-IP sliding window, AI_RATE_LIMIT=60/мин, AI_RATE_BURST=6 параллельных; 429+retry; =0 отключает)
 - [x] Семантическая валидация путей (read «looks like a directory» до выполнения) — Этап 36 (_path_dir_hint в read/write/edit/patch: существующая директория → Error с подсказкой list/glob, до мутаций)
 - [x] Unquoted string values в lenient JSON — Этап 37 (_parse_tool_json: значения без кавычек, включая пути с точкой/слэшем; {"tool": write, "path": test.py})
+- [x] Работа вне workspace (создание приложений в произвольной папке) — Этап 38 (EXTRA_ROOTS='E:\test mycode' — доп. разрешённые корни; ALLOW_OUTSIDE=1 — полное снятие jail; блок изобретённых путей сохранён; live: агент :8765 создал файл в E:\test mycode)
 ## Осталось (низкий приоритет, 10/10)
 - [ ] DI-контейнер вместо import agent as _agent (частично: этапы 7/16)
 - [ ] Абстракции RAG/DB (замена FAISS/SQLite по дереву)
