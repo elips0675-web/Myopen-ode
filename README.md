@@ -233,11 +233,22 @@ Local AI coding agent powered by Ollama. Free, private, offline alternative to C
 - ✅ **testgen** — auto-generates unit tests from code (Python, JS/TS)
 - ✅ **db_query** — SQL queries against local SQLite DB
 - ✅ **DeepSeek-V4-Flash** — 1M context support via FLASH_PROVIDER/FLASH_API_KEY
+- ✅ **Real terminal** — xterm.js over WebSocket (`/ws/term`, PTY shell: interactive Python/CMD/PowerShell, resize, Ctrl+C)
+- ✅ **CLI mode** — `python -m myopencode "task"` without UI (NO_CONFIRM=1)
+- ✅ **Crash recovery** — session checkpoints every 2 iterations + «⚠ interrupted» marker + resume note
+- ✅ **Model router** — auto-switch to main model when the planner ignores tool format
+- ✅ **Native tool calling** — Ollama `tools=` for qwen3/llama3.1/gpt-oss, legacy ` ```tool` pipeline as fallback
+- ✅ **Git snapshot / restore all** — automatic pre-backup before the first mutating tool
+- ✅ **Inline diff preview** (Cursor-style) + fully offline UI (vendored CodeMirror 5, no CDN)
+- ✅ **Update check** (`/api/update` badge) + CI matrix (Windows/Linux/macOS) + JSON Schema constrained output
+- ✅ **RAG folder scope** + source attribution `[file:line]`
+- ✅ **MCP client** — full handshake (initialize → notifications/initialized), resources/prompts/tools
+- ✅ **Desktop App** — native window via pywebview: auto-start/reuse server, ready-poll, app icon, browser fallback
 
 ### Tests
 
 ```bash
-python test_agent.py   # 52/52 smoke tests
+python test_agent.py   # 83/83 smoke tests
 ```
 
 Integration tests with mock model (agent loop + tool calls + live SSE events), SQLite sessions (CRUD + JSON migration), line-aware patch (multi-hunk, mismatch → None), bash filter (nested `bash -c` / `cmd /c`), todo thread-safety, incremental RAG cache, audit, terminal, deps.

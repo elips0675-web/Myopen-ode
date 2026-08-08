@@ -131,7 +131,7 @@ RUNNING
 -------
 python agent.py        ->  http://localhost:8765/
 python desktop.py      ->  native pywebview window
-python test_agent.py   ->  52/52 smoke tests pass
+python test_agent.py   ->  83/83 smoke tests pass
 python mcp_server.py   ->  MCP stdio server for IDEs
 pip install -r requirements.txt
 AI Desktop.bat         ->  desktop app launcher (python desktop.py)
