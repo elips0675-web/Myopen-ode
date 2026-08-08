@@ -2,6 +2,7 @@
 
 Дата: 2026-08-08 · Тесты: **86/86 unit + мультимодельный live-набор (qwen2.5-coder:7b, qwen3:8b, deepseek-coder-v2:16b)** · Сервер: `python agent.py` → http://localhost:8765
 Репозиторий: github.com/elips0675-web/Myopen-ode (master, работает локально, Windows, Python 3.14)
+История оценок: `Оценка kimi.txt` (7.8/8.7/8.8) и `Оценка deepseek.txt` (8.5/8.6/8.9) — в репо.
 
 ## Что это
 Локальный ИИ-агент-программист на Ollama (замена Cursor/Windsurf/Claude Code — бесплатно, приватно).

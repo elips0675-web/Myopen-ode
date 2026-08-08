@@ -605,3 +605,49 @@ UPDATE (2026-08-08) - stage 20: Tauri desktop done (P2 fully closed, 86/86):
     desktop mentions (Tauri/WebView2 + pywebview), USER_GUIDE new section
     with both launchers + winget toolchain commands. 86/86, CLI live ("21"),
     /health 200. Test instance of the exe was closed after verification.
+
+UPDATE (2026-08-08) - reviews 8.8 (external) + 8.9 (DeepSeek 4) received; plan to 9.5/10:
+Score line: Kimi 8.3 -> DS 8.5 -> DS 8.6 -> Kimi 8.7 -> ext 8.8 -> DS4 8.9.
+Review files: KIMI_REVIEW_SUMMARY.md (full list of stages 1-20 + review 4 + plan),
+Оценка kimi.txt (7.8, 8.7, 8.8 sections), Оценка deepseek.txt (8.5, 8.6, 8.9 sections).
+
+TODO to reach 9.5/10 (prioritized, NOT started yet - codebase clean at HEAD dcae868):
+P1 (production-critical, both reviewers agree):
+(1) AST-based edit guard - in tools/exec.py _tool_edit/_apply_diff: check uniqueness of
+    old text (count occurrences); if N>1 or fuzzy match <90% -> warning to model
+    "old text found N times, make it unique" BEFORE applying. Test: edit with duplicate.
+(2) Git-auto-branch - per session: create branch agent-session-<id>, auto-commit after
+    each write/edit/patch, undo = git reset (keep .agent_backups/ as fallback). Careful:
+    WORK_DIR may not be a git repo (path_jail still covers); CI matrix + tests.
+(3) Prompt KV-cache - after iteration 3, swap full SYSTEM_PROMPT rules for compressed
+    summary (rules 1-21 -> 5-6 lines); system stays first message for Ollama KV cache.
+    Keep test_system_prompt_rules passing (it checks the full prompt - gate by iteration).
+(4) AUTO_CONFIRM_SAFE=1 (DS4) - auto-approve write/edit for NEW files only (no overwrite
+    of existing, no bash); NO_CONFIRM stays all-or-nothing.
+(5) Default model qwen3:8b when VRAM >10GB - probe via ollama ps (0 GPU/CPU fields) or
+    nvidia-smi; fallback qwen2.5-coder:7b. Env override AI_MODEL stays.
+(6) Docker sandbox default when docker present + log warning (DS4) - auto BASH_DOCKER=1
+    if docker info succeeds, with warning line; fallback local shell.
+P2 (distinction from mature prototype):
+(7) Task-level model router - zero-shot classify task (bugfix/refactor/chat/tests) with
+    PLANNER_MODEL BEFORE first call; map to model (bugfix->qwen3, refactor->16b, chat->3b).
+    Do NOT override user-picked model (stage 13 lesson!). Only propose/advise.
+(8) Plan tree UI - /api/plan for plan tool output; render checklist pending/done/error
+    (like Cursor Composer); poll or SSE events.
+(9) ARCHITECTURE.md with Mermaid diagram: UI -> FastAPI(agent.py/api_*) -> agent_loop
+    (core/) -> tools/ dispatch -> Ollama/native + per-tool examples (DS4).
+(10) AST refactor tools (DS4): rename_symbol / extract_function / inline_variable via
+     stdlib ast + tokenize (python only; no libcst dep). 3 new _tool_* handlers + schemas.
+(11) VRAM indicator in UI + auto model pick at startup (DS4).
+(12) Docker flag: BASH_DOCKER default... (same as 6).
+P3 (10/10):
+(13) Self-healing loop - after 2 errors on same tool: switch strategy (edit -> read+write)
+     automatically (TOOL_STATS already drives advice text).
+(14) Multi-turn RAG ("RAG over plan") - first pass: find all affected files via search;
+     second pass: edit them. Plan-first tool call chain.
+(15) Voice input (Whisper+STT) - long-term, DS4 9.8-10 item.
+Other notes: tool stats UI chart (DS4 2.4), prompt ceiling warning (ext review), unquoted
+string values in _parse_tool_json, semantic arg validation ("path looks like a directory"),
+STRUCTURED prompt (XML tags) alternative - all lower priority than P1 list.
+After implementing P1(1-3): rerun 86/86 + CLI live + server restart, then KIMI stage 21+
+entries, TODO checkboxes, commit+push per stage. Update README when stable.
