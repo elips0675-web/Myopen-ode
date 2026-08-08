@@ -26,6 +26,7 @@ Ollama/stream/native/fallback; `exec.py` — диспетчер 26 per-tool хе
 - DeepSeek: **8.5/10** (оценка 2, 2026-08-05; few-shot = −30-40% галлюцинаций на 7B; Docker №1, xterm.js №2)
 - DeepSeek: **8.6/10** (оценка 3, 2026-08-06; приоритеты: динамический контекст > интеграционные тесты > xterm.js > рефакторинг > few-shot на ошибке; +0.5 до 9.1 даст: интеграционные тесты + xterm.js + динамический контекст + восстановление сессии)
 - Kimi: **8.7/10** (оценка 3, 2026-08-06; «самый зрелый open-source агент на 7B»; до 9/10: рефакторинг монолитов, динамический контекст, few-shot при ошибках, USER_GUIDE.md; до 9.5/10: xterm.js+WS, живой интеграционный тест, RAG-сегментация, CLI-режим)
+- DeepSeek: **8.9/10** (оценка 4, 2026-08-08; «самая зрелая локальная open-source альтернатива Cursor/Claude Code»; до 9.2–9.3: AUTO_CONFIRM_SAFE, qwen3:8b дефолт при 12GB+, Docker по умолчанию; до 9.5: ARCHITECTURE.md+Mermaid, AST-рефакторинг тулы, VRAM-индикатор)
 - Внешний ревьювер: **8.8/10** (оценка 4, 2026-08-08; план до 9.5: P1 — AST-based edit guard, git-auto-branch, prompt KV-cache; P2 — task-level router, plan tree UI, Tauri [уже сделан этапом 20]; P3 — self-healing loop, multi-turn RAG)
 
 ## Сессия 2026-08-05 (коммиты 2480a59..c2aea27, все запушены)
