@@ -1,6 +1,6 @@
 # My OpenCode v2 — Сводка для внешнего анализа (Kimi)
 
-Дата: 2026-08-06 · Тесты: **63/63 unit + 2/2 live (реальная qwen2.5-coder:7b)** · Сервер: `python agent.py` → http://localhost:8765
+Дата: 2026-08-08 · Тесты: **83/83 unit + мультимодельный live-набор (qwen2.5-coder:7b, qwen3:8b, deepseek-coder-v2:16b)** · Сервер: `python agent.py` → http://localhost:8765
 Репозиторий: github.com/elips0675-web/Myopen-ode (master, работает локально, Windows, Python 3.14)
 
 ## Что это
@@ -74,30 +74,55 @@ call_ollama + bash-песочница, ~1110 стр.), `rag.py` (гибридн�
     prompt-формата, которые моки не ловят.
 21. **USER_GUIDE.md** — установка, первый запуск, задачи, env-таблица, troubleshooting, скиллы/плагины.
 
-Из рекомендаций оценок 2 реализовано: few-shot, [DONE]-маркер, один тул за раз, статистика тулов,
-пост-обработка JSON, Docker-песочница, code detector, Cache-Control. «Таймаут после [CONFIRM]» — НЕ нужен:
+## Сессии 2026-08-06c .. 2026-08-08 — этапы 8–13 (83/83 + live-набор)
+22. **Этап 8 (`e3bb4dd`) — crash recovery**: state-файл сессии + «interrupted»-маркер при сбое
+    (test_session_checkpoint); восстановление после рестарта сервера.
+23. **Этап 9 (`3bc58f4`) — MCP + иерархия**: полный MCP handshake (initialize → notifications/initialized,
+    capabilities, resources/list|read, prompts/list|get в mcp_call); тул `task` — сабагент выполняет
+    подцикл run_agent_loop (NO_CONFIRM=True, fallback на одиночный вызов).
+24. **Этап 10 (`cd3ea06`) — native tool calling**: для qwen3/llama3.1/gpt-oss (Ollama tools=) —
+    `native_chat()` с подменой system-промпта (legacy-правила заставляют qwen3 писать текст вместо
+    tool_calls — проверено probe); пустые calls → финальный ответ; сбой → fallback на legacy ```tool.
+    qwen2.5-coder:7b и deepseek-coder-v2:16b не поддерживают (HTTP 400 на tools=).
+25. **Этап 11 (`41c3cd7`) — desktop**: Rust/MSVC нет → Tauri заморожен, вместо него pywebview
+    (desktop.py): автозапуск сервера, poll /health до готовности, иконка (icon.png/ico, генератор
+    без PIL), флаг --browser, fallback в браузер.
+26. **Этап 12 (`577cdff`) — deepseek-coder-v2:16b**: установлен (8.9GB), legacy-only; live-кодинг
+    подтверждён (write → CONFIRM → yes → файл создан, аудит фиксирует только выполнившиеся тулы).
+27. **Этап 13 (`b0a294b`) — мультимодельный live-набор + роутер-фикс**: test_live.py прогоняет
+    create/edit/question по ВСЕМ установленным моделям (warm-up, --models/--full, честный отчёт).
+    Результаты: qwen3:8b (native) ~3/3 — сильнейшая; qwen2.5-coder:7b ~2/3; deepseek-coder-v2:16b
+    ~0–1/3 (битые ```tool блоки, инструкции вместо действий). Нестабильность между прогонами —
+    вытеснение VRAM (12GB). Роутер больше НЕ переключает юзер-выбранную модель (раньше юзер выбрал
+    16b, а работала qwen2.5-coder:7b — молча); planner-retry сохранён. Пустой ответ модели —
+    один retry перед break.
+
+Из рекомендаций оценок 2-3 реализовано: few-shot, [DONE]-маркер, один тул за раз, статистика тулов,
+пост-обработка JSON, Docker-песочница, code detector, Cache-Control, динамический контекст,
+интеграционные тесты (мультимодельные), xterm.js+WS терминал, RAG-сегментация по папкам,
+CLI-режим, восстановление сессии, update check, кроссплатформенные тесты, MCP client,
+native tool calling, desktop (pywebview). «Таймаут после [CONFIRM]» — НЕ нужен:
 после CONFIRM цикл завершается break по дизайну (юзер пишет «yes» → auto-exec pending без вызова модели).
 
 ## Что осталось (P2)
-- xterm.js + WebSocket для долгих процессов (серверы, отладчики) — приоритет №2
-- TOOL_STATS в промпт (нужен per-session stats)
-- Динамические элементы UI: индикатор «модель думает», прогресс-бар RAG, просмотр audit-лога
 - Рефакторинг монолитов: core/agent_loop.py, core/tool_parser.py, core/tool_executor.py, core/safety/*
-- RAG: сегментирование по папкам (6000 чанков ≈ 3 млн символов)
-- CLI-режим без UI; восстановление сессии после сбоя; кроссплатформенные тесты; update check
+- TOOL_STATS в system prompt (нужен per-session stats)
+- Динамические элементы UI: индикатор «модель думает», прогресс-бар RAG, просмотр audit-лога
 - CodeMirror 6 / Monaco; AST multi-file edit (parso/tree-sitter)
-- JSON Schema constrained output (Ollama format:"json" — экспериментально)
-- Native tool calling — когда Ollama поддержит; Tauri desktop; deepseek-coder-v2:16b (12GB VRAM)
+- Tauri desktop (ждёт установки Rust/MSVC — pywebview уже закрывает потребность)
+- JSON Schema constrained output — экспериментально доступен (AI_JSON_FORMAT=1)
 
 ## Известные пределы (поведение модели, не кода)
 - Полный цикл «исправь баг + прогони тесты» требует follow-up «yes» на [CONFIRM] (деструктивные операции — по дизайну)
 - deepseek-r1:7b в UI (если выбрать) галлюцинирует пути и пишет туториалы вместо тулов — дефолт qwen2.5-coder:7b
 - 7B-модели иногда пишут JSON-тул в тексте без ```tool-ограждения — bare-парсер + lenient JSON теперь ловит почти всё
+- deepseek-coder-v2:16b (legacy-путь) — слабый исполнитель: ~0–1/3 live-сценариев (битые блоки, инструкции вместо действий); qwen3:8b (native) — лучшая из установленных ~3/3
+- live-прогоны нестабильны между запусками из-за вытеснения моделей из 12GB VRAM (warm-up сглаживает)
 
 ## Вопросы для анализа (что хотим от Kimi)
 1. Правильна ли архитектура prompt-based tool calling для 7B-моделей? Что улучшить в system prompt теперь?
 2. Достаточны ли анти-галлюцинационные гарды (code detector, lenient JSON, tool-error nudge)? Что ещё реально работает на 7B?
 3. Docker-песочница: правильный ли дизайн (opt-in, whitelist + контейнер, fallback)? Стоит ли сделать её режимом по умолчанию или это ок для локального агента?
 4. Статистика тулов (TOOL_STATS) — стоит ли встраивать счётчики ошибок в system prompt для самообучения модели?
-5. Что важнее дальше: xterm.js+WS, интеграционные тесты, динамический контекст или рефакторинг монолитов?
-6. Оценка версии (было 8.3/10): что поднять до «production-ready»?
+5. Native tool calling vs legacy ```tool: стоит ли мигрировать legacy-модели или гибрид (qwen3 native, остальные legacy) — правильный выбор?
+6. Оценка версии (было 8.7/10): что поднять до «production-ready» (9.5+/10)?

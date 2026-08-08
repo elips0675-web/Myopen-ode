@@ -69,10 +69,13 @@
 ## Тесты
 
 ```bash
-python test_agent.py   # 49/49 smoke-тестов
+python test_agent.py   # 83/83 smoke-тестов
+python test_live.py    # live-набор на реальных моделях (create/edit/question)
 ```
 
 Интеграционные тесты с мок-моделью (agent loop + tool calls + live events), SQLite-сессии (CRUD + миграция из JSON), patch line-aware (мульти-хунки, mismatch → None), bash-фильтр (вложенные `bash -c` / `cmd /c`), thread-safety todo, RAG инкрементальный кеш, аудит, терминал, deps, anti-loop (question останавливает итерацию, повтор вызова блокируется).
+
+`test_live.py` прогоняет сценарии по всем установленным моделям (по умолчанию qwen2.5-coder:7b, qwen3:8b, deepseek-coder-v2:16b) с warm-up; флаги `--models qwen3:8b`, `--full`. Пропускается, если Ollama/модель отсутствуют. На 12GB VRAM live-результаты нестабильны между прогонами (вытеснение моделей).
 
 ```bash
 ollama pull deepseek-r1:7b
@@ -249,9 +252,12 @@ Local AI coding agent powered by Ollama. Free, private, offline alternative to C
 
 ```bash
 python test_agent.py   # 83/83 smoke tests
+python test_live.py    # live suite against real models (create/edit/question)
 ```
 
 Integration tests with mock model (agent loop + tool calls + live SSE events), SQLite sessions (CRUD + JSON migration), line-aware patch (multi-hunk, mismatch → None), bash filter (nested `bash -c` / `cmd /c`), todo thread-safety, incremental RAG cache, audit, terminal, deps.
+
+`test_live.py` runs the scenarios on every installed model (default: qwen2.5-coder:7b, qwen3:8b, deepseek-coder-v2:16b) with warm-up; flags `--models qwen3:8b`, `--full`. Skips when Ollama/models are missing. On 12GB VRAM live results vary between runs (model eviction).
 
 ```bash
 ollama pull deepseek-r1:7b

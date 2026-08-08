@@ -444,6 +444,24 @@ via the legacy ```tool pipeline. Live coding cycle verified: write ->
 audit log only records tools that actually execute — CONFIRM-armed writes
 appear only after "yes". All TODO items now resolved or explicitly skipped.
 
+UPDATE (2026-08-08) — stage 13: multi-model live suite + router fix (83/83):
+(1) test_live.py now runs create/edit/question scenarios across ALL installed
+models (default qwen2.5-coder:7b, qwen3:8b, deepseek-coder-v2:16b), per-model
+warm-up, flags --models/--full, honest per-model report. Honest results
+(stochastic between runs due to 12GB VRAM eviction): qwen3:8b (native) ~3/3
+best; qwen2.5-coder:7b ~2/3 (edit-rename answers with instructions); 16b
+~0-1/3 (broken ```tool blocks, lists instead of answers).
+(2) ROUTER FIX (design, asked user): user-selected model is NEVER silently
+routed to default — live test showed user picked 16b but qwen2.5-coder:7b
+was actually executing. Dead router branch removed, planner-retry (it==0)
+kept. test_model_router rewritten (never routed), test_planner_router dropped.
+(3) Empty model response retried once before break (retried_empty flag) —
+"No response from model" on 16b under VRAM pressure.
+(4) Docs synced: README (test_live.py, 83/83), TODO (stage 13), USER_GUIDE
+(CLI, desktop, xterm/WS, native tools, env vars), context, KIMI_REVIEW_SUMMARY
+(stages 8-13, P2 list reduced to: monolith refactor, TOOL_STATS in prompt,
+UI dynamics, CodeMirror 6/Monaco, AST multi-file edit, Tauri).
+
 
 
 
