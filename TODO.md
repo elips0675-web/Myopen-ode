@@ -12,7 +12,7 @@
 Kimi 2: 8.3/10 → DeepSeek 2: 8.5/10 → DeepSeek 3: 8.6/10 → Kimi 3: 8.7/10 → Внешний: 8.8/10 → DeepSeek 4: 8.9/10 → Внешний 2: 8.9/10 (оценка 5, 2026-08-08; план P1/P2 ЗАКРЫТ этапами 21–31, до 9.5 остался P3) → DeepSeek 5: 8.9/10 (переоценка, 2026-08-08; Stage 20 Tauri, все P1/P2 закрыты, до 9.5 остался P3)
 Путь к 9/10: рефакторинг монолитов ✓, динамический контекст ✓, few-shot при ошибках ✓, USER_GUIDE.md ✓
 Путь к 9.5/10: xterm.js+WS ✓, интеграционные тесты ✓, RAG-сегментация по папкам ✓, CLI-режим ✓ (этапы 8–9)
-Следующая цель (10/10): native tool calling ✓, Tauri-десктоп ✓ (этап 20), GPU embeddings ✓ (не требуется), deepseek-coder-v2:16b ✓
+Следующая цель (10/10): native tool calling ✓, Tauri-десктоп ✓ (этап 20), GPU embeddings ✓ (не требуется), deepseek-coder-v2:16b ✓, P3: self-healing ✓, RAG over plan ✓, voice input ✓ (этапы 32–34) — ВЕСЬ план оценок закрыт, заявка на переоценку 9.5/10
 
 ## ДОДЕЛАТЬ — сводка по всем оценкам (приоритет по консенсусу ревьюверов)
 
@@ -159,9 +159,10 @@ Kimi 2: 8.3/10 → DeepSeek 2: 8.5/10 → DeepSeek 3: 8.6/10 → Kimi 3: 8.7/10 
 - [x] ARCHITECTURE.md с Mermaid-диаграммой + примеры тулов (DS4) — Этап 27 (Mermaid: CLI/Web/Tauri → agent.py → core/agent_loop.py → tools/+rag.py → Ollama; таблицы тулов/модулей/env)
 - [x] AST-рефакторинг тулы: rename_symbol / extract_function / inline_variable (DS4) — Этап 28 (ast-узлы, syntax-guard, backup+git; live rename total→sum_total)
 - [x] VRAM-индикатор и автовыбор модели при старте (DS4) — Этап 29 (/api/vram + бейдж в UI, 15с; автовыбор — Этап 25)
-### P3
-- [ ] Self-healing loop — 2 ошибки одним тулом → смена стратегии (edit → read→write)
-- [ ] Multi-turn RAG — «RAG over plan»: найти все затронутые файлы → редактировать
+### P3 (10/10)
+- [x] Self-healing loop — 2 ошибки одним тулом → смена стратегии (edit → read→write) — Этап 32 (consecutive err_streak в цикле, _dynamic_context совет SWITCH STRATEGY при 2+ ошибках подряд)
+- [x] Multi-turn RAG — «RAG over plan»: найти все затронутые файлы → редактировать — Этап 33 (_rag_over_plan: rag_search по шагам плана → блок «Plan context» с содержимым топ-6 файлов; AI_RAG_OVER_PLAN=0)
+- [x] Голосовой ввод (Whisper + STT) — долгосрочно — Этап 34 (кнопка 🎤 в UI, Web Speech API STT ru-RU interim; Whisper-сервер — опциональная замена при AI_STT будущей версии)
 
 ## Собственные идеи (низкий приоритет)
 - [x] Native tool calling — СДЕЛАНО (Этап 10)

@@ -30,7 +30,7 @@ Ollama/stream/native/fallback; `exec.py` — диспетчер 26 per-tool хе
 - DeepSeek: **8.9/10** (оценка 4, 2026-08-08; «самая зрелая локальная open-source альтернатива Cursor/Claude Code»; до 9.2–9.3: AUTO_CONFIRM_SAFE, qwen3:8b дефолт при 12GB+, Docker по умолчанию; до 9.5: ARCHITECTURE.md+Mermaid, AST-рефакторинг тулы, VRAM-индикатор)
 - Внешний ревьювер: **8.8/10** (оценка 4, 2026-08-08; план до 9.5: P1 — AST-based edit guard, git-auto-branch, prompt KV-cache; P2 — task-level router, plan tree UI, Tauri [уже сделан этапом 20]; P3 — self-healing loop, multi-turn RAG)
 - Внешний ревьювер: **8.9/10** (оценка 5, 2026-08-08, +0.1 к 8.8; «зона production-ready beta», Tauri закрыл последний крупный P2; план P1/P2/P3 — ВЕСЬ закрыт этапами 21–31: edit guard=21, git-auto-branch=22, KV-cache=23, AUTO_CONFIRM_SAFE=24, авто-модель=25, Docker=26, ARCHITECTURE.md=27, AST-тулы=28, VRAM=29, router=30, plan tree=31; тесты 97/97 (на момент оценки было 86/86); до 9.5 остался P3: self-healing loop, multi-turn RAG, voice input)
-- DeepSeek: **8.9/10** (оценка 5, переоценка, 2026-08-08; Stage 20 Tauri закрыл все P2; «production-ready»; P1-план — весь закрыт этапами 21–26, P2 — этапами 27–31; тесты 97/97 на сегодня; до 9.5 остался P3: self-healing loop, multi-turn RAG, voice input)
+- DeepSeek: **8.9/10** (оценка 5, переоценка, 2026-08-08; Stage 20 Tauri закрыл все P2; «production-ready»; P1-план — весь закрыт этапами 21–26, P2 — этапами 27–31; тесты 97/97 на сегодня; до 9.5 остался P3: self-healing loop, multi-turn RAG, voice input [P3 закрыт этапами 32–34, тесты 99/99 — ВЕСЬ план оценок реализован, заявка на переоценку])
 
 ## Сессия 2026-08-05 (коммиты 2480a59..c2aea27, все запушены)
 1. **Живой стриминг**: `stream_ollama()` отдаёт текст по мере генерации → UI печатает с ~2.6s
@@ -307,7 +307,10 @@ native tool calling, desktop (pywebview). «Таймаут после [CONFIRM]�
 - ВСЕ пункты плана до 9.5 (оценка 4) закрыты этапами 21–31 (см. разделы «Оценка 4/5»):
   edit guard=21, git-auto-branch=22, KV-cache=23, AUTO_CONFIRM_SAFE=24, авто-модель=25,
   Docker=26, ARCHITECTURE.md=27, AST-тулы=28, VRAM=29, router=30, plan tree=31.
-  До 9.5 остался P3: self-healing loop, multi-turn RAG, voice input.
+  До 9.5 остался P3: self-healing loop, multi-turn RAG, voice input. [ЗАКРЫТ этапами 32–34:
+  self-healing=32 (2+ ошибки подряд → SWITCH STRATEGY), RAG over plan=33 (план → авто-
+  контекст затронутых файлов), voice input=34 (Web Speech API STT в UI); тесты 99/99]
+  → ВЕСЬ план оценок 8.3–8.9 реализован; ожидание внешней переоценки 9.5/10.
 
 ## Оценка 4 — 8.8/10 (внешний ревьювер, 2026-08-08)
 
@@ -408,6 +411,8 @@ AI_JSON_FORMAT=1 уже частично покрывают; семантиче�
 
 Что осталось до 9.5/10 (по оценке): P1 — AST-based edit guard, git-auto-branch, prompt KV-cache;
 P2 — task-level router, plan tree UI, ARCHITECTURE.md; P3 — self-healing loop, multi-turn RAG.
+[На сегодня (этапы 21–34) ВЕСЬ план закрыт; осталось вне оценок: DI-контейнер,
+rate limiting /api/chat, семантическая валидация аргументов, unquoted JSON.]
 Вердикт: «прошёл точку "зрелый прототип", зона production-ready beta. Tauri закрыл последний
 крупный P2. Оставшиеся P1 — полировка крайних случаев, а не архитектурные дыры. После P1(1)
 AST edit guard проект заслуживает v2.0-stable и 9.2–9.3/10.»
@@ -421,7 +426,14 @@ P1(3) prompt KV-cache = этап 23 (COMPACT_SYSTEM_PROMPT при it>=3), P2(1) 
 тулы + env), плюс AUTO_CONFIRM_SAFE (этап 24), авто-подбор qwen3:8b по VRAM (этап 25),
 Docker default-when-present (этап 26), AST-рефакторинг тулы rename/extract/inline (этап 28),
 VRAM-индикатор (этап 29). Тесты: 97/97 ×2 (было 86/86 на момент оценки). Осталось до 9.5:
-P3 — self-healing loop, multi-turn RAG, voice input.
+P3 — self-healing loop, multi-turn RAG, voice input. [ПЕРЕОЦЕНКА ИТОГА: P3 закрыт
+этапами 32–34 (2026-08-08) — self-healing loop (2+ ошибки тула подряд → совет
+SWITCH STRATEGY в dynamic context, err_streak в цикле), RAG over plan (план →
+rag_search по шагам → блок «Plan context» с содержимым топ-6 файлов,
+AI_RAG_OVER_PLAN=0), voice input (🎤 в UI, Web Speech API STT ru-RU interim).
+Тесты: 99/99 ×2 (b85800f). ВЕСЬ план оценок 8.3–8.9 реализован этапами 19–34.
+Осталось вне оценок (до 10/10): DI-контейнер, rate limiting /api/chat,
+семантическая валидация аргументов, unquoted JSON в lenient-парсере.]
 
 ## Вопросы для анализа (что хотим от Kimi)
 1. Правильна ли архитектура prompt-based tool calling для 7B-моделей? Что улучшить в system prompt теперь?

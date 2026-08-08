@@ -836,3 +836,24 @@ UPDATE (2026-08-08) - docs sync with evaluation plan status (Что додела
   marked [x]; 'Что осталось (P2)' section notes ALL plan items closed 21-31,
   remaining P3 (self-healing loop, multi-turn RAG, voice input); agent.py
   DI note updated (partially closed by stages 7/16, DI container out of 9.5 scope).
+
+UPDATE (2026-08-08) - P3 done (stages 32-34), commit b85800f, tests 99/99 x2:
+- Stage 32 self-healing loop: consecutive same-tool errors tracked (err_streak/
+  err_tool in run_agent_loop); after 2+ in a row _dynamic_context injects
+  'SWITCH STRATEGY NOW' advice (glob/read first, edit with EXACT text or
+  rewrite with write). test_self_healing_advice.
+- Stage 33 multi-turn RAG ('RAG over plan'): plan branch runs rag_search over
+  each step (up to 4), collects top file paths (max 6), reads them (2KB each,
+  total cap 10KB) into a system block 'Plan context' appended after the plan
+  message; status event emitted; AI_RAG_OVER_PLAN=0 disables; never raises.
+  test_rag_over_plan; live CLI: plan built with pre-loaded context.
+- Stage 34 voice input: mic button (#mic) in UI next to Send; Web Speech API
+  (SpeechRecognition/webkitSpeechRecognition, ru-RU, interimResults, continuous)
+  fills the textarea; button hidden when API unsupported; Whisper server-side
+  remains future option.
+- UI verified: mic button + toggleMic in served HTML/JS; server restarted,
+  /health 200 (qwen3:8b, 43 sessions).
+- Docs: TODO.md P3 all [x]; KIMI_REVIEW_SUMMARY.md updated (P3 closed 32-34,
+  whole 8.3-8.9 plan realized; open non-eval items: DI container, rate
+  limiting /api/chat, semantic arg validation, unquoted JSON); README rating
+  line. Waiting for external re-evaluation (9.5/10 claim).
