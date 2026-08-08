@@ -462,6 +462,28 @@ kept. test_model_router rewritten (never routed), test_planner_router dropped.
 (stages 8-13, P2 list reduced to: monolith refactor, TOOL_STATS in prompt,
 UI dynamics, CodeMirror 6/Monaco, AST multi-file edit, Tauri).
 
+UPDATE (2026-08-08) — stage 14: tools.py monolith split into tools/ package (83/83):
+(1) tools/_state.py = all mutable globals + init_config with _sync_register():
+    every submodule keeps a copy of the config names and registers itself,
+    init_config setattr-s both the state module and all copies. BACKUP_DIR/
+    AUDIT_LOG/PLUGINS assignments inside submodules go through their local
+    globals (same objects as state for dicts; re-assignments like PLUGINS={}
+    in load_plugins are mirrored to _state).
+(2) tools/paths.py, backup.py (backup/undo/git/verify/prebackup/restore/diff),
+    plugins.py, llm.py (call/stream/native/fallback + TOOL_DESCS), audit.py,
+    exec.py (validate_tool/execute_tool/_execute_tool_inner/check_bash/diff
+    parser), __init__.py = facade re-exporting EVERYTHING public + private
+    helpers used by tests + module attrs tests monkey-patch (tools.requests).
+(3) exec.py reads BASH_TIMEOUT via _state module (live value); task tool
+    accesses SUBAGENT_PROMPTS lazily via `import tools` (circular import safe);
+    websearch/read/web use lazy imports (equivalent behavior).
+(4) BREAKING-NOTE for tests: tools.WORK_DIR = x no longer propagates to
+    submodules — use tools.init_config(WORK_DIR=x) (test_git_snapshot_restore
+    updated). Other modules (agent.py, mcp_server.py, agent_loop) use
+    init_config or read-only attr access — unaffected.
+(5) Verified: 83/83 tests, CLI live ("4"), server restarted on new layout
+    (/health 200).
+
 
 
 

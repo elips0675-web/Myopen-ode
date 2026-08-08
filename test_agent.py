@@ -360,7 +360,7 @@ def test_git_snapshot_restore():
     sp.run(["git", "-C", str(repo), "config", "user.email", "test@test"], check=True)
     sp.run(["git", "-C", str(repo), "add", "-A"], check=True)
     sp.run(["git", "-C", str(repo), "commit", "-qm", "base"], check=True)
-    tools.WORK_DIR = repo
+    tools.init_config(WORK_DIR=repo)
     tools.init_backup()
     try:
         victim = repo / "untracked_file.txt"
@@ -377,7 +377,7 @@ def test_git_snapshot_restore():
         assert not (repo / "new_after.txt").exists(), "file created after snapshot should be removed"
         assert (repo / "tracked.txt").read_text() == "base", "tracked changes should be reverted"
     finally:
-        tools.WORK_DIR = old_wd
+        tools.init_config(WORK_DIR=old_wd)
         tools.init_backup()
     print("  [OK] git pre-backup + restore all")
 

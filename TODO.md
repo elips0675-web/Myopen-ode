@@ -100,6 +100,13 @@ Kimi 2: 8.3/10 → DeepSeek 2: 8.5/10 → DeepSeek 3: 8.6/10 → Kimi 3: 8.7/10
 - [x] Дизайн-фикс: роутер больше НЕ переключает юзер-выбранную модель (test_model_router: never routed); ветка роутера удалена (мёртвая), planner-retry сохранён (test_agent_loop_planner_fallback)
 - [x] Пустой ответ модели → retry один раз перед break («No response from model» на 16b из-за вытеснения VRAM)
 - [x] 83/83 mock-тестов, live-набор параметризован
+
+## Этап 14. Рефакторинг монолита tools.py (2026-08-08) — СДЕЛАНО
+- [x] tools.py (1352 строки) → пакет tools/: _state.py (конфиг+глобалы+init_config с синхронизацией копий подмодулей через _sync_register), paths.py, backup.py (backup/undo/git/verify/git_prebackup/restore), plugins.py, llm.py (Ollama+stream+native+fallback), audit.py, exec.py (validate/execute/diff/bash-обёртки), __init__.py (фасад: реэкспорт + SYSTEM_PROMPT/SUBAGENT_PROMPTS)
+- [x] Фасад сохраняет API: from tools import ... и tools.X (включая tools.requests.post для моков, private-хелперы для тестов)
+- [x] init_config теперь синхронизирует копии глобалов во всех подмодулях (WORK_DIR/BASH_TIMEOUT/...); SUBAGENT_PROMPTS в exec.py — ленивый доступ через tools (цикл импортов)
+- [x] Обновлён test_git_snapshot_restore: tools.WORK_DIR = x → tools.init_config(WORK_DIR=x) (прямое присваивание атрибута пакета больше не синхронизирует подмодули)
+- [x] 83/83 тестов, CLI live («4»), сервер перезапущен на новой структуре (/health 200)
 - Предел (поведение модели, не кода): полный цикл «исправь баг + прогони тесты» требует follow-up «yes» на CONFIRM (bash) — по дизайну
 
 ## Собственные идеи (низкий приоритет)
