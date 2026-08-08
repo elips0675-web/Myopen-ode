@@ -122,7 +122,7 @@ Ollama/stream/native/fallback; `exec.py` — диспетчер 26 per-tool хе
     глобалы (WORK_DIR/SESSIONS_DIR при switch_project) в роутерах читаются динамически через
     `import agent as _agent` (копия-на-импорт устаревала бы). Тесты health/update_check/
     session_search перенесены на api_misc/api_sessions. 83/83, CLI live, сервер перезапущен.
-31. **Этап 17 — TOOL_STATS в system prompt**: `_dynamic_context` получил блок «Global tool
+31. **Этап 17 (`cc60f55`) — TOOL_STATS в system prompt**: `_dynamic_context` получил блок «Global tool
     stats (all sessions)» — топ-3 тула с повторяющимися ошибками (>=2 вызовов, иначе
     одиночный сбой не мусорит контекст), сортировка по числу ошибок, тот же advice
     (use glob or list). Статистика резолвится лениво через `import tools` — CLI/тесты
