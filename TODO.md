@@ -164,6 +164,16 @@ Kimi 2: 8.3/10 → DeepSeek 2: 8.5/10 → DeepSeek 3: 8.6/10 → Kimi 3: 8.7/10 
 - [x] Multi-turn RAG — «RAG over plan»: найти все затронутые файлы → редактировать — Этап 33 (_rag_over_plan: rag_search по шагам плана → блок «Plan context» с содержимым топ-6 файлов; AI_RAG_OVER_PLAN=0)
 - [x] Голосовой ввод (Whisper + STT) — долгосрочно — Этап 34 (кнопка 🎤 в UI, Web Speech API STT ru-RU interim; Whisper-сервер — опциональная замена при AI_STT будущей версии)
 
+## Вне оценок (закрыто этапами 35–37, 2026-08-08)
+- [x] Rate limiting /api/chat (LAN DoS) — Этап 35 (per-IP sliding window, AI_RATE_LIMIT=60/мин, AI_RATE_BURST=6 параллельных; 429+retry; =0 отключает)
+- [x] Семантическая валидация путей (read «looks like a directory» до выполнения) — Этап 36 (_path_dir_hint в read/write/edit/patch: существующая директория → Error с подсказкой list/glob, до мутаций)
+- [x] Unquoted string values в lenient JSON — Этап 37 (_parse_tool_json: значения без кавычек, включая пути с точкой/слэшем; {"tool": write, "path": test.py})
+## Осталось (низкий приоритет, 10/10)
+- [ ] DI-контейнер вместо import agent as _agent (частично: этапы 7/16)
+- [ ] Абстракции RAG/DB (замена FAISS/SQLite по дереву)
+- [ ] Whisper-сервер STT (сейчас браузерный Web Speech API)
+- [ ] Внешняя переоценка 9.5/10 (весь план 8.3–8.9 закрыт, тесты 102/102)
+
 ## Собственные идеи (низкий приоритет)
 - [x] Native tool calling — СДЕЛАНО (Этап 10)
 - [x] Desktop App — СДЕЛАНО как Этап 11 (pywebview fallback); Этап 20 — Tauri desktop (Rust 1.97.1 + MSVC Build Tools установлены, src-tauri/ cargo-only wrapper, WebView2 1280×860, ~50MB против ~300MB pywebview, scripts/run_tauri.bat)

@@ -857,3 +857,19 @@ UPDATE (2026-08-08) - P3 done (stages 32-34), commit b85800f, tests 99/99 x2:
   whole 8.3-8.9 plan realized; open non-eval items: DI container, rate
   limiting /api/chat, semantic arg validation, unquoted JSON); README rating
   line. Waiting for external re-evaluation (9.5/10 claim).
+
+UPDATE (2026-08-08) - non-eval important items done (stages 35-37), 1f8413f, 102/102 x2:
+- Stage 35 rate limiting /api/chat: per-IP sliding window (AI_RATE_LIMIT,
+  default 60 req/min) + concurrent in-flight burst cap (AI_RATE_BURST=6,
+  decrement via task done-callback); 429 + retry seconds; AI_RATE_LIMIT=0
+  disables; per-IP isolation. (LAN DoS item from external review 4.)
+- Stage 36 semantic path validation: _path_dir_hint() in read/write/edit/
+  patch - existing DIRECTORY -> 'Error: ... looks like a directory' with
+  list/glob hint, BEFORE any mutation; read dir now Error-prefixed too.
+- Stage 37 lenient JSON: unquoted string VALUES quoted incl. dotted/slash
+  paths (tool: write, path: test.py) in _parse_tool_json.
+- Tests +3 -> 102/102 x2; live: dir-hint via tools + server restarted,
+  /health 200 (qwen3:8b).
+- TODO.md: new section 'Вне оценок (закрыто 35-37)' + 'Осталось (10/10)':
+  DI container, RAG/DB abstractions, Whisper server, external 9.5 re-eval.
+- KIMI_REVIEW_SUMMARY.md/README updated. Awaiting re-evaluation claim 9.5.

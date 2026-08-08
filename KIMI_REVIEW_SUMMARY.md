@@ -434,6 +434,12 @@ AI_RAG_OVER_PLAN=0), voice input (🎤 в UI, Web Speech API STT ru-RU interim).
 Тесты: 99/99 ×2 (b85800f). ВЕСЬ план оценок 8.3–8.9 реализован этапами 19–34.
 Осталось вне оценок (до 10/10): DI-контейнер, rate limiting /api/chat,
 семантическая валидация аргументов, unquoted JSON в lenient-парсере.]
+[ЗАКРЫТО этапами 35–37 (1f8413f): rate limiting /api/chat (per-IP окно
+60/мин + burst 6, 429, AI_RATE_LIMIT=0 откл.), семантическая валидация
+путей (_path_dir_hint: директория → «looks like a directory» + list/glob,
+read/write/edit/patch до мутаций), unquoted string values в lenient JSON
+(включая пути с точкой). Тесты 102/102 ×2. Осталось до 10/10: DI-контейнер,
+абстракции RAG/DB, Whisper-сервер, внешняя переоценка 9.5/10.]
 
 ## Вопросы для анализа (что хотим от Kimi)
 1. Правильна ли архитектура prompt-based tool calling для 7B-моделей? Что улучшить в system prompt теперь?
