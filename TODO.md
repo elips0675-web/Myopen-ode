@@ -158,7 +158,7 @@ Kimi 2: 8.3/10 → DeepSeek 2: 8.5/10 → DeepSeek 3: 8.6/10 → Kimi 3: 8.7/10 
 - [ ] Plan tree UI — дерево шагов pending/done/error
 - [ ] ARCHITECTURE.md с Mermaid-диаграммой + примеры тулов (DS4)
 - [x] AST-рефакторинг тулы: rename_symbol / extract_function / inline_variable (DS4) — Этап 28 (ast-узлы, syntax-guard, backup+git; live rename total→sum_total)
-- [ ] VRAM-индикатор и автовыбор модели при старте (DS4)
+- [x] VRAM-индикатор и автовыбор модели при старте (DS4) — Этап 29 (/api/vram + бейдж в UI, 15с; автовыбор — Этап 25)
 ### P3
 - [ ] Self-healing loop — 2 ошибки одним тулом → смена стратегии (edit → read→write)
 - [ ] Multi-turn RAG — «RAG over plan»: найти все затронутые файлы → редактировать

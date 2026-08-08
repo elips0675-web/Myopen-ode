@@ -213,7 +213,7 @@ function init(){
   }).catch(function(){});
   fetch(A+'/api/project').then(function(r){return r.json()}).then(function(p){$('prj').textContent=p.name}).catch(function(){});
   loadProjects();loadFiles();loadSessions();loadSkills();loadTabPaths();cl();$('ta').focus();
-  ragPoll();updPoll();
+  ragPoll();updPoll();vramPoll();
 }
 function updPoll(){
   fetch(A+'/api/update').then(function(r){return r.json()}).then(function(d){
@@ -222,6 +222,18 @@ function updPoll(){
     if(d.ok&&d.has_update)el.textContent='\u2B06 update '+d.behind;
     else el.textContent='';
   }).catch(function(){});
+}
+function vramPoll(){
+  var el=$('vram-badge');if(!el)return;
+  fetch(A+'/api/vram').then(function(r){return r.json()}).then(function(d){
+    if(d.ok&&d.total_mb>0){
+      var pct=Math.round(100*d.used_mb/d.total_mb);
+      el.style.display='';
+      el.textContent='VRAM '+Math.round(d.used_mb/102.4)/10+'/'+Math.round(d.total_mb/102.4)/10+' GB ('+pct+'%)';
+      el.style.background=pct>90?'var(--cnl-btn)':'var(--btn)';
+    } else {el.style.display='none'}
+    setTimeout(vramPoll,15000);
+  }).catch(function(){setTimeout(vramPoll,30000)});
 }
 function ragPoll(){
   fetch(A+'/api/rag/status').then(function(r){return r.json()}).then(function(s){

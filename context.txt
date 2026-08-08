@@ -758,3 +758,13 @@ UPDATE (2026-08-08) - stage 28 done (P2 #10 AST refactor tools), 94/94:
 - Live CLI: model renamed total->sum_total via rename_symbol (file correct).
 - Server restarted (health 200).
 Remaining P2: (7) task-level router, (8) plan tree UI, (11) VRAM indicator.
+
+UPDATE (2026-08-08) - stage 29 done (P2 #11 VRAM indicator), 95/95 x2:
+- api_misc.py _vram_info(): nvidia-smi memory.total,used, cached 10s;
+  GET /api/vram + "vram" field in /health. Graceful (ok:false) without GPU.
+- ui.py: #vram-badge in header; static/app.js vramPoll() every 15s ->
+  'VRAM 7.3/12.0 GB (61%)', red bg above 90%.
+- Test test_vram_indicator (mock nvidia-smi parse + missing GPU).
+- Live: /api/vram {total_mb:12288, used_mb:9430, ok:true}.
+- Server restarted (health 200).
+Remaining P2: (7) task-level router, (8) plan tree UI.

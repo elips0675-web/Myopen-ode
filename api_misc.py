@@ -14,6 +14,36 @@ import requests
 router = APIRouter()
 _SERVER_START = time.time()
 _UPDATE_CACHE = {"at": 0, "data": None}
+_VRAM_CACHE = {"at": 0, "data": None}
+
+
+def _vram_info():
+    """Stage 29: GPU VRAM via nvidia-smi, cached 10s; used by /api/vram and
+    /health so the UI can show a live indicator."""
+    now = time.time()
+    if _VRAM_CACHE["data"] and now - _VRAM_CACHE["at"] < 10:
+        return _VRAM_CACHE["data"]
+    data = {"total_mb": 0, "used_mb": 0, "free_mb": 0, "ok": False}
+    try:
+        r = subprocess.run(
+            ["nvidia-smi", "--query-gpu=memory.total,memory.used",
+             "--format=csv,noheader,nounits"],
+            capture_output=True, text=True, timeout=5)
+        total, used = r.stdout.strip().split(",")[:2]
+        total, used = int(total), int(used)
+        data = {"total_mb": total, "used_mb": used,
+                "free_mb": max(0, total - used), "ok": True}
+    except Exception:
+        pass
+    _VRAM_CACHE.update({"at": now, "data": data})
+    return data
+
+
+@router.get("/api/vram")
+def vram_info():
+    """GPU VRAM usage for the UI indicator (cached 10s; ok=False without
+    nvidia-smi, e.g. iGPU-only machines)."""
+    return _vram_info()
 
 @router.get("/api/stats")
 def tool_stats():
@@ -56,6 +86,7 @@ def health():
         "sessions": sessions,
         "rag_chunks": len(RAG_CHUNKS or []),
         "rag_embeddings": len(RAG_INDEX or []),
+        "vram": _vram_info(),
         "uptime_s": round(time.time() - _SERVER_START, 1),
     }
 

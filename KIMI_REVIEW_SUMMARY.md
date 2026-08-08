@@ -255,9 +255,17 @@ Ollama/stream/native/fallback; `exec.py` — диспетчер 26 per-tool хе
     end_col_offset у FunctionDef — конец ВСЕГО блока (не имени). Тест
     test_ast_refactor_tools (rename с проверкой отсутствия 'foo' в файле,
     ошибки для не-.py и отсутствующего символа; extract с синтаксисом;
-    inline двух использований). 94/94, CLI live: модель переименовала
+    inline двух использований). 94/94, CLI live:     модель переименовала
     total → sum_total (def sum_total, print(sum_total)) — файл корректен.
     Сервер перезапущен.
+42. **Этап 29 — VRAM-индикатор** (2026-08-08, P2 #11): api_misc.py
+    `_vram_info()` — nvidia-smi memory.total/used (кэш 10 c, ok=False без
+    GPU) → GET /api/vram + поле vram в /health; static/app.js `vramPoll()`
+    (15 c) — бейдж «VRAM 7.3/12.0 GB (61%)», фон красный при >90%;
+    ui.py бейдж #vram-badge. Тест test_vram_indicator (мок nvidia-smi:
+    парсинг 12288/5120 → free 7168; отсутствие → ok=False). 95/95 ×2.
+    Live: /api/vram = {total 12288, used 9430, ok:true} — qwen3:8b грузит
+    карту. Сервер перезапущен. Остались P2: task-level router, plan tree UI.
 
 Из рекомендаций оценок 2-3 реализовано: few-shot, [DONE]-маркер, один тул за раз, статистика тулов,
 пост-обработка JSON, Docker-песочница, code detector, Cache-Control, динамический контекст,

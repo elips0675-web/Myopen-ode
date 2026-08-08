@@ -155,6 +155,7 @@ body[data-theme="dark"]{--bg:#0f1117;--fg:#e2e8f0;--sidebar:#161b22;--sidebar-bo
     <button onclick="pullModel()" title="Pull model" style="background:var(--btn);color:#fff;border:none;border-radius:4px;padding:2px 8px;cursor:pointer;font-size:11px">+Pull</button>
     <button onclick="delModel()" title="Delete model" style="background:var(--cnl-btn);color:#fff;border:none;border-radius:4px;padding:2px 8px;cursor:pointer;font-size:11px">-Del</button>
     <span class="badge" id="model-badge">Model</span>
+    <span class="badge" id="vram-badge" title="GPU VRAM (nvidia-smi)" style="display:none"></span>
     <span id="prj"></span>
     <span id="st2"></span><a href="/docs" target="_blank" style="font-size:11px;color:var(--st-c);text-decoration:none;margin-left:8px">API</a><span id="ragst" style="font-size:11px;color:var(--st-c);margin-left:8px"></span><span id="updst" style="font-size:11px;color:var(--st-c);margin-left:8px"></span><button onclick="showAudit()" title="Action audit log" style="background:none;border:none;color:var(--st-c);cursor:pointer;font-size:12px;margin-left:8px">&#128203;</button><button onclick="toggleTerm()" title="Terminal" style="background:none;border:none;color:var(--st-c);cursor:pointer;font-size:14px;margin-left:8px">&#9654;_</button><button id="theme-btn" onclick="toggleTheme()" style="background:none;border:none;color:var(--st-c);cursor:pointer;font-size:16px;margin-left:8px">&#127769;</button>
   </div>

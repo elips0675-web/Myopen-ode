@@ -1972,6 +1972,35 @@ def test_ast_refactor_tools():
     assert "x = 2 * 3" not in s3 and "print(2 * 3)" in s3 and "print(2 * 3 + 1)" in s3, s3
     print("  [OK] AST refactor: rename_symbol / extract_function / inline_variable")
 
+def test_vram_indicator():
+    """Stage 29: _vram_info parses nvidia-smi output; ok=False without GPU."""
+    import api_misc
+    old_run = api_misc.subprocess.run
+    old_cache = dict(api_misc._VRAM_CACHE)
+    def fake_run(cmd, **kw):
+        class R:
+            returncode = 0
+            stdout = "12288, 5120\n"
+            stderr = ""
+        return R()
+    try:
+        api_misc._VRAM_CACHE.update({"at": 0, "data": None})
+        api_misc.subprocess.run = fake_run
+        d = api_misc._vram_info()
+        assert d["ok"] and d["total_mb"] == 12288 and d["used_mb"] == 5120 \
+            and d["free_mb"] == 7168, d
+
+        def fake_fail(cmd, **kw):
+            raise FileNotFoundError("nvidia-smi")
+        api_misc.subprocess.run = fake_fail
+        api_misc._VRAM_CACHE.update({"at": 0, "data": None})
+        d = api_misc._vram_info()
+        assert not d["ok"] and d["total_mb"] == 0, d
+    finally:
+        api_misc.subprocess.run = old_run
+        api_misc._VRAM_CACHE.clear(); api_misc._VRAM_CACHE.update(old_cache)
+    print("  [OK] VRAM indicator: nvidia-smi parsed, graceful without GPU")
+
 def test_cross_platform():
     """Cross-platform safety: no hard-coded Windows paths, CREATE_NO_WINDOW
     guarded, core modules importable on any OS (also runs in CI matrix)."""
@@ -1999,7 +2028,7 @@ if __name__ == "__main__":
     if _native_supported(_agent_main.MODEL):
         _agent_main.MODEL = "qwen2.5-coder:7b"
         print("  [test] default MODEL is native-capable -> forced to qwen2.5-coder:7b (legacy path)")
-    tests = [test_cross_platform, test_ast_refactor_tools, test_auto_pick_model, test_docker_sandbox_flag, test_git_auto_commit, test_compact_prompt_after_iterations,
+    tests = [test_cross_platform, test_vram_indicator, test_ast_refactor_tools, test_auto_pick_model, test_docker_sandbox_flag, test_git_auto_commit, test_compact_prompt_after_iterations,
              test_auto_confirm_safe, test_read, test_read_absolute, test_read_url, test_list, test_glob,
              test_write_and_undo, test_edit, test_edit_guard_ambiguous, test_edit_guard_fuzzy_hint,
              test_syntax_guard_write, test_patch_multi_file, test_bash, test_verify_py, test_verify_json,
