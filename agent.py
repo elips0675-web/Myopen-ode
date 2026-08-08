@@ -15,6 +15,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse, HTMLResponse, JSONResponse, FileResponse
+from fastapi import Request
 from pydantic import BaseModel
 from ui import HTML
 
@@ -111,6 +112,40 @@ def _cancel_clear(session_id):
 def _cancel_pending(session_id):
     with _CANCEL_LOCK:
         return (session_id or "") in _CANCEL_FLAGS
+
+# ─── rate limiting (stage 35) ──────────────────────────────
+# Sliding-window per-IP cap for /api/chat (LAN DoS protection) + a cap on
+# concurrent in-flight chat runs per IP (slow client / many sessions).
+RATE_MAX = int(os.environ.get("AI_RATE_LIMIT", "60"))       # requests per window
+RATE_WINDOW = float(os.environ.get("AI_RATE_WINDOW", "60.0"))
+RATE_BURST = int(os.environ.get("AI_RATE_BURST", "6"))      # concurrent per IP
+_RATE_HITS = {}     # ip -> [timestamps]
+_RATE_INFLIGHT = {}  # ip -> int
+_RATE_LOCK = threading.Lock()
+
+def _rate_limited(ip):
+    """Return (blocked, retry_seconds) for the given client IP."""
+    if RATE_MAX <= 0:
+        return False, None
+    now = time.time()
+    with _RATE_LOCK:
+        dq = _RATE_HITS.setdefault(ip, [])
+        while dq and now - dq[0] > RATE_WINDOW:
+            dq.pop(0)
+        if len(dq) >= RATE_MAX:
+            return True, int(RATE_WINDOW - (now - dq[0]) + 1)
+        dq.append(now)
+        if _RATE_INFLIGHT.get(ip, 0) >= RATE_BURST:
+            return True, 2
+    return False, None
+
+def _rate_inc(ip):
+    with _RATE_LOCK:
+        _RATE_INFLIGHT[ip] = _RATE_INFLIGHT.get(ip, 0) + 1
+
+def _rate_dec(ip):
+    with _RATE_LOCK:
+        _RATE_INFLIGHT[ip] = max(0, _RATE_INFLIGHT.get(ip, 0) - 1)
 
 # ─── import tools & rag ───────────────────────────────────
 from tools import (init_config, execute_tool, validate_tool, call_ollama,
@@ -405,7 +440,11 @@ app.mount("/static/vendor/cm", StaticFiles(directory=WORK_DIR / "static" / "vend
 
 
 @app.post("/api/chat")
-async def chat(req: ChatReq):
+async def chat(req: ChatReq, request: Request = None):
+    if request and request.client and request.client.host:
+        blocked, retry = _rate_limited(request.client.host)
+        if blocked:
+            raise HTTPException(429, detail=f"Rate limit exceeded — retry in ~{retry}s")
     session_msgs = []
     if req.session_id:
         s = load_session(req.session_id)
@@ -425,7 +464,9 @@ async def chat(req: ChatReq):
     loop = asyncio.get_running_loop()
     def emit(ev):
         loop.call_soon_threadsafe(q.put_nowait, ev)
+    _rate_inc(request.client.host if request and request.client else "?")
     task = asyncio.create_task(asyncio.to_thread(run_agent_loop, msgs, req.session_id, emit, chosen_model or None))
+    task.add_done_callback(lambda _t: _rate_dec(request.client.host if request and request.client else "?"))
     if req.session_id:
         _cancel_clear(req.session_id)
     async def gen():

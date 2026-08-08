@@ -13,11 +13,12 @@ YAML_TOOL_PAT = re.compile(r'```[^\n]*\ntool\s+(\w+)\n(.*?)\n```', re.DOTALL)
 
 def _parse_tool_json(raw):
     """Parse a ```tool block body with lenient heuristics:
-    plain JSON -> single quotes -> unquoted keys -> trailing-comma / garbage
+    plain JSON -> single quotes -> unquoted keys -> unquoted values (incl.
+    dotted paths / slashes, stage 37) -> trailing-comma / garbage
     trimming (models often append prose after the closing brace)."""
     attempts = [raw, raw.replace("'", '"')]
     attempts.append(re.sub(r'([{,]\s*)([A-Za-z_]\w*)\s*:', r'\1"\2":', attempts[-1]))
-    attempts.append(re.sub(r':\s*([A-Za-z_][A-Za-z0-9_]*)([\s,}])', r': "\1"\2', attempts[-1]))
+    attempts.append(re.sub(r':\s*([A-Za-z_][A-Za-z0-9_./\\\-]*)([\s,}])', r': "\1"\2', attempts[-1]))
     for a in attempts:
         try:
             return json.loads(a)

@@ -131,6 +131,25 @@ def _validate_patch(diff_text):
     return None
 
 # ─── validation ───────────────────────────────────────────
+def _path_dir_hint(p):
+    """Stage 36: semantic argument validation — a path that resolves to an
+    existing DIRECTORY is almost always an invented/wrong argument (models
+    hallucinate `read /tmp`-style paths). Fail fast with a concrete hint
+    instead of a cryptic OS error. Includes the path-jail check."""
+    err = ensure_safe_path(p)
+    if err:
+        return err
+    try:
+        pp = resolve(p)
+    except Exception:
+        return None
+    if pp.exists() and pp.is_dir():
+        return (f"Error: '{p}' looks like a directory, but write/edit/patch needs a "
+                f"FILE path. Use the `list` tool to see its contents or `glob` to "
+                f"find the real file before retrying.")
+    return None
+
+
 def validate_tool(tc):
     name = tc.get("tool", "")
     schema = TOOL_SCHEMAS.get(name)
@@ -198,7 +217,9 @@ def _tool_read(args):
     pp = resolve(p)
     if not pp.exists():
         return f"Error: {p} not found" + (_similar_files(p) or ". Use the glob tool to find files. Do NOT give tutorials — retry with a correct path.")
-    if pp.is_dir(): return f"'{p}' is a directory. Use list tool to see contents."
+    if pp.is_dir():
+        return (f"Error: '{p}' looks like a directory — read needs a FILE path. "
+                f"Use `list` to see its contents or `glob` to find the real file.")
     return pp.read_text("utf-8")
 
 def _tool_web(args):
@@ -210,7 +231,7 @@ def _tool_web(args):
     except Exception as e: return f"Error: {e}"
 
 def _tool_write(args):
-    err = ensure_safe_path(args["path"])
+    err = _path_dir_hint(args["path"])
     if err: return err
     p = resolve(args["path"])
     rel = str(p.relative_to(_s.WORK_DIR.resolve())) if _s.WORK_DIR in p.parents else str(p)
@@ -239,7 +260,7 @@ def _edit_old_stats(content, old):
     return 0, (best, best_r) if best_r >= 0.8 else None
 
 def _tool_edit(args):
-    err = ensure_safe_path(args["path"])
+    err = _path_dir_hint(args["path"])
     if err: return err
     p = resolve(args["path"])
     if not p.exists():
@@ -576,7 +597,7 @@ def _tool_patch(args):
         return "Error: provide path+diff or files=[{path, diff}, ...]"
     out = []
     for path, diff_text in jobs:
-        err = ensure_safe_path(path)
+        err = _path_dir_hint(path)
         if err:
             out.append(err)
             continue

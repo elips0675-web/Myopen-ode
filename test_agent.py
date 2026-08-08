@@ -2133,6 +2133,61 @@ def test_rag_over_plan():
             os.environ["AI_RAG_OVER_PLAN"] = orig_env
     print("  [OK] RAG over plan: plan steps -> pre-loaded file context")
 
+def test_unquoted_json_values():
+    """Stage 37: lenient JSON catches unquoted string VALUES, including
+    dotted paths ({"tool": write, "path": test.py})."""
+    from core.tool_parser import _parse_tool_json
+    j = _parse_tool_json('{"tool": write, "path": test.py, "content": hi_there}')
+    assert j == {"tool": "write", "path": "test.py", "content": "hi_there"}, j
+    j2 = _parse_tool_json('{"tool": "edit", "path": src/mod.py, "old": x, "new": y}')
+    assert j2 == {"tool": "edit", "path": "src/mod.py", "old": "x", "new": "y"}, j2
+    print("  [OK] unquoted JSON values (incl. dotted paths) parsed")
+
+def test_path_dir_hint():
+    """Stage 36: read/write/edit/patch on an existing DIRECTORY fail fast
+    with a concrete hint ('looks like a directory') before any mutation."""
+    d = TMP / "dir_hint_probe"
+    d.mkdir(parents=True, exist_ok=True)
+    assert "Error" in execute_tool("read", {"path": str(d)}), "read dir not rejected"
+    r = execute_tool("write", {"path": str(d), "content": "x"})
+    assert "looks like a directory" in r and "glob" in r, r
+    r = execute_tool("edit", {"path": str(d), "old": "x", "new": "y"})
+    assert "looks like a directory" in r, r
+    f = TMP / "dir_hint_ok.txt"
+    f.write_text("abc")
+    r = execute_tool("read", {"path": str(f)})
+    assert "Error" not in r, "valid file read rejected"
+    print("  [OK] semantic path validation (directory hint before mutation)")
+
+def test_rate_limit():
+    """Stage 35: sliding-window rate limit blocks over-limit IPs; burst cap
+    blocks concurrent in-flight runs; AI_RATE_LIMIT=0 disables."""
+    import agent as ag
+    orig_max, orig_burst, orig_hits, orig_inf = (ag.RATE_MAX, ag.RATE_BURST,
+                                                 ag._RATE_HITS, ag._RATE_INFLIGHT)
+    try:
+        ag.RATE_MAX, ag.RATE_BURST = 3, 1
+        ag._RATE_HITS, ag._RATE_INFLIGHT = {}, {}
+        for _ in range(3):
+            blocked, _ = ag._rate_limited("10.0.0.9")
+            assert not blocked
+        blocked, retry = ag._rate_limited("10.0.0.9")
+        assert blocked and retry >= 1, (blocked, retry)
+        assert ag._rate_limited("10.0.0.10")[0] is False  # other IP untouched
+        # burst cap: 1 concurrent run allowed, 2nd blocked
+        ag._RATE_HITS = {}
+        ag._rate_inc("10.0.0.11")
+        blocked, _ = ag._rate_limited("10.0.0.11")
+        assert blocked, "burst cap not enforced"
+        ag._rate_dec("10.0.0.11")
+        assert ag._rate_limited("10.0.0.11")[0] is False
+        ag.RATE_MAX = 0
+        assert ag._rate_limited("10.0.0.9")[0] is False
+    finally:
+        ag.RATE_MAX, ag.RATE_BURST = orig_max, orig_burst
+        ag._RATE_HITS, ag._RATE_INFLIGHT = orig_hits, orig_inf
+    print("  [OK] rate limit: window block, burst cap, disable, per-IP isolation")
+
 def test_cross_platform():
     """Cross-platform safety: no hard-coded Windows paths, CREATE_NO_WINDOW
     guarded, core modules importable on any OS (also runs in CI matrix)."""
@@ -2160,7 +2215,7 @@ if __name__ == "__main__":
     if _native_supported(_agent_main.MODEL):
         _agent_main.MODEL = "qwen2.5-coder:7b"
         print("  [test] default MODEL is native-capable -> forced to qwen2.5-coder:7b (legacy path)")
-    tests = [test_cross_platform, test_plan_tree_events, test_self_healing_advice, test_rag_over_plan, test_task_router, test_vram_indicator, test_ast_refactor_tools, test_auto_pick_model, test_docker_sandbox_flag, test_git_auto_commit, test_compact_prompt_after_iterations,
+    tests = [test_cross_platform, test_plan_tree_events, test_self_healing_advice, test_rag_over_plan, test_task_router, test_vram_indicator, test_ast_refactor_tools, test_auto_pick_model, test_docker_sandbox_flag, test_git_auto_commit, test_compact_prompt_after_iterations, test_rate_limit, test_path_dir_hint, test_unquoted_json_values,
              test_auto_confirm_safe, test_read, test_read_absolute, test_read_url, test_list, test_glob,
              test_write_and_undo, test_edit, test_edit_guard_ambiguous, test_edit_guard_fuzzy_hint,
              test_syntax_guard_write, test_patch_multi_file, test_bash, test_verify_py, test_verify_json,
