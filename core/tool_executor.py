@@ -17,6 +17,17 @@ def _sess_record(stats, name, result):
         s["errors"] += 1
 
 
+def _auto_confirm_safe(name, tc):
+    """AUTO_CONFIRM_SAFE=1: write to a BRAND-NEW file (does not exist yet) is
+    auto-approved; overwrites, edits, bash, commit, undo still require 'yes'."""
+    import os as _os
+    if name != "write" or _os.environ.get("AUTO_CONFIRM_SAFE") != "1":
+        return False
+    try:
+        from tools import resolve as _resolve
+        return not _resolve(tc.get("path", "")).exists()
+    except Exception:
+        return False
 def _empty_or_trivial(steps):
     steps = [s for s in steps if len(str(s).strip()) > 2
              and not re.fullmatch(r"step\s*\d+", str(s).strip(), re.IGNORECASE)
@@ -123,7 +134,15 @@ def execute_tool_block(idx, tc, ctx):
 
     if name in DESTRUCTIVE:
         last = (msgs[-1]["content"].strip().lower() if msgs else "")[:5]
-        if last in ("yes", "y", "go a", "да", "ok", "cont", "proc", "do i"):
+        if _auto_confirm_safe(name, tc):
+            # AUTO_CONFIRM_SAFE=1: brand-new file writes need no confirmation
+            r = execute_tool(name, tc)
+            _sess_record(ctx["sess_stats"], name, r)
+            ctx["emit"]({"type": "tool", "name": name, "args": tc, "result": r[:200]})
+            entries.append(f"[tool:{name}] {r[:2000]}")
+            calls.append(name)
+            state["last_result_name"], state["last_result_text"] = name, r[:2000]
+        elif last in ("yes", "y", "go a", "да", "ok", "cont", "proc", "do i"):
             r = execute_tool(name, tc)
             _sess_record(ctx["sess_stats"], name, r)
             ctx["emit"]({"type": "tool", "name": name, "args": tc, "result": r[:200]})

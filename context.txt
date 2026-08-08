@@ -694,3 +694,17 @@ UPDATE (2026-08-08) - stage 23 done (P1 #3 Prompt KV-cache), 90/90 x2:
   stream_ollama (mock BOTH call_ollama and stream_ollama!). 90/90 x2, live 4/9
   (usual variance), CLI live, server restarted.
 Next: (4) AUTO_CONFIRM_SAFE, (5) qwen3:8b default >10GB VRAM, (6) Docker default.
+
+UPDATE (2026-08-08) - stage 24 done (P1 #4 AUTO_CONFIRM_SAFE), 91/91 x2:
+- core/tool_executor.py: _auto_confirm_safe(name, tc) - AUTO_CONFIRM_SAFE=1 +
+  write + target file does NOT exist -> execute immediately (no [CONFIRM]);
+  all other destructive ops unchanged. NOTE: 'last' var must be computed
+  before the _auto_confirm_safe branch (yes-autoexec relies on it).
+- Test test_auto_confirm_safe: env set/restored in finally; new file auto-
+  written, overwrite of existing file still [CONFIRM] and file untouched.
+- Live CLI with AUTO_CONFIRM_SAFE=1: write called without CONFIRM (visible as
+  "(called: write)"); the 7B model kept emitting broken blocks that run - that
+  is the known model-behavior limit, not the feature.
+Next: (5) qwen3:8b default >10GB VRAM via ollama ps, (6) Docker default when
+present. Then P2: (7) task-level router, (8) plan tree UI, (9) ARCHITECTURE.md,
+(10) AST refactor tools, (11) VRAM indicator.

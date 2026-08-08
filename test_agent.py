@@ -957,6 +957,52 @@ def test_agent_loop_planner_fallback():
     assert "list" in out, f"tool result missing: {out[:300]}"
     print("  [OK] agent loop: planner fallback to main model")
 
+def test_auto_confirm_safe():
+    """AUTO_CONFIRM_SAFE=1: write to a NEW file executes immediately; writing
+    an EXISTING file and bash still require 'yes'."""
+    import agent as agent_mod
+    import os as _os
+    calls = {"n": 0}
+    def mock_ollama(msgs, model):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            return '```tool\n{"tool": "write", "path": "auto_safe_new.txt", "content": "hello"}\n```', 10
+        return "Done.", 5
+    original = agent_mod.call_ollama
+    old_confirm = agent_mod.NO_CONFIRM
+    agent_mod.call_ollama = mock_ollama
+    agent_mod.NO_CONFIRM = False
+    _os.environ["AUTO_CONFIRM_SAFE"] = "1"
+    sid = "test-auto-safe"
+    agent_mod._PENDING_CONFIRM.clear()
+    try:
+        new_f = WORK_DIR / "auto_safe_new.txt"
+        if new_f.exists():
+            new_f.unlink()
+        out1 = agent_mod.run_agent_loop([{"role": "user", "content": "write a file"}], sid)
+        assert "[CONFIRM]" not in out1, f"new-file write should not confirm: {out1[:200]}"
+        assert new_f.exists() and new_f.read_text() == "hello", "new file not written"
+
+        calls["n"] = 0
+        calls["write_overwrite"] = False
+        def mock2(msgs, model):
+            calls["n"] += 1
+            if calls["n"] == 1:
+                return '```tool\n{"tool": "write", "path": "auto_safe_new.txt", "content": "overwrite"}\n```', 10
+            return "Done.", 5
+        agent_mod.call_ollama = mock2
+        out2 = agent_mod.run_agent_loop([{"role": "user", "content": "overwrite"}], sid + "-2")
+        assert "[CONFIRM]" in out2, "overwrite must confirm even with AUTO_CONFIRM_SAFE"
+        assert new_f.read_text() == "hello", "existing file was overwritten without confirmation"
+    finally:
+        agent_mod.call_ollama = original
+        agent_mod.NO_CONFIRM = old_confirm
+        _os.environ.pop("AUTO_CONFIRM_SAFE", None)
+        agent_mod._PENDING_CONFIRM.clear()
+        if new_f.exists():
+            new_f.unlink()
+    print("  [OK] AUTO_CONFIRM_SAFE: new file auto-write, overwrite still confirmed")
+
 def test_confirm_yes_autoexec():
     """Bug: 'yes' after [CONFIRM] must re-execute the tool without a model call."""
     import agent as agent_mod
@@ -1821,7 +1867,8 @@ def test_cross_platform():
 
 if __name__ == "__main__":
     print(f"\nSmoke tests for agent.py\n{'='*40}")
-    tests = [test_cross_platform, test_git_auto_commit, test_compact_prompt_after_iterations, test_read, test_read_absolute, test_read_url, test_list, test_glob,
+    tests = [test_cross_platform, test_git_auto_commit, test_compact_prompt_after_iterations,
+             test_auto_confirm_safe, test_read, test_read_absolute, test_read_url, test_list, test_glob,
              test_write_and_undo, test_edit, test_edit_guard_ambiguous, test_edit_guard_fuzzy_hint,
              test_syntax_guard_write, test_patch_multi_file, test_bash, test_verify_py, test_verify_json,
              test_backup_undo, test_db_query, test_testgen, test_validation, test_save_api,

@@ -200,6 +200,15 @@ Ollama/stream/native/fallback; `exec.py` — диспетчер 26 per-tool хе
     компактный на поздних, размер < 50%). 90/90 ×2 + live-набор 4/9
     (обычная стохастика: qwen2.5 2/3, qwen3 2/3, 16b 0/3), CLI live,
     сервер перезапущен.
+38. **Этап 24 — AUTO_CONFIRM_SAFE=1** (2026-08-08): в core/tool_executor.py
+    `_auto_confirm_safe(name, tc)` — write в НОВЫЙ файл (не существует) при
+    AUTO_CONFIRM_SAFE=1 выполняется сразу, без [CONFIRM] (diff-preview и
+    git-prebackup по-прежнему работают); overwrite существующего файла, edit,
+    bash, commit, undo — по-прежнему требуют «yes» (NO_CONFIRM остаётся
+    all-or-nothing). Тест test_auto_confirm_safe (новый файл → сразу создан
+    без CONFIRM; повторная запись → CONFIRM, файл нетронут; env
+    восстанавливается). 91/91 ×2, CLI live (write вызван без CONFIRM — модель
+    в прогонах давала битые блоки, известный предел 7B), сервер перезапущен.
 
 Из рекомендаций оценок 2-3 реализовано: few-shot, [DONE]-маркер, один тул за раз, статистика тулов,
 пост-обработка JSON, Docker-песочница, code detector, Cache-Control, динамический контекст,
