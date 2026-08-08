@@ -22,6 +22,8 @@ OPENAI_KEY = ""
 ANTHROPIC_KEY = ""
 FALLBACK_MODEL = ""
 BASH_TIMEOUT = 60
+GIT_AUTO_COMMIT = bool(os.environ.get("GIT_AUTO_COMMIT", ""))
+GIT_AUTO_BRANCH = bool(os.environ.get("GIT_AUTO_BRANCH", ""))
 # DeepSeek-V4-Flash provider URLs (и т.д. бесплатные)
 FLASH_PROVIDERS = {
     "fireworks": "https://api.fireworks.ai/inference/v1",

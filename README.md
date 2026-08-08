@@ -99,6 +99,8 @@ python agent.py
 | `EMBED_MODEL` | `nomic-embed-text` | Модель для RAG |
 | `WORK_DIR` | папка репозитория | Рабочая директория (проект) |
 | `NO_CONFIRM` | `0` | `1` = без подтверждений для write/edit/bash |
+| `GIT_AUTO_COMMIT` | `0` | `1` = авто-коммит после каждого write/edit/patch (`git: <hash>` в ответе тула) |
+| `GIT_AUTO_BRANCH` | `0` | `1` (с GIT_AUTO_COMMIT) = работа в ветке agent-session-*, история не трогается |
 | `PORT` | `8765` | Порт сервера |
 | `OLLAMA_URL` | `http://localhost:11434` | URL сервера Ollama |
 | `MAX_TOKENS` | `0` | Лимит токенов за сессию (0 = без лимита) |

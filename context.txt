@@ -661,3 +661,22 @@ UPDATE (2026-08-08) - stage 21 done (P1 #1 AST-based edit guard), HEAD pending p
   test_edit_guard_ambiguous, test_edit_guard_fuzzy_hint), CLI live, server restarted.
 Next stages: (2) Git-auto-branch, (3) Prompt KV-cache, (4) AUTO_CONFIRM_SAFE,
 (5) qwen3:8b default >10GB VRAM, (6) Docker default.
+
+UPDATE (2026-08-08) - stage 22 done (P1 #2 Git auto-branch/commit), 89/89 x3:
+- tools/_state.py: GIT_AUTO_COMMIT / GIT_AUTO_BRANCH (env, default 0).
+- tools/backup.py git_auto_commit(rel, tool): opt-in; wd = _s.WORK_DIR.resolve();
+  paths normalized "\\"->"/" and relative-to-wd (abs outside repo -> None);
+  GIT_AUTO_BRANCH creates agent-session-<ts> branch on FIRST commit;
+  git add -- <rel> + git commit --no-verify -m "agent: <tool> <path>";
+  returns "git: <hash> committed" or None (no repo/disabled/fail). Appended to
+  write/edit/patch results.
+- IMPORTANT fix: rel path in _tool_write/_tool_edit was computed against the
+  STALE exec.py copy of WORK_DIR (frozen at import) -> when tests changed
+  _state.WORK_DIR the rel was wrong and git add failed on Windows backslashes.
+  Now rel uses _s.WORK_DIR.resolve(). Also git add needs forward slashes.
+- Test test_git_auto_commit: temp repo via git init -b main (no checkout!),
+  force rmtree with chmod onerror (Windows .git read-only files block plain
+  rmtree - that was the "temp repo cleanup failed" flake), write+edit ->
+  "git:" in result, branch starts agent-session-, main log still "base".
+Next: (3) Prompt KV-cache, (4) AUTO_CONFIRM_SAFE, (5) qwen3 default >10GB,
+(6) Docker default when present.

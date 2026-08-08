@@ -9,6 +9,7 @@ from ._state import WORK_DIR, MODEL, TOOL_SCHEMAS, TODO_LIST, TODO_LOCK
 from ._state import _sync_register
 from .paths import resolve, ensure_safe_path, _similar_files
 from .backup import backup, undo, git, git_prebackup, git_restore_all, diff_preview, verify_file
+from .backup import git_auto_commit as _git_auto_commit
 from .plugins import call_plugin
 from .llm import call_ollama
 from .audit import _audit, _stats_record
@@ -212,15 +213,17 @@ def _tool_write(args):
     err = ensure_safe_path(args["path"])
     if err: return err
     p = resolve(args["path"])
-    rel = str(p.relative_to(WORK_DIR)) if WORK_DIR in p.parents else str(p)
+    rel = str(p.relative_to(_s.WORK_DIR.resolve())) if _s.WORK_DIR in p.parents else str(p)
     backup(rel)
     p.parent.mkdir(parents=True, exist_ok=True)
     p.write_text(args["content"], "utf-8")
     v = verify_file(str(p))
     sc = _syntax_check(str(p))
+    gc = _git_auto_commit(rel, "write")
     msg = f"Written {len(args['content'])}b to {p}"
     if v: msg += f"\nVerify: {v[:500]}"
     if sc: msg += f"\nSyntax: {sc}"
+    if gc: msg += f"\n{gc}"
     return msg
 
 def _edit_old_stats(content, old):
@@ -256,14 +259,16 @@ def _tool_edit(args):
         return (f"Error: 'old' text found {count} times in {args['path']} — ambiguous, "
                 f"edit NOT applied.\nMake the old text unique: include the surrounding lines "
                 f"from the file (copy EXACTLY from read output), so only one match remains.")
-    rel = str(p.relative_to(WORK_DIR)) if WORK_DIR in p.parents else str(p)
+    rel = str(p.relative_to(_s.WORK_DIR.resolve())) if _s.WORK_DIR in p.parents else str(p)
     backup(rel)
     p.write_text(content.replace(old, new), "utf-8")
     v = verify_file(str(p))
     sc = _syntax_check(str(p))
+    gc = _git_auto_commit(rel, "edit")
     msg = f"Replaced in {p}"
     if v: msg += f"\nVerify: {v[:500]}"
     if sc: msg += f"\nSyntax: {sc}"
+    if gc: msg += f"\n{gc}"
     return msg
 
 def _tool_bash(args):
@@ -423,6 +428,10 @@ def _tool_patch(args):
         if v: m += f"\nVerify: {v[:300]}"
         if sc: m += f"\nSyntax: {sc}"
         out.append(m)
+    if jobs:
+        gc = _git_auto_commit([p for p, _ in jobs], "patch")
+        if gc:
+            out.append(gc)
     return "\n".join(out)
 
 def _tool_task(args):

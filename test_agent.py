@@ -1692,6 +1692,69 @@ def test_session_checkpoint():
         shutil.rmtree(tmp_sessions, ignore_errors=True)
     print("  [OK] session checkpoint + interrupted marker")
 
+def test_git_auto_commit():
+    """write/edit/patch auto-commit into an agent branch (GIT_AUTO_COMMIT=1,
+    GIT_AUTO_BRANCH=1) without touching the user's default branch."""
+    import subprocess as _sp
+    import shutil
+    import sys as _sys
+    _bk = _sys.modules["tools.backup"]
+    def _force_rm(p):
+        def _onerr(func, path, exc_info):
+            try:
+                os.chmod(path, 0o777)
+                func(path)
+            except OSError:
+                pass
+        if p.exists():
+            shutil.rmtree(p, onerror=_onerr)
+    repo = (TMP / "git_auto_repo").resolve()
+    for _ in range(30):
+        try:
+            _force_rm(repo)
+            repo.mkdir(parents=True)
+            break
+        except OSError:
+            time.sleep(0.2)
+    assert repo.exists() and not (repo / ".git").exists(), "temp repo cleanup failed"
+    _sp.run(["git", "init", "-q", "-b", "main"], cwd=str(repo), check=True)
+    _sp.run(["git", "config", "user.email", "t@t"], cwd=str(repo))
+    _sp.run(["git", "config", "user.name", "t"], cwd=str(repo))
+    (repo / "base.txt").write_text("base\n")
+    _sp.run(["git", "add", "."], cwd=str(repo))
+    _sp.run(["git", "commit", "-q", "-m", "base"], cwd=str(repo))
+    from tools import _state as _st
+    old_wd, old_ac, old_ab = _st.WORK_DIR, _st.GIT_AUTO_COMMIT, _st.GIT_AUTO_BRANCH
+    old_bk = _bk.WORK_DIR, _bk.BACKUP_DIR
+    try:
+        _st.WORK_DIR = repo; _st.GIT_AUTO_COMMIT = True; _st.GIT_AUTO_BRANCH = True
+        _bk.WORK_DIR = repo
+        _bk.BACKUP_DIR = repo / ".agent_backups"; _bk.BACKUP_DIR.mkdir(exist_ok=True)
+        r = execute_tool("write", {"path": str(repo / "a.py"), "content": "x = 1\n"})
+        if "git:" not in r:
+            dbg = _sp.run(["git", "status", "--short", "--branch"], cwd=str(repo),
+                          capture_output=True, text=True).stdout
+            dbg2 = _sp.run(["git", "log", "--oneline", "-3"], cwd=str(repo),
+                           capture_output=True, text=True).stdout
+            raise AssertionError(f"no auto-commit: {r}\n{dbg}\n{dbg2}")
+        assert "committed" in r, f"auto-commit malformed: {r}"
+        branch = _sp.run(["git", "rev-parse", "--abbrev-ref", "HEAD"], cwd=str(repo),
+                         capture_output=True, text=True).stdout.strip()
+        assert branch.startswith("agent-session-"), f"not on agent branch: {branch}"
+        r = execute_tool("edit", {"path": str(repo / "a.py"), "old": "x = 1", "new": "x = 2"})
+        assert "git:" in r and "committed" in r, f"edit not committed: {r}"
+        log = _sp.run(["git", "log", "--oneline", "-3"], cwd=str(repo),
+                      capture_output=True, text=True).stdout
+        assert log.count("agent:") >= 2, f"commit history wrong: {log}"
+        main_log = _sp.run(["git", "log", "--oneline", "main", "-1"], cwd=str(repo),
+                           capture_output=True, text=True).stdout
+        assert "base" in main_log, "main history was touched"
+    finally:
+        _st.WORK_DIR, _st.GIT_AUTO_COMMIT, _st.GIT_AUTO_BRANCH = old_wd, old_ac, old_ab
+        _bk.WORK_DIR, _bk.BACKUP_DIR = old_bk
+        shutil.rmtree(repo, ignore_errors=True)
+    print("  [OK] git auto-commit on agent branch (write+edit), main untouched")
+
 def test_cross_platform():
     """Cross-platform safety: no hard-coded Windows paths, CREATE_NO_WINDOW
     guarded, core modules importable on any OS (also runs in CI matrix)."""
@@ -1714,7 +1777,7 @@ def test_cross_platform():
 
 if __name__ == "__main__":
     print(f"\nSmoke tests for agent.py\n{'='*40}")
-    tests = [test_cross_platform, test_read, test_read_absolute, test_read_url, test_list, test_glob,
+    tests = [test_cross_platform, test_git_auto_commit, test_read, test_read_absolute, test_read_url, test_list, test_glob,
              test_write_and_undo, test_edit, test_edit_guard_ambiguous, test_edit_guard_fuzzy_hint,
              test_syntax_guard_write, test_patch_multi_file, test_bash, test_verify_py, test_verify_json,
              test_backup_undo, test_db_query, test_testgen, test_validation, test_save_api,

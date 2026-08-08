@@ -174,6 +174,19 @@ Ollama/stream/native/fallback; `exec.py` — диспетчер 26 per-tool хе
     test_edit_guard_ambiguous (2 вхождения → reject, уникальный edit проходит,
     Syntax: OK) и test_edit_guard_fuzzy_hint (опечатка → «Closest match»). 88/88,
     CLI live, сервер перезапущен.
+36. **Этап 22 — Git auto-branch / auto-commit** (2026-08-08): opt-in через
+    `GIT_AUTO_COMMIT=1` (+`GIT_AUTO_BRANCH=1`): после каждого успешного
+    write/edit/patch — `git add <rel> + git commit --no-verify -m "agent: <tool>
+    <path>"`, ответ тула получает «git: <hash> committed». GIT_AUTO_BRANCH
+    создаёт ветку agent-session-<ts> при первом коммите — история юзера
+    (main/master) не трогается; вне git-репо или при сбое — тихий None (бэкапы
+    .agent_backups остаются основным undo-механизмом). Найдены и исправлены
+    два бага по ходу: (1) rel-путь write/edit считался от устаревшей копии
+    WORK_DIR в exec.py — теперь от _s.WORK_DIR.resolve(); (2) git add с
+    обратными слэшами в Windows — нормализация "\"→"/". Тест
+    test_git_auto_commit (временный репо, ветка agent-session, main нетронут,
+    history ≥2 «agent:» коммитов; rmtree с chmod-обработчиком из-за read-only
+    .git на Windows). 89/89 ×3, CLI live, сервер перезапущен.
 
 Из рекомендаций оценок 2-3 реализовано: few-shot, [DONE]-маркер, один тул за раз, статистика тулов,
 пост-обработка JSON, Docker-песочница, code detector, Cache-Control, динамический контекст,

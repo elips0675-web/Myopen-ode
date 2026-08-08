@@ -1,5 +1,5 @@
 """File versioning (backups), git pre-backup/restore, verify, git helpers."""
-import os, re, subprocess, shutil, sys
+import os, re, subprocess, shutil, sys, time
 from pathlib import Path
 from datetime import datetime
 from ._state import WORK_DIR, BACKUP_DIR, MAX_BACKUPS
@@ -149,6 +149,61 @@ def git_restore_all(sid=None):
                 continue
     msgs.append(f"{removed} new untracked item(s) removed, {restored} restored")
     return f"Restored to snapshot {d.name}: " + "; ".join(msgs)
+
+# ─── git auto-branch / auto-commit (stage 22) ─────────────
+def git_is_repo():
+    return (WORK_DIR / ".git").exists()
+
+_GIT_BRANCH_CREATED = False
+
+def git_auto_commit(rel, tool="edit"):
+    """Auto-commit a mutated file after write/edit/patch (opt-in via
+    GIT_AUTO_COMMIT=1). With GIT_AUTO_BRANCH=1 the first commit creates an
+    agent-session-* branch so the user's history (e.g. master) is never touched.
+    Returns "git: <hash> <msg>" to append to the tool result, or None when
+    disabled / not a repo / commit failed."""
+    from . import _state as _s
+    if not _s.GIT_AUTO_COMMIT:
+        return None
+    wd = Path(_s.WORK_DIR).resolve()
+    if not (wd / ".git").exists():
+        return None
+    rels = [rel] if isinstance(rel, str) else list(rel)
+    fixed = []
+    for r in rels:
+        rp = Path(r)
+        r = r.replace("\\", "/")
+        if rp.is_absolute():
+            try:
+                r = str(rp.resolve().relative_to(wd)).replace("\\", "/")
+            except ValueError:
+                return None  # file outside the repo
+        fixed.append(r)
+    rel = fixed[0]
+    global _GIT_BRANCH_CREATED
+    try:
+        if _s.GIT_AUTO_BRANCH and not _GIT_BRANCH_CREATED:
+            _GIT_BRANCH_CREATED = True
+            name = f"agent-session-{int(time.time())}"
+            r = subprocess.run(["git", "checkout", "-b", name], cwd=str(wd),
+                               capture_output=True, text=True, timeout=20)
+            if r.returncode != 0 and "already exists" not in r.stderr:
+                # existing dirty workdir on a branch switch can fail; fall back
+                # to the current branch but never touch master history
+                _GIT_BRANCH_CREATED = False
+        for r in fixed:
+            subprocess.run(["git", "add", "--", r], cwd=str(wd),
+                           capture_output=True, text=True, timeout=20)
+        r = subprocess.run(["git", "commit", "--no-verify", "-m",
+                            f"agent: {tool} {rel}"], cwd=str(wd),
+                           capture_output=True, text=True, timeout=30)
+        if r.returncode != 0:
+            return None  # nothing to commit / conflict
+        h = subprocess.run(["git", "rev-parse", "--short", "HEAD"], cwd=str(wd),
+                           capture_output=True, text=True, timeout=10).stdout.strip()
+        return f"git: {h} committed"
+    except (OSError, subprocess.SubprocessError, ValueError):
+        return None
 
 # ─── verify ───────────────────────────────────────────────
 def diff_preview(path, old, new, context=3):
