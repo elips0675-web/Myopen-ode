@@ -53,7 +53,7 @@
 - ✅ **MCP сервер** — Model Context Protocol для интеграции с VS Code, Cursor, Claude Desktop
 - ✅ **Tab completion** — автодополнение путей по Tab в чате
 - ✅ **Progress bar** — SSE прогресс при pull модели
-- ✅ **Desktop App** — нативное окно через pywebview (или браузер)
+- ✅ **Desktop App** — нативное окно через Tauri/WebView2 и pywebview (или браузер)
 - ✅ **Плагины** — `.agent_plugins/*.py`, динамическая загрузка новых инструментов
 - ✅ **Slash-команды** — /test, /deploy, /review, /fix, /doc в чате
 - ✅ **Todo tracking** — todo-лист внутри сессии (add/complete/list)
@@ -234,7 +234,7 @@ Local AI coding agent powered by Ollama. Free, private, offline alternative to C
 - ✅ **MCP server** — Model Context Protocol for VS Code, Cursor, Claude Desktop integration
 - ✅ **Tab completion** — path completion via Tab key in chat
 - ✅ **Progress bar** — SSE progress stream for model pull
-- ✅ **Desktop App** — native window via pywebview (or browser fallback)
+- ✅ **Desktop App** — native window via Tauri/WebView2 and pywebview (or browser fallback)
 - ✅ **Plugins** — `.agent_plugins/*.py`, dynamic tool loading
 - ✅ **Slash commands** — /test, /deploy, /review, /fix, /doc in chat
 - ✅ **Todo tracking** — in-session todo list (add/complete/list)
@@ -251,7 +251,7 @@ Local AI coding agent powered by Ollama. Free, private, offline alternative to C
 - ✅ **Update check** (`/api/update` badge) + CI matrix (Windows/Linux/macOS) + JSON Schema constrained output
 - ✅ **RAG folder scope** + source attribution `[file:line]`
 - ✅ **MCP client** — full handshake (initialize → notifications/initialized), resources/prompts/tools
-- ✅ **Desktop App** — native window via pywebview: auto-start/reuse server, ready-poll, app icon, browser fallback
+- ✅ **Desktop App** — native window via pywebview/Tauri: auto-start/reuse server, ready-poll, app icon, browser fallback
 
 ### Tests
 

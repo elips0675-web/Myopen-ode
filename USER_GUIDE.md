@@ -61,6 +61,28 @@
 
 Подтверждения: опасные операции (запись файлов, edit, bash, commit) требуют вашего `yes` — это защита. Если хотите авто-подтверждение — запустите с `NO_CONFIRM=1` (только для доверенных проектов!).
 
+## Десктоп-обёртка (Tauri / pywebview)
+
+Есть два способа запустить нативное окно (обе обёртки сами стартуют сервер,
+если он не запущен, и переиспользуют уже работающий):
+
+| Способ | Что нужно | Команда |
+|---|---|---|
+| **Tauri (WebView2)** | Rust + MSVC Build Tools (одноразовая установка) | `scripts\run_tauri.bat` (первый запуск компилирует обёртку, дальше — мгновенный старт) |
+| **pywebview** | `pip install pywebview` | `python desktop.py` (флаг `--browser` — открыть в браузере) |
+
+Установка тулчейна для Tauri (Windows):
+
+```
+winget install Rustlang.Rustup -e
+winget install --id Microsoft.VisualStudio.2022.BuildTools -e --override "--quiet --wait --norestart --add Microsoft.VisualStudio.Workload.VCTools --includeRecommended"
+# в новом терминале: rustup default stable
+```
+
+Обёртка Tauri: окно WebView2 1280×860 с иконкой, URL `http://127.0.0.1:8765`.
+Полезные env: `MYOPENCODE_PORT` (порт, по умолчанию 8765), `MYOPENCODE_PYTHON`
+(интерпретатор для автозапуска сервера).
+
 ## Настройка (env-переменные)
 
 | Переменная | По умолчанию | Что делает |

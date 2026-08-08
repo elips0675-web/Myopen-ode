@@ -150,6 +150,17 @@ Ollama/stream/native/fallback; `exec.py` — диспетчер 26 per-tool хе
     Whitelist /static/vendor/ дополнен (cm6.bundle.js); RAG-флак (большой
     JS-бандл попадал в индекс) устранён: `static`/`vendor` добавлены в
     SKIP_PARTS. 86/86 ×2 прогона, CLI live, сервер перезапущен.
+34. **Этап 20 — Tauri desktop (WebView2)** (2026-08-08): установлены Rust
+    1.97.1 (rustup) + MSVC Build Tools (VCTools workload, winget) — блокер
+    снят. Обёртка `src-tauri/` (cargo-only, без npm): main.rs — если
+    :8765 закрыт, сам спавнит `python -X utf8 agent.py` (env
+    MYOPENCODE_PORT/MYOPENCODE_PYTHON), ждёт готовности (poll 0.5s × 240),
+    затем tauri::Builder → окно WebView2 1280×860, иконка из assets/icon.ico,
+    URL devUrl http://127.0.0.1:8765 (живой UI агента). Сборка 2m16s,
+    `cargo build` (debug, без bundling) → `target/debug/myopencode.exe`;
+    запуск окна подтверждён (WebView2-процессы поднялись). Стартер
+    `scripts/run_tauri.bat` (сборка при первом запуске + инструкция
+    установки тулчейна). Pywebview сохранён как fallback. 86/86, CLI live.
 
 Из рекомендаций оценок 2-3 реализовано: few-shot, [DONE]-маркер, один тул за раз, статистика тулов,
 пост-обработка JSON, Docker-песочница, code detector, Cache-Control, динамический контекст,
@@ -159,10 +170,8 @@ native tool calling, desktop (pywebview). «Таймаут после [CONFIRM]�
 после CONFIRM цикл завершается break по дизайну (юзер пишет «yes» → auto-exec pending без вызова модели).
 
 ## Что осталось (P2)
-- Tauri desktop (ждёт установки Rust/MSVC — pywebview уже закрывает потребность)
-- Tauri desktop (ждёт установки Rust/MSVC — pywebview уже закрывает потребность)
-- JSON Schema constrained output — экспериментально доступен (AI_JSON_FORMAT=1)
-- UI-динамика (индикатор «думает», RAG-прогресс, audit-просмотр) — уже реализованы в app.js
+- закрыто: Tauri desktop ✓ (этап 20), JSON Schema constrained output ✓ (AI_JSON_FORMAT=1),
+  UI-динамика ✓ (индикатор «думает», RAG-прогресс, audit-просмотр)
 
 ## Известные пределы (поведение модели, не кода)
 - Полный цикл «исправь баг + прогони тесты» требует follow-up «yes» на [CONFIRM] (деструктивные операции — по дизайну)

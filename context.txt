@@ -575,3 +575,33 @@ UPDATE (2026-08-08) - stage 19: CodeMirror 6 replaces CodeMirror 5 (86/86):
     SKIP_PARTS. test_rag_search_via_execute stable across two full runs.
 (5) 86/86 x2, CLI live ("4"), server restarted (index serves cm6 script,
     /static/vendor/cm6.bundle.js 200, /health 200). P2 left: Tauri only.
+
+UPDATE (2026-08-08) - stage 20: Tauri desktop done (P2 fully closed, 86/86):
+(1) Toolchain: winget Rustlang.Rustup (rustc 1.97.1, msvc target default) +
+    winget Microsoft.VisualStudio.2022.BuildTools --override "--quiet --wait
+    --norestart --add Microsoft.VisualStudio.Workload.VCTools --add
+    Microsoft.VisualStudio.Component.VC.Tools.x86.x64 --includeRecommended"
+    -> cl.exe at Program Files (x86)...BuildTools. Add C:\Users\admin\.cargo\bin
+    to PATH in every shell (rustup installs there, not auto-added to PATH of
+    existing processes).
+(2) src-tauri/ = cargo-only wrapper (NO npm needed): Cargo.toml (tauri 2,
+    tauri-build 2, edition 2021, release opt-level s), build.rs, tauri.conf.json
+    (productName "My Open Code", identifier com.myopencode.desktop, devUrl
+    http://127.0.0.1:8765, frontendDist ../dist as dummy because bundle.active
+    = false, window 1280x860 center min 800x600, bundle inactive, icon
+    icons/icon.ico), src/main.rs: if :8765 closed -> spawn python -X utf8
+    agent.py in project cwd (MYOPENCODE_PYTHON/MYOPENCODE_PORT env), poll
+    TcpStream connect 0.5s x 240; tauri::Builder::default().run. Icons copied
+    from assets/icon.ico.
+(3) Build: cargo build in src-tauri/ (first ~2m16s) -> target/debug/myopencode.exe
+    (target/ is gitignored by src-tauri/.gitignore). Launch verified: process
+    alive + 3 msedgewebview2 children (WebView2 window really opened).
+    scripts/run_tauri.bat: builds on first run, prints toolchain install
+    instructions if cargo missing, starts the exe.
+(4) devUrl-only approach: release/bundle build does NOT make sense here -
+    the whole UI is served by agent.py (ui.py HTML string + /static), so the
+    wrapper always targets the live server (same reuse logic as desktop.py).
+(5) Docs: KIMI stage 34 + "Что осталось (P2)" closed, TODO stage 20, README
+    desktop mentions (Tauri/WebView2 + pywebview), USER_GUIDE new section
+    with both launchers + winget toolchain commands. 86/86, CLI live ("21"),
+    /health 200. Test instance of the exe was closed after verification.

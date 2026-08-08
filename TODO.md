@@ -137,6 +137,13 @@ Kimi 2: 8.3/10 → DeepSeek 2: 8.5/10 → DeepSeek 3: 8.6/10 → Kimi 3: 8.7/10
 - [x] Whitelist /static/vendor/ + cm6.bundle.js; RAG-флак устранён: static/vendor в SKIP_PARTS (616KB-бандл попадал в индекс)
 - [x] Тесты: test_vendor_static + cm6.bundle.js; 86/86 ×2 прогона, CLI live, сервер перезапущен (index без CM5-тегов, /static/vendor/cm6.bundle.js 200)
 
+## Этап 20. Tauri desktop (2026-08-08) — СДЕЛАНО
+- [x] Установлены Rust 1.97.1 (winget Rustup.Rustup) + MSVC Build Tools (winget Microsoft.VisualStudio.2022.BuildTools, override VCTools + VC.Tools.x86.x64 --includeRecommended); rustc/cargo/cl.exe проверены
+- [x] src-tauri/ (cargo-only): main.rs — reuse сервера на :8765 (иначе spawn `python -X utf8 agent.py`, poll 0.5s×240, env MYOPENCODE_PORT/MYOPENCODE_PYTHON) → tauri::Builder → окно WebView2 1280×860 (center, min 800×600), иконка icons/icon.ico (копия assets), devUrl http://127.0.0.1:8765 (живой UI, как desktop.py); bundle inactive (frontendDist — заглушка, фронтенд отдаёт сервер)
+- [x] Сборка cargo build 2m16s → target/debug/myopencode.exe; запуск окна подтверждён (3 WebView2-процесса, процесс жив); scripts/run_tauri.bat — сборка при первом запуске + инструкция установки тулчейна
+- [x] Pywebview сохранён как fallback (desktop.py не тронут); USER_GUIDE — таблица двух способов запуска
+- [x] 86/86, CLI live («21»), сервер перезапущен (/health 200); KIMI P2 закрыт (Tauri ✓)
+
 ## Собственные идеи (низкий приоритет)
 - [x] Native tool calling — СДЕЛАНО (Этап 10)
 - [x] Desktop App — СДЕЛАНО как Этап 11 (pywebview; Tauri требует Rust/MSVC тулчейн — не установлен)
