@@ -11,10 +11,12 @@
 
 ## Архитектура (3 слоя)
 HTML/CLI UI --HTTP/SSE--> FastAPI (`agent.py`) --> agent loop (LLM → parse → tool → LLM, max 12 итераций)
---> Ollama 127.0.0.1:11434. Файлы: `agent.py` (сервер+цикл, ~1030 стр.), `tools.py` (28 инструментов +
-call_ollama + bash-песочница, ~1110 стр.), `rag.py` (гибридный поиск BM25+эмбеддинги, FAISS/numpy),
-`ui.py` (HTML, ~20KB) + `static/app.js` (JS, 30KB), `lsp.py`, `mcp_server.py`, `mcp_client.py`,
-плагины `.agent_plugins/*.py`, скиллы `.agent_skills/`.
+--> Ollama 127.0.0.1:11434. Файлы: `agent.py` (сервер+цикл, ~1030 стр.), `tools/` — пакет
+(`_state.py` — конфиг+глобалы+init_config с синхронизацией копий; `llm.py` — Ollama/stream/native/fallback;
+`exec.py` — validate/execute/bash-обёртки; `backup.py`, `plugins.py`, `audit.py`, `paths.py`,
+`__init__.py` — фасад-реэкспорт; был монолитом tools.py ~1350 стр.), `rag.py` (гибридный поиск
+BM25+эмбеддинги, FAISS/numpy), `ui.py` (HTML, ~20KB) + `static/app.js` (JS, 30KB), `lsp.py`,
+`mcp_server.py`, `mcp_client.py`, плагины `.agent_plugins/*.py`, скиллы `.agent_skills/`.
 
 ## Оценки внешних ревьюверов
 - Kimi: **8.3/10** (оценка 2, 2026-08-05; P1: Docker > рефакторинг монолитов; whitelist bash уже был — ревьювер не увидел)
@@ -96,6 +98,14 @@ call_ollama + bash-песочница, ~1110 стр.), `rag.py` (гибридн�
     вытеснение VRAM (12GB). Роутер больше НЕ переключает юзер-выбранную модель (раньше юзер выбрал
     16b, а работала qwen2.5-coder:7b — молча); planner-retry сохранён. Пустой ответ модели —
     один retry перед break.
+28. **Этап 14 (`4a5fe21`) — рефакторинг монолита tools.py → пакет tools/**: _state.py (все
+    мутабельные глобалы + init_config с _sync_register: копии конфиг-имён в каждом подмодуле
+    синхронизируются), paths/backup/plugins/llm/audit/exec, __init__.py — фасад с полным
+    реэкспортом API (включая tools.requests для моков тестов и приватные хелперы). Циклы импортов
+    решены: BASH_TIMEOUT читается через _state, SUBAGENT_PROMPTS — лениво через `import tools`,
+    requests/DDGS — ленивые импорты. Замечание: `tools.WORK_DIR = x` больше не распространяется
+    на подмодули — только tools.init_config(WORK_DIR=x) (обновлён test_git_snapshot_restore).
+    Проверено: 83/83, CLI live, сервер перезапущен на новой структуре.
 
 Из рекомендаций оценок 2-3 реализовано: few-shot, [DONE]-маркер, один тул за раз, статистика тулов,
 пост-обработка JSON, Docker-песочница, code detector, Cache-Control, динамический контекст,
@@ -105,12 +115,12 @@ native tool calling, desktop (pywebview). «Таймаут после [CONFIRM]�
 после CONFIRM цикл завершается break по дизайну (юзер пишет «yes» → auto-exec pending без вызова модели).
 
 ## Что осталось (P2)
-- Рефакторинг монолитов: core/agent_loop.py, core/tool_parser.py, core/tool_executor.py, core/safety/*
-- TOOL_STATS в system prompt (нужен per-session stats)
-- Динамические элементы UI: индикатор «модель думает», прогресс-бар RAG, просмотр audit-лога
+- Рефакторинг: agent.py (~880 стр. FastAPI) — вынос роутов; _execute_tool_inner (366 стр.) — разбивка
+- TOOL_STATS в system prompt (per-session stats — частично закрыт через sess_stats в _dynamic_context)
 - CodeMirror 6 / Monaco; AST multi-file edit (parso/tree-sitter)
 - Tauri desktop (ждёт установки Rust/MSVC — pywebview уже закрывает потребность)
 - JSON Schema constrained output — экспериментально доступен (AI_JSON_FORMAT=1)
+- UI-динамика (индикатор «думает», RAG-прогресс, audit-просмотр) — уже реализованы в app.js
 
 ## Известные пределы (поведение модели, не кода)
 - Полный цикл «исправь баг + прогони тесты» требует follow-up «yes» на [CONFIRM] (деструктивные операции — по дизайну)

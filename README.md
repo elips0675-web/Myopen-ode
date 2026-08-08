@@ -113,7 +113,8 @@ python agent.py
 
 ```
 agent.py   — FastAPI сервер, endpoints, agent loop
-tools.py   — инструменты, call_ollama с retry, fallback, bash sandbox
+tools/     — пакет инструментов: _state.py (конфиг), llm.py (Ollama/native/fallback),
+             exec.py (validate/execute/bash), backup.py, plugins.py, audit.py, paths.py
 rag.py     — индексация и семантический поиск с дисковым кешем
 ui.py      — HTML UI (встроенный, без зависимостей)
 ```
@@ -294,7 +295,8 @@ python agent.py
 
 ```
 agent.py   — FastAPI server, endpoints, agent loop
-tools.py   — tool implementations, Ollama caller with retry, bash sandbox
+tools/     — tool package: _state.py (config), llm.py (Ollama/native/fallback),
+             exec.py (validate/execute/bash), backup.py, plugins.py, audit.py, paths.py
 rag.py     — code indexing and semantic search with disk cache
 ui.py      — HTML UI (inline, zero dependencies)
 ```
