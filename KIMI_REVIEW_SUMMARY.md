@@ -30,6 +30,7 @@ Ollama/stream/native/fallback; `exec.py` — диспетчер 26 per-tool хе
 - DeepSeek: **8.9/10** (оценка 4, 2026-08-08; «самая зрелая локальная open-source альтернатива Cursor/Claude Code»; до 9.2–9.3: AUTO_CONFIRM_SAFE, qwen3:8b дефолт при 12GB+, Docker по умолчанию; до 9.5: ARCHITECTURE.md+Mermaid, AST-рефакторинг тулы, VRAM-индикатор)
 - Внешний ревьювер: **8.8/10** (оценка 4, 2026-08-08; план до 9.5: P1 — AST-based edit guard, git-auto-branch, prompt KV-cache; P2 — task-level router, plan tree UI, Tauri [уже сделан этапом 20]; P3 — self-healing loop, multi-turn RAG)
 - Внешний ревьювер: **8.9/10** (оценка 5, 2026-08-08, +0.1 к 8.8; «зона production-ready beta», Tauri закрыл последний крупный P2; план P1/P2/P3 — ВЕСЬ закрыт этапами 21–31: edit guard=21, git-auto-branch=22, KV-cache=23, AUTO_CONFIRM_SAFE=24, авто-модель=25, Docker=26, ARCHITECTURE.md=27, AST-тулы=28, VRAM=29, router=30, plan tree=31; тесты 97/97 (на момент оценки было 86/86); до 9.5 остался P3: self-healing loop, multi-turn RAG, voice input)
+- DeepSeek: **8.9/10** (оценка 5, переоценка, 2026-08-08; Stage 20 Tauri закрыл все P2; «production-ready»; P1-план — весь закрыт этапами 21–26, P2 — этапами 27–31; тесты 97/97 на сегодня; до 9.5 остался P3: self-healing loop, multi-turn RAG, voice input)
 
 ## Сессия 2026-08-05 (коммиты 2480a59..c2aea27, все запушены)
 1. **Живой стриминг**: `stream_ollama()` отдаёт текст по мере генерации → UI печатает с ~2.6s

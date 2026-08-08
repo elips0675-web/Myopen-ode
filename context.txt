@@ -814,3 +814,16 @@ UPDATE (2026-08-08) - external review #2 (Kimi file): 8.9/10 (+0.1), оценк�
 - Files updated: 'Оценка kimi.txt' (ОЦЕНКА 5 section), KIMI_REVIEW_SUMMARY.md
   (header line + section), TODO.md (rating line), README.md (ratings line).
 - Remaining to 9.5: P3 - self-healing loop, multi-turn RAG, voice input.
+
+UPDATE (2026-08-08) - DeepSeek re-evaluation (Оценка deepseek.txt): 8.9/10 (evaluation 5):
+- Same eval as external #2 (8.9): Stage 20 Tauri desktop (WebView2, ~50MB RAM
+  vs ~300MB pywebview), 86/86 tests at review time, repo github.com/elips0675-web/Myopen-ode.
+- Verdict: 'production-ready product', project keeps position as most mature
+  local open-source Cursor/Claude Code alternative; Tauri closed the last P2.
+- P1 list at review time: AST edit guard, git-auto-branch, prompt KV-cache,
+  AUTO_CONFIRM_SAFE, qwen3:8b default >10GB, Docker default - ALL now done
+  (stages 21-26). P2: task router, plan tree, ARCHITECTURE.md, AST tools,
+  VRAM indicator - ALL done (stages 27-31). Tests now 97/97 x2.
+- Remaining to 9.5: P3 - self-healing loop, multi-turn RAG, voice input.
+- Files updated: 'Оценка deepseek.txt' (ОЦЕНКА 5 section), KIMI_REVIEW_SUMMARY.md
+  (DeepSeek bullet), TODO.md rating line, README.md ratings line.

@@ -408,3 +408,144 @@ My OpenCode v2: ✅ работает (86 тестов + live), ✅ безопа�
 Зазор до 9.5/10 — не код, а: UX-гладкость (конфирм-флоу, автовыбор модели), документация (диаграммы), продвинутые фичи (AST-рефакторинг).
 Оценка: 8.9/10. Статус: производственно-готовый прототип с отличной инженерной базой. Следующий шаг: UX-полировка и документация.
 ========================================================================
+
+========================================================================
+ОЦЕНКА 5 (DeepSeek, переоценка, 2026-08-08): 8.9/10
+========================================================================
+Оценка проекта My OpenCode v2 (актуальная)
+Дата оценки: 2026-08-08
+Версия: Stage 20 (Tauri desktop реализован)
+Тесты: 86/86 unit + мультимодельный live-набор
+Репозиторий: github.com/elips0675-web/Myopen-ode
+
+Текущая оценка: 8.9/10
+Проект продолжает удерживать позицию самой зрелой локальной open-source
+альтернативы Cursor/Claude Code. Завершён этап 20 – Tauri desktop (WebView2,
+~50MB RAM против ~300MB у pywebview), что закрывает последнюю P2-задачу из
+предыдущих ревью.
+
+Что достигнуто
+Архитектура и качество кода:
+- Полный рефакторинг монолитов: tools.py → пакет tools/ (9 модулей),
+  agent.py 883→470 строк + api_*.py.
+- Чистый DI в agent_loop (deps-инъекция), позволяющий тестировать цикл без
+  сервера.
+- Согласованные слои безопасности: path-jail, bash-whitelist, Docker-
+  песочница (opt-in), рекурсивная проверка вложенных интерпретаторов.
+
+Инженерные решения:
+- Prompt-based tool calling доведён до совершенства: lenient JSON-парсер,
+  bare-блоки, YAML-стиль, анти-луп, динамический контекст, few-shot на
+  ошибках – 7B-модели стабильно вызывают тулы.
+- Нативная поддержка tool_calls для qwen3/llama3.1 через Ollama API с
+  бесшовным fallback на legacy-путь.
+- Интерактивный терминал: xterm.js + WebSocket PTY (POSIX) / pipes
+  (Windows) – настоящий shell, resize, Ctrl+C.
+- CodeMirror 6: собранный офлайн-бандл (esbuild, 601KB) с LSP-
+  автодополнением.
+- SQLite-сессии с миграцией из JSON, checkpoint-восстановление после краша.
+- Tauri desktop (WebView2) – нативное окно с малым потреблением памяти.
+
+Качество кода и тестирование:
+- 86 unit-тестов покрывают критические пути.
+- Мультимодельный live-набор (test_live.py) прогоняет сценарии на реальных
+  моделях – ловит регрессии.
+- Регрессионный гард промпта – проверяет наличие правил и примеров.
+
+Инструментарий:
+- 28 инструментов + 3 плагина – функциональный паритет с коммерческими.
+- MCP-клиент с полным handshake (initialize → initialized,
+  resources/prompts/tools) – интеграция с VS Code/Cursor.
+- RAG: гибридный (BM25 + FAISS/numpy), инкрементальный кеш, сегментация по
+  папкам.
+- AST-синтаксис-гард (ast.parse для .py, node --check для .js/.ts).
+- Tauri desktop – завершён (этап 20), закрывает все P2-задачи.
+
+Слабые стороны и риски (оценка 4, внешнее ревью):
+Ось         Балл    До 9.5
+Архитектура 9.0     DI-контейнер, абстракции для RAG/DB
+Код/тесты   9.5     уже на уровне
+Безопасность 8.5    AST-анализ python/node инъекций, git-auto-branch
+AI/модели   8.0     prompt caching, task-level router, AST edit
+UX/UI       8.0     agentic plan tree, AST multi-file, Tauri ✓
+Доки/процесс 9.0    уже на уровне
+
+Ключевые замечания ревьюверов (цитаты):
+- agent.py ~470 строк с глобалами – нужен AgentApp-класс/DI.
+- RAG/LLM-кеш без интерфейсов – замена FAISS/SQLite потребует правки по
+  дереву.
+- Prompt перегружен (правила 1-21 + EXAMPLES + контекст + stats) – близко к
+  ceiling; рекомендованы структурный промпт или constrained decoding.
+- Нет семантической валидации аргументов (read path – «looks like a
+  directory» до выполнения).
+- Нет fuzzy-матчера для edit («old text найден N раз, уточни»).
+- Lenient JSON не ловит unquoted string values ({"tool": write, "path":
+  test.py}).
+- python -c/node -e проверяются рекурсивно только по ключевым словам – нужен
+  ast.parse.
+- Нет rate limiting на /api/chat (если порт открыт в LAN – тривиальный DoS).
+- Rollback вне git-репозитория – сейчас .agent_backups/ + ручной undo; лучше
+  auto-branch.
+- TOOL_STATS – «корреляция ≠ причинность», лучше мнемоника вместо сырых
+  счётчиков.
+- Нет prompt KV-cache – правила ~2K токенов каждый раз.
+- Роутер только на уровне итераций – нужен task-level.
+- Нет AST-aware multi-file edit (rename function X в N файлах сам, без exact
+  old/new).
+- Нет agentic plan tree в UI (чекбоксы pending/done/error, как Cursor
+  Composer).
+
+План до 9.5/10 (из KIMI_REVIEW_SUMMARY и TODO):
+P1 (критично для production) – не начаты на момент оценки:
+□ AST-based edit guard – перед apply: старый текст уникален или fuzzy-
+  совпадает 90%+, иначе warning «old text found N times».
+□ Git-auto-branch – сессия = ветка, write/edit/patch = auto-commit, undo =
+  git reset.
+□ Prompt KV-cache – compressed system prompt после 3-й итерации.
+□ AUTO_CONFIRM_SAFE=1 – автоподтверждение безопасных write/edit.
+□ qwen3:8b дефолт при >10GB VRAM (проверка через ollama ps).
+□ Docker-песочница по умолчанию при наличии Docker + предупреждение в логе.
+P2 (отличие от «зрелого прототипа») – не начаты, кроме Tauri:
+☑ Tauri desktop ✓ (этап 20)
+□ Task-level model router – классификатор задачи выбирает модель до цикла.
+□ Plan tree UI – дерево шагов pending/done/error.
+□ ARCHITECTURE.md с Mermaid-диаграммой + примеры тулов.
+□ AST-рефакторинг тулы: rename_symbol / extract_function / inline_variable.
+□ VRAM-индикатор и автовыбор модели при старте.
+P3 (10/10):
+□ Self-healing loop – 2 ошибки одним тулом → смена стратегии (edit →
+  read→write).
+□ Multi-turn RAG – «RAG over plan»: найти все затронутые файлы →
+  редактировать.
+□ Голосовой ввод (Whisper + STT) – долгосрочно.
+
+Итоговый вердикт:
+My OpenCode v2 – production-готовый локальный AI-агент, который:
+✅ Работает (86 тестов + live-подтверждение)
+✅ Безопасен (path-jail, bash-whitelist, Docker-песочница)
+✅ Расширяем (плагины, скиллы, MCP)
+✅ Документирован (README + USER_GUIDE + context.txt)
+✅ Тестируем (unit + live + CI)
+✅ Имеет десктоп (Tauri/WebView2 и pywebview как fallback)
+
+Оставшийся зазор до 9.5/10 – это не количество фич, а полировка крайних
+случаев: AST-based edit guard, git-auto-branch, prompt KV-cache – три
+P1-задачи, которые поднимут оценку до 9.2–9.3. Task-level router, plan tree
+UI, AST-рефакторинг – доведут до 9.5. Проект уже превосходит многие
+коммерческие решения по приватности и стоимости. При реализации
+рекомендованных P1-пунктов он станет де-факто стандартом для локального
+AI-кодинга.
+
+Оценка: 8.9/10
+Статус: Производственно-готовый продукт с отличной инженерной базой.
+Следующий шаг: Сфокусироваться на P1-задачах (AST-edit guard, git-auto-branch,
+prompt KV-cache).
+
+СТАТУС НА СЕГОДНЯ (этапы 21-31, 2026-08-08): ВСЕ пункты этой переоценки
+закрыты — P1: edit guard=этап 21, git-auto-branch=22, prompt KV-cache
+(COMPACT_SYSTEM_PROMPT при it>=3)=23, AUTO_CONFIRM_SAFE=24, qwen3:8b дефолт
+по VRAM=25, Docker default-when-present=26; P2: task-level router=30, plan
+tree UI=31, ARCHITECTURE.md=27, AST-тулы rename/extract/inline=28,
+VRAM-индикатор=29; тесты 97/97 x2 (на момент оценки было 86/86). До 9.5
+остался P3: self-healing loop, multi-turn RAG, voice input.
+========================================================================
