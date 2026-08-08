@@ -79,9 +79,11 @@ def _load_file_cache(rel, mtime, size):
         if data.get("mtime") == mtime and data.get("size") == size and data.get("model") == EMBED_MODEL:
             chunks = data.get("chunks", [])
             embs = data.get("embeddings", [])
+            dim = max((len(e) for e in embs if isinstance(e, (list, tuple))), default=0)
             for c, e in zip(chunks, embs):
-                c["emb"] = e
-                c["_toks"] = _tokenize(c["text"])
+                if isinstance(e, (list, tuple)) and len(e) == dim and dim > 0:
+                    c["emb"] = e
+                    c["_toks"] = _tokenize(c["text"])
             return chunks
     except: pass
     return None
@@ -186,7 +188,7 @@ def _rebuild_fast_index():
     FAISS_INDEX = None
     if not RAG_INDEX or _np is None:
         return
-    dim = len(RAG_INDEX[0]) if isinstance(RAG_INDEX[0], (list, tuple)) else 0
+    dim = max((len(e) for e in RAG_INDEX if isinstance(e, (list, tuple))), default=0)
     rows = [e for e in RAG_INDEX
             if isinstance(e, (list, tuple)) and len(e) == dim and dim > 0]
     if len(rows) != len(RAG_INDEX):

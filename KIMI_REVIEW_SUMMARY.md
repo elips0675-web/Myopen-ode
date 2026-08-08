@@ -209,6 +209,23 @@ Ollama/stream/native/fallback; `exec.py` — диспетчер 26 per-tool хе
     без CONFIRM; повторная запись → CONFIRM, файл нетронут; env
     восстанавливается). 91/91 ×2, CLI live (write вызван без CONFIRM — модель
     в прогонах давала битые блоки, известный предел 7B), сервер перезапущен.
+39. **Этап 25 — авто-выбор модели по VRAM** (2026-08-08): в agent.py
+    `_auto_pick_model()` — если AI_MODEL НЕ задан явно: `ollama list`
+    содержит qwen3:8b И nvidia-smi >= 10 GB VRAM → дефолт становится
+    qwen3:8b (лог «Auto-picked...»); вызов при импорте. `import subprocess`
+    вынесен наверх, чтобы тест мог мокать agent_mod.subprocess.run. Тест
+    test_auto_pick_model (VRAM>=10GB+установлена → qwen3:8b; малая VRAM →
+    дефолт; явный AI_MODEL побеждает). 92/92 ×2, CLI live (qwen3:8b
+    ответила через tool verify), сервер перезапущен.
+    ВАЖНО-баг 1: автопик сменил тестовую модель на native-совместимую
+    qwen3:8b → все loop-тесты (мокают только legacy call_ollama) упали с
+    «model never called»/реальными ответами модели; фикс: в __main__
+    тест-раннера модель форсится в qwen2.5-coder:7b, если
+    native_supported(MODEL). ВАЖНО-баг 2: в .rag_cache было 3 битых файла
+    (эмбеддинги dim 2 / dim 0 — мусор прошлых прогонов), а
+    _rebuild_fast_index брал dim от ПЕРВОГО эмбеддинга → один битый файл
+    ломал весь индекс («RAG search error: »); фикс: dim = max по всем +
+    фильтр в _load_file_cache; битые файлы удалены.
 
 Из рекомендаций оценок 2-3 реализовано: few-shot, [DONE]-маркер, один тул за раз, статистика тулов,
 пост-обработка JSON, Docker-песочница, code detector, Cache-Control, динамический контекст,

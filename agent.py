@@ -7,7 +7,7 @@ if __name__ == "__main__" and "agent" not in sys.modules:
     # so api_* routers import the same instance instead of a fresh copy
     sys.modules["agent"] = sys.modules["__main__"]
 
-import json, os, webbrowser, re, time, logging, asyncio, threading
+import json, os, webbrowser, re, time, logging, asyncio, threading, subprocess
 from pathlib import Path
 from datetime import datetime
 import requests, uvicorn
@@ -25,6 +25,34 @@ log.setLevel(logging.DEBUG if os.environ.get("DEBUG") else logging.INFO)
 # ─── config ───────────────────────────────────────────────
 OLLAMA_URL = os.environ.get("OLLAMA_URL", "http://localhost:11434")
 MODEL = os.environ.get("AI_MODEL", "qwen2.5-coder:7b")
+
+
+def _auto_pick_model():
+    """Stage 25 (DS4): pick qwen3:8b as default when the GPU has >=10GB VRAM
+    and the model is installed. Only when AI_MODEL was NOT set explicitly —
+    an explicit user choice always wins. Logs the decision."""
+    global MODEL
+    if os.environ.get("AI_MODEL"):
+        return MODEL
+    try:
+        r = subprocess.run(["ollama", "list"], capture_output=True, text=True, timeout=15)
+        installed = [ln.split()[0] for ln in r.stdout.splitlines()[1:] if ln.strip()]
+        if "qwen3:8b" not in installed:
+            return MODEL
+        vr = subprocess.run(["nvidia-smi", "--query-gpu=memory.total",
+                             "--format=csv,noheader,nounits"], capture_output=True,
+                            text=True, timeout=15)
+        vram = max((int(x.strip()) for x in vr.stdout.splitlines() if x.strip().isdigit()),
+                   default=0)
+        if vram >= 10_000:  # MB
+            MODEL = "qwen3:8b"
+            log.info("Auto-picked qwen3:8b as default (%.1f GB VRAM, installed)", vram / 1024)
+    except Exception:
+        pass
+    return MODEL
+
+
+_auto_pick_model()
 PLANNER_MODEL = os.environ.get("PLANNER_MODEL", "deepseek-r1:1.5b")
 WORK_DIR = Path(os.environ.get("WORK_DIR") or Path(__file__).resolve().parent)
 NO_CONFIRM = os.environ.get("NO_CONFIRM", "0") == "1"

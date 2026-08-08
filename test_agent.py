@@ -1845,6 +1845,56 @@ def test_git_auto_commit():
         shutil.rmtree(repo, ignore_errors=True)
     print("  [OK] git auto-commit on agent branch (write+edit), main untouched")
 
+def test_auto_pick_model():
+    """Stage 25: qwen3:8b becomes default with >=10GB VRAM + installed, but an
+    explicit AI_MODEL always wins."""
+    import agent as agent_mod
+    import os as _os
+    old_env = _os.environ.pop("AI_MODEL", None)
+    old_model = agent_mod.MODEL
+    captured = {"cmds": []}
+    def fake_run(cmd, **kw):
+        captured["cmds"].append(cmd[0])
+        class R:
+            returncode = 0
+            stdout = ""
+            stderr = ""
+        r = R()
+        if cmd[0] == "ollama":
+            r.stdout = "NAME  SIZE\nqwen3:8b  5.5GB\n"
+        elif cmd[0] == "nvidia-smi":
+            r.stdout = "12288\n"
+        return r
+    original_run = agent_mod.subprocess.run
+    agent_mod.subprocess.run = fake_run
+    try:
+        agent_mod.MODEL = "qwen2.5-coder:7b"
+        m = agent_mod._auto_pick_model()
+        assert m == "qwen3:8b", f"big VRAM should pick qwen3:8b: {m}"
+
+        agent_mod.MODEL = "qwen2.5-coder:7b"
+        def fake_small(cmd, **kw):
+            r = fake_run(cmd, **kw)
+            if cmd[0] == "nvidia-smi":
+                r.stdout = "4096\n"
+            return r
+        agent_mod.subprocess.run = fake_small
+        m = agent_mod._auto_pick_model()
+        assert m == "qwen2.5-coder:7b", f"small VRAM keeps default: {m}"
+
+        _os.environ["AI_MODEL"] = "deepseek-coder-v2:16b"
+        agent_mod.MODEL = "deepseek-coder-v2:16b"
+        m = agent_mod._auto_pick_model()
+        assert m == "deepseek-coder-v2:16b", "explicit AI_MODEL must win"
+    finally:
+        agent_mod.subprocess.run = original_run
+        agent_mod.MODEL = old_model
+        if old_env is None:
+            _os.environ.pop("AI_MODEL", None)
+        else:
+            _os.environ["AI_MODEL"] = old_env
+    print("  [OK] auto model pick: VRAM>=10GB -> qwen3:8b, explicit wins")
+
 def test_cross_platform():
     """Cross-platform safety: no hard-coded Windows paths, CREATE_NO_WINDOW
     guarded, core modules importable on any OS (also runs in CI matrix)."""
@@ -1867,7 +1917,12 @@ def test_cross_platform():
 
 if __name__ == "__main__":
     print(f"\nSmoke tests for agent.py\n{'='*40}")
-    tests = [test_cross_platform, test_git_auto_commit, test_compact_prompt_after_iterations,
+    import agent as _agent_main
+    from tools import native_supported as _native_supported
+    if _native_supported(_agent_main.MODEL):
+        _agent_main.MODEL = "qwen2.5-coder:7b"
+        print("  [test] default MODEL is native-capable -> forced to qwen2.5-coder:7b (legacy path)")
+    tests = [test_cross_platform, test_auto_pick_model, test_git_auto_commit, test_compact_prompt_after_iterations,
              test_auto_confirm_safe, test_read, test_read_absolute, test_read_url, test_list, test_glob,
              test_write_and_undo, test_edit, test_edit_guard_ambiguous, test_edit_guard_fuzzy_hint,
              test_syntax_guard_write, test_patch_multi_file, test_bash, test_verify_py, test_verify_json,

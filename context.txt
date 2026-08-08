@@ -708,3 +708,22 @@ UPDATE (2026-08-08) - stage 24 done (P1 #4 AUTO_CONFIRM_SAFE), 91/91 x2:
 Next: (5) qwen3:8b default >10GB VRAM via ollama ps, (6) Docker default when
 present. Then P2: (7) task-level router, (8) plan tree UI, (9) ARCHITECTURE.md,
 (10) AST refactor tools, (11) VRAM indicator.
+
+UPDATE (2026-08-08) - stage 25 done (P1 #5 auto model pick), 92/92 x2:
+- agent.py _auto_pick_model(): no explicit AI_MODEL + ollama list has qwen3:8b
+  + nvidia-smi total >=10GB -> default MODEL = qwen3:8b (log 'Auto-picked').
+  Called at import. import subprocess moved to top (tests mock
+  agent_mod.subprocess.run).
+- BUG FIX 1 (stage 25 side effect): auto-pick switched the test model to
+  native-capable qwen3:8b -> all loop tests that mock ONLY legacy
+  call_ollama broke ('model never called', real model answers). Fix: test
+  runner main forces MODEL to qwen2.5-coder:7b when native_supported(MODEL).
+- BUG FIX 2 (RAG): 3 corrupt .rag_cache files (embeddings dim 2 / dim 0,
+  leftovers) + _rebuild_fast_index used len(RAG_INDEX[0]) -> one bad entry
+  killed the whole index ('RAG search error: '). Fix: dim = max over all,
+  _load_file_cache filters pairs; corrupt files deleted.
+- Live: qwen3:8b answered via tool verify (native path works). Server
+  restarted with auto-picked model.
+Next: (6) Docker default when present. Then P2: (7) task-level router,
+(8) plan tree UI, (9) ARCHITECTURE.md, (10) AST refactor tools,
+(11) VRAM indicator.
