@@ -107,6 +107,10 @@ Kimi 2: 8.3/10 → DeepSeek 2: 8.5/10 → DeepSeek 3: 8.6/10 → Kimi 3: 8.7/10
 - [x] init_config теперь синхронизирует копии глобалов во всех подмодулях (WORK_DIR/BASH_TIMEOUT/...); SUBAGENT_PROMPTS в exec.py — ленивый доступ через tools (цикл импортов)
 - [x] Обновлён test_git_snapshot_restore: tools.WORK_DIR = x → tools.init_config(WORK_DIR=x) (прямое присваивание атрибута пакета больше не синхронизирует подмодули)
 - [x] 83/83 тестов, CLI live («4»), сервер перезапущен на новой структуре (/health 200)
+
+## Этап 15. Разбивка _execute_tool_inner (2026-08-08) — СДЕЛАНО
+- [x] 366-строчный _execute_tool_inner → _TOOL_DISPATCH: 26 хелперов _tool_* (read/web, write, edit, bash, glob, grep, list, diff, commit, undo, verify, search, snapshot, restore, websearch, question, skill, patch, task, todo, lsp, testgen, db_query, deps, mcp) + fallback на плагины
+- [x] Поведение идентично (побайтовый перенос веток); 83/83 тестов, CLI live «4»
 - Предел (поведение модели, не кода): полный цикл «исправь баг + прогони тесты» требует follow-up «yes» на CONFIRM (bash) — по дизайну
 
 ## Собственные идеи (низкий приоритет)

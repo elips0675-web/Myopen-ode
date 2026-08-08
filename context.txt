@@ -484,6 +484,16 @@ UPDATE (2026-08-08) — stage 14: tools.py monolith split into tools/ package (8
 (5) Verified: 83/83 tests, CLI live ("4"), server restarted on new layout
     (/health 200).
 
+UPDATE (2026-08-08) — stage 15: _execute_tool_inner split (83/83):
+(1) The 366-line _execute_tool_inner became a dispatcher (_TOOL_DISPATCH)
+    over 26 per-tool handlers _tool_* in tools/exec.py; plugin fallback kept.
+    Byte-identical branch behavior — verified by the full 83-test suite and
+    a live CLI run ("4").
+(2) Remaining P2: agent.py (~880 lines FastAPI) route split, TOOL_STATS in
+    system prompt (per-session stats already covered by sess_stats in
+    _dynamic_context), CodeMirror 6/Monaco, AST multi-file edit, Tauri
+    (blocked on Rust/MSVC).
+
 
 
 
