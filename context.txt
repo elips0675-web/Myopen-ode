@@ -827,3 +827,12 @@ UPDATE (2026-08-08) - DeepSeek re-evaluation (Оценка deepseek.txt): 8.9/10
 - Remaining to 9.5: P3 - self-healing loop, multi-turn RAG, voice input.
 - Files updated: 'Оценка deepseek.txt' (ОЦЕНКА 5 section), KIMI_REVIEW_SUMMARY.md
   (DeepSeek bullet), TODO.md rating line, README.md ratings line.
+
+UPDATE (2026-08-08) - docs sync with evaluation plan status (Что доделать):
+- TODO.md P2: ARCHITECTURE.md marked [x] (Этап 27, DS4 item); Desktop App line
+  updated (Tauri = Этап 20, Rust 1.97.1 + MSVC installed).
+- KIMI_REVIEW_SUMMARY.md: 'План до 9.5/10 (по оценке 4)' - P1 (edit guard=21,
+  git-auto-branch=22, prompt KV-cache=23) and P2 (router=30, plan tree=31)
+  marked [x]; 'Что осталось (P2)' section notes ALL plan items closed 21-31,
+  remaining P3 (self-healing loop, multi-turn RAG, voice input); agent.py
+  DI note updated (partially closed by stages 7/16, DI container out of 9.5 scope).

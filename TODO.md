@@ -156,7 +156,7 @@ Kimi 2: 8.3/10 → DeepSeek 2: 8.5/10 → DeepSeek 3: 8.6/10 → Kimi 3: 8.7/10 
 - [x] Tauri desktop ✓ (этап 20)
 - [x] Task-level model router — классификатор задачи (zero-shot 1.5b) выбирает модель до цикла — Этап 30 (pick_task_model; AI_MODEL/юзер-выбор побеждают; короткие — дефолт)
 - [x] Plan tree UI — дерево шагов pending/done/error — Этап 31 (PLAN_STEPS + {type:plan} события, _plan_mark после тулов, JS-дерево ✓/✗/○)
-- [ ] ARCHITECTURE.md с Mermaid-диаграммой + примеры тулов (DS4)
+- [x] ARCHITECTURE.md с Mermaid-диаграммой + примеры тулов (DS4) — Этап 27 (Mermaid: CLI/Web/Tauri → agent.py → core/agent_loop.py → tools/+rag.py → Ollama; таблицы тулов/модулей/env)
 - [x] AST-рефакторинг тулы: rename_symbol / extract_function / inline_variable (DS4) — Этап 28 (ast-узлы, syntax-guard, backup+git; live rename total→sum_total)
 - [x] VRAM-индикатор и автовыбор модели при старте (DS4) — Этап 29 (/api/vram + бейдж в UI, 15с; автовыбор — Этап 25)
 ### P3
@@ -165,7 +165,7 @@ Kimi 2: 8.3/10 → DeepSeek 2: 8.5/10 → DeepSeek 3: 8.6/10 → Kimi 3: 8.7/10 
 
 ## Собственные идеи (низкий приоритет)
 - [x] Native tool calling — СДЕЛАНО (Этап 10)
-- [x] Desktop App — СДЕЛАНО как Этап 11 (pywebview; Tauri требует Rust/MSVC тулчейн — не установлен)
+- [x] Desktop App — СДЕЛАНО как Этап 11 (pywebview fallback); Этап 20 — Tauri desktop (Rust 1.97.1 + MSVC Build Tools установлены, src-tauri/ cargo-only wrapper, WebView2 1280×860, ~50MB против ~300MB pywebview, scripts/run_tauri.bat)
 - [x] GPU embeddings — НЕ ТРЕБУЕТСЯ (Ollama уже работает на GPU: RTX 3060 12GB, qwen3:8b 7.5GB 100% GPU)
 - [x] deepseek-coder-v2:16b — пулл завершён (8.9GB, resume после обрыва на 26%); native tool calling НЕ поддерживается (Ollama возвращает 400 при tools= — как qwen2.5-coder), работает legacy-путь; live-кодинг подтверждён: write → CONFIRM → yes → файл создан (8 байт, аудит 1 вызов)
 

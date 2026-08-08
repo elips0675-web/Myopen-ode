@@ -304,6 +304,10 @@ native tool calling, desktop (pywebview). «Таймаут после [CONFIRM]�
 ## Что осталось (P2)
 - закрыто: Tauri desktop ✓ (этап 20), JSON Schema constrained output ✓ (AI_JSON_FORMAT=1),
   UI-динамика ✓ (индикатор «думает», RAG-прогресс, audit-просмотр)
+- ВСЕ пункты плана до 9.5 (оценка 4) закрыты этапами 21–31 (см. разделы «Оценка 4/5»):
+  edit guard=21, git-auto-branch=22, KV-cache=23, AUTO_CONFIRM_SAFE=24, авто-модель=25,
+  Docker=26, ARCHITECTURE.md=27, AST-тулы=28, VRAM=29, router=30, plan tree=31.
+  До 9.5 остался P3: self-healing loop, multi-turn RAG, voice input.
 
 ## Оценка 4 — 8.8/10 (внешний ревьювер, 2026-08-08)
 
@@ -328,7 +332,9 @@ fallback; дефолтом для локального агента не дел�
 рациональная стратегия»; AGENTS.md-дисциплина, bilingual README, context.txt — «уровень коммерческого продукта».
 
 Что снижает оценку (и наши ответы):
-- **agent.py ~470 стр. с глобалами** — нужен AgentApp-класс/DI. (В работе: спринт по абстракциям.)
+- **agent.py ~470 стр. с глобалами** — нужен AgentApp-класс/DI. (Частично закрыто: core/agent_loop.py
+  с deps-инъекцией (этап 7), роуты вынесены в api_* (этап 16); глобалы обновляются через
+  import agent as _agent и init_config. Полный DI-контейнер — вне плана 9.5.)
 - **RAG/LLM-кеш без интерфейсов** — замена FAISS/SQLite потребует правки по дереву.
 - **Prompt перегружен** (правила 1-21 + EXAMPLES + VALID/INVALID + контекст + stats) — близко
   к prompt engineering ceiling; рекомендация: структурный prompt (XML-теги) или constrained decoding
@@ -350,15 +356,21 @@ fallback; дефолтом для локального агента не дел�
 
 ## План до 9.5/10 (по оценке 4) — статус
 ### P1 (критично для production)
-- [ ] **AST-based edit guard** — перед apply: старый текст уникален или fuzzy-совпадает 90%+,
-      иначе warning «old text found N times» (уберёт ~50% «edit failed» в live)
-- [ ] **Git-auto-branch** — сессия = ветка, write/edit/patch = auto-commit, undo = git reset
-      (сейчас .agent_backups/ + ручной undo)
-- [ ] **Prompt KV-cache** — compressed system prompt после 3-й итерации (суммаризация правил)
+- [x] **AST-based edit guard** — перед apply: старый текст уникален или fuzzy-совпадает 90%+,
+      иначе warning «old text found N times» (уберёт ~50% «edit failed» в live) — Этап 21
+      (`_edit_old_stats` + fuzzy-подсказка, count>1 → отклонение без мутаций)
+- [x] **Git-auto-branch** — сессия = ветка, write/edit/patch = auto-commit, undo = git reset
+      (сейчас .agent_backups/ + ручной undo) — Этап 22 (GIT_AUTO_COMMIT/GIT_AUTO_BRANCH,
+      ветка agent-session-*, auto-commit write/edit/patch, --no-verify)
+- [x] **Prompt KV-cache** — compressed system prompt после 3-й итерации (суммаризация правил) —
+      Этап 23 (COMPACT_SYSTEM_PROMPT при it>=3, ~0.3K токенов, RULES-маркер сохранён)
 ### P2 (отличие от «зрелого прототипа»)
 - [x] **Tauri desktop** — этап 20 (`dd45746`), WebView2 ~50MB против ~300MB pywebview
-- [ ] **Task-level model router** — классификатор задачи (zero-shot 1.5b) выбирает модель до цикла
-- [ ] **Plan tree UI** — визуальное дерево шагов (pending/done/error)
+- [x] **Task-level model router** — классификатор задачи (zero-shot 1.5b) выбирает модель до
+      цикла — Этап 30 (pick_task_model: bugfix/refactor/tests→qwen3:8b, chat→3b; AI_MODEL/
+      юзер-выбор побеждают; кэш установленных 60с)
+- [x] **Plan tree UI** — визуальное дерево шагов (pending/done/error) — Этап 31 (PLAN_STEPS +
+      {type:plan} SSE-события, _plan_mark после каждого тула, JS-дерево ✓/✗/○)
 ### P3 (10/10)
 - [ ] **Self-healing loop** — 2 ошибки одним тулом → агент сам меняет стратегию (edit → read→write)
 - [ ] **Multi-turn RAG** — «RAG over plan»: сначала найти все затронутые файлы, потом редактировать
