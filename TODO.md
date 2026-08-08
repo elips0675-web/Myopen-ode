@@ -125,6 +125,12 @@ Kimi 2: 8.3/10 → DeepSeek 2: 8.5/10 → DeepSeek 3: 8.6/10 → Kimi 3: 8.7/10
 - [x] Ленивое резолвление TOOL_STATS через import tools (CLI/тесты не передают); параметр tool_stats= для чистых unit-тестов
 - [x] Per-session блок «Tool errors this session» сохранён; тест test_dynamic_context_global_stats (в т.ч. исключение одиночных сбоев); 84/84, CLI live
 
+## Этап 18. AST syntax guard + multi-file patch (2026-08-08) — СДЕЛАНО
+- [x] _syntax_check() в tools/exec.py: .py — ast.parse (stdlib, номер строки ошибки), .json — json.loads, .js/.mjs/.ts — node --check (если node есть); прочие расширения пропускаются (None); результат «Syntax: OK/ERROR» добавляется в ответы write/edit/patch — модель сразу видит битый код и исправляет без ручного прогона
+- [x] patch: режим files=[{path, diff}, ...] — несколько файлов одним вызовом (порядок, backup+verify+syntax на каждый, ошибки не прерывают остальные); legacy path+diff сохранён
+- [x] validate_tool: при files-вызове required path/diff не обязательны; каждый diff валидируется (no hunk headers / shape), ошибка по файлу
+- [x] Тесты: test_syntax_guard_write (OK/ERROR py+json, edit-правка ломающая синтаксис), test_patch_multi_file (2 файла, валидация files, per-file mismatch); 86/86, CLI live, сервер перезапущен
+
 ## Собственные идеи (низкий приоритет)
 - [x] Native tool calling — СДЕЛАНО (Этап 10)
 - [x] Desktop App — СДЕЛАНО как Этап 11 (pywebview; Tauri требует Rust/MSVC тулчейн — не установлен)

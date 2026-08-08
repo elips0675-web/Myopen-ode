@@ -1,4 +1,5 @@
 """Tool execution: validation, bash sandbox, unified diff, execute_tool."""
+import ast
 import glob as _glob, json, os, re, subprocess, sys
 from pathlib import Path
 import logging
@@ -17,6 +18,42 @@ log = logging.getLogger("tools")
 def check_bash(cmd):
     """Block dangerous shell commands (whitelist + blacklist + nested checks)."""
     return _check_bash(cmd, WORK_DIR)
+
+# ─── post-write syntax guard (AST) ────────────────────────
+def _syntax_check(path):
+    """AST-level syntax check after write/edit/patch for Python/JSON/JS.
+
+    Returns "OK" or "ERROR: <msg> (line N)" for checkable files; None when the
+    language is not checkable or no checker binary is available (e.g. node
+    missing). Uses only the stdlib (ast) so there are no hard dependencies."""
+    suffix = Path(path).suffix.lower()
+    if suffix not in (".py", ".json", ".js", ".mjs", ".cjs", ".ts"):
+        return None
+    try:
+        code = Path(path).read_text("utf-8", errors="replace")
+    except OSError as e:
+        return f"ERROR: cannot read for syntax check ({e})"
+    if suffix == ".py":
+        try:
+            ast.parse(code, filename=str(path))
+            return "OK"
+        except SyntaxError as e:
+            return f"ERROR: {e.msg} (line {e.lineno})"
+    if suffix == ".json":
+        try:
+            json.loads(code)
+            return "OK"
+        except ValueError as e:
+            return f"ERROR: invalid JSON ({e})"
+    try:
+        r = subprocess.run(["node", "--check", str(path)], capture_output=True,
+                           text=True, timeout=30)
+        if r.returncode == 0:
+            return "OK"
+        tail = (r.stderr or r.stdout).strip().split("\n")[-1]
+        return f"ERROR: {tail[:300]}"
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        return None
 
 # ─── unified diff parser ──────────────────────────────────
 def _parse_hunks(diff_text):
@@ -97,7 +134,10 @@ def validate_tool(tc):
     schema = TOOL_SCHEMAS.get(name)
     if schema is None:
         return f"Unknown tool '{name}'. Available tools: {', '.join(sorted(TOOL_SCHEMAS))}"
-    missing = [k for k in schema.get("required", []) if k not in tc]
+    req = schema.get("required", [])
+    if tc.get("tool") == "patch" and isinstance(tc.get("files"), list):
+        req = [k for k in req if k not in ("path", "diff")]
+    missing = [k for k in req if k not in tc]
     if missing: return f"Missing required fields: {', '.join(missing)} in {name}"
     def need_str(key, label):
         if key in tc and not isinstance(tc[key], str): return f"{label} must be string"
@@ -134,6 +174,12 @@ def validate_tool(tc):
     if tc.get("tool") == "patch" and "diff" in tc:
         err = _validate_patch(tc["diff"])
         if err: return err
+    if tc.get("tool") == "patch" and isinstance(tc.get("files"), list):
+        for f in tc["files"]:
+            if not isinstance(f, dict) or not f.get("path") or not isinstance(f.get("diff"), str):
+                return "patch.files must be an array of {path, diff}"
+            err = _validate_patch(f["diff"])
+            if err: return f"patch.files[{f.get('path')}]: {err}"
     return ""
 
 # ─── per-tool implementations ─────────────────────────────
@@ -170,8 +216,10 @@ def _tool_write(args):
     p.parent.mkdir(parents=True, exist_ok=True)
     p.write_text(args["content"], "utf-8")
     v = verify_file(str(p))
+    sc = _syntax_check(str(p))
     msg = f"Written {len(args['content'])}b to {p}"
     if v: msg += f"\nVerify: {v[:500]}"
+    if sc: msg += f"\nSyntax: {sc}"
     return msg
 
 def _tool_edit(args):
@@ -190,7 +238,11 @@ def _tool_edit(args):
     backup(rel)
     p.write_text(content.replace(old, new), "utf-8")
     v = verify_file(str(p))
-    return f"Replaced in {p}" + (f"\nVerify: {v[:500]}" if v else "")
+    sc = _syntax_check(str(p))
+    msg = f"Replaced in {p}"
+    if v: msg += f"\nVerify: {v[:500]}"
+    if sc: msg += f"\nSyntax: {sc}"
+    return msg
 
 def _tool_bash(args):
     cmd = args["cmd"]
@@ -313,24 +365,43 @@ def _tool_skill(args):
     return f"[SKILL: {skill_name}]\n{content[:2000]}"
 
 def _tool_patch(args):
-    path = args.get("path", "")
-    err = ensure_safe_path(path)
-    if err: return err
-    pp = resolve(path)
-    if not pp.exists(): return f"Error: {path} not found"
-    diff_text = args.get("diff", "")
-    if not diff_text:
-        return "Error: diff field is required"
-    content = pp.read_text("utf-8")
-    result = _apply_diff(content, diff_text)
-    if result is None:
-        return "Error: patch does not match file content (hunk context mismatch)"
-    backup(str(pp))
-    pp.write_text(result, "utf-8")
-    v = verify_file(str(pp))
-    msg = f"Patch applied to {path} ({len(pp.read_text('utf-8'))}b)"
-    if v: msg += f"\nVerify: {v[:500]}"
-    return msg
+    """Apply unified diffs: single file (path+diff) or multiple files at once
+    (files=[{path, diff}, ...]). Each file: backup, apply, verify, syntax check."""
+    jobs = []
+    files = args.get("files")
+    if isinstance(files, list) and files:
+        for f in files:
+            fp, fd = (f or {}).get("path", ""), (f or {}).get("diff", "")
+            if fp and fd:
+                jobs.append((fp, fd))
+    elif args.get("path") and args.get("diff"):
+        jobs.append((args["path"], args["diff"]))
+    if not jobs:
+        return "Error: provide path+diff or files=[{path, diff}, ...]"
+    out = []
+    for path, diff_text in jobs:
+        err = ensure_safe_path(path)
+        if err:
+            out.append(err)
+            continue
+        pp = resolve(path)
+        if not pp.exists():
+            out.append(f"Error: {path} not found")
+            continue
+        content = pp.read_text("utf-8")
+        result = _apply_diff(content, diff_text)
+        if result is None:
+            out.append(f"Error: patch does not match file content (hunk context mismatch): {path}")
+            continue
+        backup(str(pp))
+        pp.write_text(result, "utf-8")
+        v = verify_file(str(pp))
+        sc = _syntax_check(str(pp))
+        m = f"Patched {path} ({len(pp.read_text('utf-8'))}b)"
+        if v: m += f"\nVerify: {v[:300]}"
+        if sc: m += f"\nSyntax: {sc}"
+        out.append(m)
+    return "\n".join(out)
 
 def _tool_task(args):
     agent_type = args.get("agent", "general")

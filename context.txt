@@ -531,3 +531,22 @@ UPDATE (2026-08-08) - stage 17: TOOL_STATS in system prompt (84/84):
 (3) New test: test_dynamic_context_global_stats (asserts top-3 + exclusion
     of single-failure tools). 84/84, CLI live ("4"). P2 left: CodeMirror 6/
     Monaco, AST multi-file edit, Tauri (blocked on Rust/MSVC).
+
+UPDATE (2026-08-08) - stage 18: AST syntax guard + multi-file patch (86/86):
+(1) _syntax_check(path) in tools/exec.py after write/edit/patch: .py ->
+    ast.parse (stdlib, reports line number), .json -> json.loads, .js/.mjs/
+    .cjs/.ts -> node --check when node exists; other extensions -> None
+    (silently skipped). Reply gains "Syntax: OK" / "Syntax: ERROR: msg (line N)".
+    Model can self-correct broken code without a manual compile step.
+(2) patch tool: new mode files=[{path, diff}, ...] - multiple files in one
+    call, applied in order; each file: ensure_safe_path, backup, _apply_diff
+    (None -> per-file "mismatch", other files still proceed), verify_file,
+    _syntax_check. Legacy path+diff mode untouched.
+(3) validate_tool: when patch has a files list, required path/diff are not
+    enforced; each diff validated via _validate_patch (hunk headers), shape
+    check ({path, diff} strings) - errors reference the file. NOTE: validate
+    runs in the agent loop (core/tool_executor.py) and mcp_server, NOT in
+    bare execute_tool - tests call validate_tool directly for that path.
+(4) _apply_diff semantics kept: '-' lines just skip a line (no content
+    match), only ' ' context lines are matched - mismatch tests use a
+    context line. 86/86, CLI live, server restarted.

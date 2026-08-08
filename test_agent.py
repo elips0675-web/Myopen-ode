@@ -52,6 +52,49 @@ def test_edit():
     assert test_file.read_text() == "new text", "edit content wrong"
     print("  [OK] edit")
 
+def test_syntax_guard_write():
+    """write/edit/patch report AST syntax status (Python/JSON) so the model
+    can self-correct broken code immediately."""
+    good = TMP / "syntax_good.py"
+    r = execute_tool("write", {"path": str(good), "content": "def f():\n    return 1\n"})
+    assert "Syntax: OK" in r, f"good python not OK: {r}"
+    bad = TMP / "syntax_bad.py"
+    r = execute_tool("write", {"path": str(bad), "content": "def f(:\n"})
+    assert "Syntax: ERROR" in r and "line 1" in r, f"broken python not caught: {r}"
+    jbad = TMP / "syntax_bad.json"
+    r = execute_tool("write", {"path": str(jbad), "content": "{not json"})
+    assert "Syntax: ERROR" in r and "JSON" in r, f"broken json not caught: {r}"
+    efile = TMP / "syntax_edit.py"
+    efile.write_text("def f():\n    return 1\n")
+    r = execute_tool("edit", {"path": str(efile), "old": "def f():", "new": "def f(:"})
+    assert "Syntax: ERROR" in r, f"edit broken syntax not caught: {r}"
+    print("  [OK] AST syntax guard on write/edit")
+
+def test_patch_multi_file():
+    """patch accepts files=[{path, diff}, ...] — several files in one call,
+    applied in order, each backed up, verified and syntax-checked."""
+    a = TMP / "multi_a.py"
+    b = TMP / "multi_b.py"
+    a.write_text("x = 1\n")
+    b.write_text("y = 2\n")
+    def _diff(fname, old, new):
+        return f"--- a/{fname}\n+++ b/{fname}\n@@ -1 +1 @@\n-{old}\n+{new}\n"
+    r = execute_tool("patch", {"files": [
+        {"path": str(a), "diff": _diff("a", "x = 1", "x = 10")},
+        {"path": str(b), "diff": _diff("b", "y = 2", "y = 20")},
+    ]})
+    assert "Patched" in r and r.count("Syntax: OK") == 2, f"multi patch failed: {r}"
+    assert a.read_text() == "x = 10\n" and b.read_text() == "y = 20\n", r
+    from tools import validate_tool
+    r2v = validate_tool({"tool": "patch", "files": [{"path": "a", "diff": "garbage"}]})
+    assert "no hunk headers" in r2v, f"files diff validation missing: {r2v}"
+    r3v = validate_tool({"tool": "patch", "files": [{"path": "a"}]})
+    assert "patch.files must be" in r3v, f"files shape validation missing: {r3v}"
+    r3 = execute_tool("patch", {"files": [{"path": str(a),
+        "diff": "--- a/a\n+++ b/a\n@@ -1 +1 @@\n nope\n+x\n"}]})
+    assert "mismatch" in r3, f"mismatch not reported per-file: {r3}"
+    print("  [OK] patch multi-file (files=[{path, diff}])")
+
 def test_system_prompt_rules():
     """Regression guard: the system prompt must keep the hard-won rules —
     anti-hallucination (16), one-tool-per-reply + [DONE] finish (17-18),
@@ -1649,7 +1692,7 @@ def test_cross_platform():
 if __name__ == "__main__":
     print(f"\nSmoke tests for agent.py\n{'='*40}")
     tests = [test_cross_platform, test_read, test_read_absolute, test_read_url, test_list, test_glob,
-             test_write_and_undo, test_edit, test_bash, test_verify_py, test_verify_json,
+             test_write_and_undo, test_edit, test_syntax_guard_write, test_patch_multi_file, test_bash, test_verify_py, test_verify_json,
              test_backup_undo, test_db_query, test_testgen, test_validation, test_save_api,
              test_terminal_api, test_pty_shell, test_ws_terminal, test_deps_tool, test_audit, test_rag_cache_incremental,
              test_agent_loop_tool_call, test_agent_loop_plain_text, test_agent_loop_shell_alias,

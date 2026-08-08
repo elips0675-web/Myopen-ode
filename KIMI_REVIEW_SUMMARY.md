@@ -128,6 +128,16 @@ Ollama/stream/native/fallback; `exec.py` — диспетчер 26 per-tool хе
     (use glob or list). Статистика резолвится лениво через `import tools` — CLI/тесты
     ничего не передают; параметр tool_stats= позволяет чистый unit-тест без сети.
     Per-session блок («Tool errors this session») сохранён. 84/84, CLI live.
+32. **Этап 18 — AST syntax guard + multi-file patch**: после write/edit/patch —
+    `_syntax_check()` (только stdlib: ast для .py с номером строки ошибки,
+    json.loads для .json, node --check для .js/.ts если node установлен; прочие
+    файлы пропускаются) — модель сразу видит «Syntax: OK/ERROR» и может
+    исправить битый код без ручного прогона. Тулу `patch` добавлен режим
+    `files=[{path, diff}, ...]` — несколько файлов одним вызовом, порядок
+    применения, backup+verify+синтакс-чек на каждый; validate_tool понимает
+    files-вызов (required path/diff не обязательны при files) и валидирует
+    каждый diff; legacy path+diff не тронут. 86/86, CLI live, сервер
+    перезапущен.
 
 Из рекомендаций оценок 2-3 реализовано: few-shot, [DONE]-маркер, один тул за раз, статистика тулов,
 пост-обработка JSON, Docker-песочница, code detector, Cache-Control, динамический контекст,
@@ -137,7 +147,7 @@ native tool calling, desktop (pywebview). «Таймаут после [CONFIRM]�
 после CONFIRM цикл завершается break по дизайну (юзер пишет «yes» → auto-exec pending без вызова модели).
 
 ## Что осталось (P2)
-- CodeMirror 6 / Monaco; AST multi-file edit (parso/tree-sitter)
+- CodeMirror 6 / Monaco
 - Tauri desktop (ждёт установки Rust/MSVC — pywebview уже закрывает потребность)
 - JSON Schema constrained output — экспериментально доступен (AI_JSON_FORMAT=1)
 - UI-динамика (индикатор «думает», RAG-прогресс, audit-просмотр) — уже реализованы в app.js

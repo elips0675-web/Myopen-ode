@@ -115,7 +115,7 @@ TOOL_SCHEMAS = {
     "websearch": {"required": ["query"]},
     "question": {"required": ["text", "options"]},
     "skill": {"required": ["name"]},
-    "patch": {"required": ["path", "diff"]},
+    "patch": {"required": ["path", "diff"], "description": "apply unified diff: one file (path+diff) OR multiple files at once (files=[{path, diff}, ...]); per-file backup + AST syntax check for .py/.json/.js"},
     "task": {"required": ["agent", "prompt"]},
     "todo": {"required": ["action"]},
     "lsp": {"required": ["operation", "path"]},
