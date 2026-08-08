@@ -110,7 +110,7 @@ def run_agent_loop(msgs, session_id, events=None, model=None, deps=None):
     last_result_name = None
     last_result_text = ""
     sess_stats = {}
-    no_tool_iterations = 0
+    retried_empty = False
     active_model = None
     user_model = model
 
@@ -210,6 +210,11 @@ def run_agent_loop(msgs, session_id, events=None, model=None, deps=None):
                 content, tokens_used = (result if isinstance(result, tuple)
                                         else (result, 0))
         if not content and not (native_on and native_calls):
+            if not retried_empty:
+                retried_empty = True
+                log.warning("Empty response from %s — retrying once", current_model)
+                it -= 1
+                continue
             break
         total_tokens += tokens_used or (len(content) / 4)
 
@@ -227,15 +232,6 @@ def run_agent_loop(msgs, session_id, events=None, model=None, deps=None):
             tool_blocks = parse_tool_blocks(content, VALID_TOOLS)
 
         if not tool_blocks:
-            no_tool_iterations += 1
-            if no_tool_iterations >= 2 and it > 0 and current_model != deps.MODEL:
-                # model keeps ignoring tool format — route to the main model
-                log.warning("Model %s produced no tool blocks for %d iterations — routing to %s",
-                            current_model, no_tool_iterations, deps.MODEL)
-                user_model = None
-                active_model = deps.MODEL
-                full += _strip_system_markers(content) + "\n"
-                continue
             if not model and it == 0 and current_model != deps.MODEL:
                 # planner model (1.5b) often ignores tool format — retry with main model
                 log.info("Planner iteration produced no tool blocks; retrying with %s", deps.MODEL)
@@ -327,8 +323,6 @@ def run_agent_loop(msgs, session_id, events=None, model=None, deps=None):
         last_call_key, repeats = ctx["state"]["last_call_key"], ctx["state"]["repeats"]
         last_result_name, last_result_text = ctx["state"]["last_result_name"], ctx["state"]["last_result_text"]
 
-        if calls_made:
-            no_tool_iterations = 0
         if needs_break:
             break
         if all_results:

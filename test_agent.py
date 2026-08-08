@@ -1504,8 +1504,7 @@ def test_sess_stats_advice():
     print("  [OK] per-session tool-error advice in dynamic context")
 
 def test_model_router():
-    """When the user-selected model produces no tool blocks for 3 iterations,
-    the loop routes to the default MODEL."""
+    """A user-selected model is never routed away: all calls keep the chosen model."""
     import agent as agent_mod
     calls = []
     def mock_ollama(msgs, model):
@@ -1519,11 +1518,8 @@ def test_model_router():
     finally:
         agent_mod.call_ollama = original
     assert calls, "model never called"
-    first = calls[0]
-    assert first == "bad_model_x", f"first call should use selected model, got {first}"
-    assert agent_mod.MODEL in calls, f"router never routed to {agent_mod.MODEL}: calls={calls}"
-    assert calls.index(agent_mod.MODEL) >= 2, f"routed too early: calls={calls}"
-    print("  [OK] model router falls back to default model after 3 empty iterations")
+    assert set(calls) == {"bad_model_x"}, f"user model was routed away: calls={calls}"
+    print("  [OK] user-selected model is never routed to another model")
 
 def test_rag_status_api():
     """GET /api/rag/status returns the RAG indexing progress dict."""

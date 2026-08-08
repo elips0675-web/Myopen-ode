@@ -93,6 +93,13 @@ Kimi 2: 8.3/10 → DeepSeek 2: 8.5/10 → DeepSeek 3: 8.6/10 → Kimi 3: 8.7/10
 - [x] /api/sessions/search — сессия со сниппетом (пройдена)
 - [x] Стриминг: первый текст ~2.6s, итог 8.8s (пройден)
 - [x] /api/stats, Cache-Control на /static/app.js (проверены)
+
+## Этап 13. Мультимодельный live-набор (2026-08-08) — СДЕЛАНО
+- [x] test_live.py: сценарии create/edit/question прогоняются на всех установленных моделях (qwen2.5-coder:7b, qwen3:8b, deepseek-coder-v2:16b); параметры --models/--full; warm-up каждой модели
+- [x] Результаты честные: qwen3:8b (native) сильнейшая ~3/3, qwen2.5-coder:7b ~2/3 (edit-rename даёт инструкции), deepseek-coder-v2:16b ~0-1/3 (слабый исполнитель, битые блоки) — стохастика между прогонами из-за VRAM-вытеснения
+- [x] Дизайн-фикс: роутер больше НЕ переключает юзер-выбранную модель (test_model_router: never routed); ветка роутера удалена (мёртвая), planner-retry сохранён (test_agent_loop_planner_fallback)
+- [x] Пустой ответ модели → retry один раз перед break («No response from model» на 16b из-за вытеснения VRAM)
+- [x] 83/83 mock-тестов, live-набор параметризован
 - Предел (поведение модели, не кода): полный цикл «исправь баг + прогони тесты» требует follow-up «yes» на CONFIRM (bash) — по дизайну
 
 ## Собственные идеи (низкий приоритет)
