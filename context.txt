@@ -651,3 +651,13 @@ string values in _parse_tool_json, semantic arg validation ("path looks like a d
 STRUCTURED prompt (XML tags) alternative - all lower priority than P1 list.
 After implementing P1(1-3): rerun 86/86 + CLI live + server restart, then KIMI stage 21+
 entries, TODO checkboxes, commit+push per stage. Update README when stable.
+
+UPDATE (2026-08-08) - stage 21 done (P1 #1 AST-based edit guard), HEAD pending push:
+- tools/exec.py: _edit_old_stats(content, old) - returns (count, fuzzy) where fuzzy =
+  closest line via difflib.SequenceMatcher (ratio >= 0.8). _tool_edit now: count>1 ->
+  reject WITHOUT backup/mutation, message "found N times - ambiguous, make old unique
+  (include surrounding lines)"; count==0 -> "text not found" + "Closest match: ..."
+  hint. Edit never mutates on ambiguity/typo. 88/88 (2 new tests:
+  test_edit_guard_ambiguous, test_edit_guard_fuzzy_hint), CLI live, server restarted.
+Next stages: (2) Git-auto-branch, (3) Prompt KV-cache, (4) AUTO_CONFIRM_SAFE,
+(5) qwen3:8b default >10GB VRAM, (6) Docker default.

@@ -164,6 +164,16 @@ Ollama/stream/native/fallback; `exec.py` — диспетчер 26 per-tool хе
     запуск окна подтверждён (WebView2-процессы поднялись). Стартер
     `scripts/run_tauri.bat` (сборка при первом запуске + инструкция
     установки тулчейна). Pywebview сохранён как fallback. 86/86, CLI live.
+35. **Этап 21 — AST-based edit guard** (2026-08-08): `_edit_old_stats()` в tools/exec.py —
+    до применения edit: (1) `old` найден N>1 раз → edit НЕ применяется, ответ модели
+    «found N times — ambiguous, make old unique (include surrounding lines)» (раньше
+    replace менял ВСЕ вхождения молча — потенциально ломал не то место); (2) `old`
+    не найден → fuzzy-подсказка «Closest match: ... (similarity N%)» через
+    difflib.SequenceMatcher (>=0.8) — модель видит свою опечатку. Мутации не
+    происходит ни в одном из случаев (backup не вызывается). Тесты
+    test_edit_guard_ambiguous (2 вхождения → reject, уникальный edit проходит,
+    Syntax: OK) и test_edit_guard_fuzzy_hint (опечатка → «Closest match»). 88/88,
+    CLI live, сервер перезапущен.
 
 Из рекомендаций оценок 2-3 реализовано: few-shot, [DONE]-маркер, один тул за раз, статистика тулов,
 пост-обработка JSON, Docker-песочница, code detector, Cache-Control, динамический контекст,

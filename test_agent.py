@@ -52,6 +52,28 @@ def test_edit():
     assert test_file.read_text() == "new text", "edit content wrong"
     print("  [OK] edit")
 
+def test_edit_guard_ambiguous():
+    """old text found N times -> reject BEFORE mutating (AST-edit guard)."""
+    f = TMP / "edit_guard_dup.py"
+    f.write_text("x = 1\nprint(x)\nprint(x)\ny = 2\n")
+    r = execute_tool("edit", {"path": str(f), "old": "print(x)", "new": "print('v', x)"})
+    assert "found 2 times" in r and "NOT applied" in r, f"ambiguous edit not rejected: {r}"
+    assert f.read_text() == "x = 1\nprint(x)\nprint(x)\ny = 2\n", "file mutated despite ambiguity"
+    u = execute_tool("edit", {"path": str(f), "old": "print(x)\ny = 2", "new": "print('v', x)\ny = 3"})
+    assert "Replaced" in u and "Syntax: OK" in u, f"unique edit failed: {u}"
+    assert "print('v', x)" in f.read_text() and "print(x)" in f.read_text(), "wrong replace"
+    print("  [OK] edit guard: ambiguous rejected, unique applied")
+
+def test_edit_guard_fuzzy_hint():
+    """typo'd old text -> 'Closest match' hint pointing at the real line."""
+    f = TMP / "edit_guard_fuzzy.py"
+    f.write_text("def compute_total():\n    return 42\n")
+    r = execute_tool("edit", {"path": str(f), "old": "def comput_total():", "new": "def total():"})
+    assert "text not found" in r, "typo edit not rejected"
+    assert "Closest match" in r and "compute_total" in r, f"no fuzzy hint: {r}"
+    assert f.read_text() == "def compute_total():\n    return 42\n", "file mutated on typo"
+    print("  [OK] edit guard: fuzzy closest-match hint")
+
 def test_syntax_guard_write():
     """write/edit/patch report AST syntax status (Python/JSON) so the model
     can self-correct broken code immediately."""
@@ -1693,7 +1715,8 @@ def test_cross_platform():
 if __name__ == "__main__":
     print(f"\nSmoke tests for agent.py\n{'='*40}")
     tests = [test_cross_platform, test_read, test_read_absolute, test_read_url, test_list, test_glob,
-             test_write_and_undo, test_edit, test_syntax_guard_write, test_patch_multi_file, test_bash, test_verify_py, test_verify_json,
+             test_write_and_undo, test_edit, test_edit_guard_ambiguous, test_edit_guard_fuzzy_hint,
+             test_syntax_guard_write, test_patch_multi_file, test_bash, test_verify_py, test_verify_json,
              test_backup_undo, test_db_query, test_testgen, test_validation, test_save_api,
              test_terminal_api, test_pty_shell, test_ws_terminal, test_deps_tool, test_audit, test_rag_cache_incremental,
              test_agent_loop_tool_call, test_agent_loop_plain_text, test_agent_loop_shell_alias,

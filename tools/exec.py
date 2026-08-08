@@ -1,5 +1,6 @@
 """Tool execution: validation, bash sandbox, unified diff, execute_tool."""
 import ast
+import difflib
 import glob as _glob, json, os, re, subprocess, sys
 from pathlib import Path
 import logging
@@ -222,6 +223,18 @@ def _tool_write(args):
     if sc: msg += f"\nSyntax: {sc}"
     return msg
 
+def _edit_old_stats(content, old):
+    """Count exact occurrences of `old`; if absent, find the closest line (fuzzy)."""
+    n = content.count(old)
+    if n > 0:
+        return n, None
+    best, best_r = None, 0.0
+    for line in content.splitlines():
+        r = difflib.SequenceMatcher(None, old.strip(), line.strip()).ratio()
+        if r > best_r:
+            best_r, best = r, line.strip()
+    return 0, (best, best_r) if best_r >= 0.8 else None
+
 def _tool_edit(args):
     err = ensure_safe_path(args["path"])
     if err: return err
@@ -230,10 +243,19 @@ def _tool_edit(args):
         return f"Error: {p} not found" + (_similar_files(args["path"]) or ". Use the glob tool to find files. Do NOT give tutorials — retry with a correct path.")
     old = args.get("old", ""); new = args.get("new", "")
     content = p.read_text("utf-8")
-    if old not in content:
+    count, fuzzy = _edit_old_stats(content, old)
+    if count == 0:
         lines = content.split("\n")
         snippet = "\n".join(lines[:20]) if len(lines) <= 20 else "\n".join(lines[:10]) + "\n...\n" + "\n".join(lines[-5:])
-        return f"Error: text not found in {args['path']}.\nCurrent file content (first lines):\n```\n{snippet[:800]}\n```\nUse the EXACT text from the file."
+        hint = ""
+        if fuzzy:
+            hint = (f"\nClosest match in file: `{fuzzy[0][:160]}` "
+                    f"(similarity {int(fuzzy[1]*100)}%). Copy it EXACTLY.")
+        return f"Error: text not found in {args['path']}.{hint}\nCurrent file content (first lines):\n```\n{snippet[:800]}\n```\nUse the EXACT text from the file."
+    if count > 1:
+        return (f"Error: 'old' text found {count} times in {args['path']} — ambiguous, "
+                f"edit NOT applied.\nMake the old text unique: include the surrounding lines "
+                f"from the file (copy EXACTLY from read output), so only one match remains.")
     rel = str(p.relative_to(WORK_DIR)) if WORK_DIR in p.parents else str(p)
     backup(rel)
     p.write_text(content.replace(old, new), "utf-8")
