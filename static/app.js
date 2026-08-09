@@ -291,7 +291,7 @@ function send(){
   var agentMatch=txt.match(/^@(explore|scout|general)\s+(.*)/);
   var skillMatch=txt.match(/^@skill\s+(\w+)\s*(.*)/);
   var slashMatch=txt.match(/^\/(\w+)\s*(.*)/);
-  if(agentMatch){var agent=agentMatch[1],prompt=agentMatch[2];am('u',fm('[@'+agent+'] '+prompt));ms.push({role:'user',content:'[@'+agent+'] '+prompt});sd=1;$('snd').disabled=1;$('cnl').style.display='inline-block';ac=new AbortController();var fl='',be=am('a','<span class="sp"></span>');$('st2').textContent='['+agent+']...';fetch(A+'/api/task/'+agent+'?prompt='+encodeURIComponent(prompt)).then(function(r){return r.json()}).then(function(d){fl=d.result||'No response';ms.push({role:'assistant',content:fl});be.innerHTML=fm(fl);sd=0;$('snd').disabled=0;$('cnl').style.display='none';$('st2').textContent=''}).catch(function(e){be.innerHTML='Error: '+esc(e.message);sd=0;$('snd').disabled=0;$('cnl').style.display='none'});return}
+  if(agentMatch){var agent=agentMatch[1],prompt=agentMatch[2];am('u',fm('[@'+agent+'] '+prompt));ms.push({role:'user',content:'[@'+agent+'] '+prompt});sd=1;$('snd').disabled=1;$('cnl').style.display='inline-block';ac=new AbortController();var fl='',be=am('a','<span class="sp"></span>');$('st2').textContent='['+agent+']...';fetch(A+'/api/task/'+agent+'?prompt='+encodeURIComponent(prompt)).then(function(r){return r.json()}).then(function(d){fl=d.result||'No response';ms.push({role:'assistant',content:fl});be.innerHTML=fm(fl);sd=0;$('snd').disabled=0;$('cnl').style.display='none';$('st2').textContent='';$('st2').classList.remove('think')}).catch(function(e){be.innerHTML='Error: '+esc(e.message);sd=0;$('snd').disabled=0;$('cnl').style.display='none'});return}
   if(skillMatch){var sk=skillMatch[1];fetch(A+'/api/skills').then(function(r){return r.json()}).then(function(skills){var found=skills.find(function(s){return s.name===sk});if(found){txt='I loaded the '+sk+' skill. '+found.preview+(skillMatch[2]?'\n\n'+skillMatch[2]:'')}else{txt='Skill "'+sk+'" not found'};am('u',fm(txt));ms.push({role:'user',content:txt})});}
   // Handle slash commands
   if(slashMatch){
@@ -301,7 +301,7 @@ function send(){
   }
   am('u',fm(txt));ms.push({role:'user',content:txt});
   var m=$('chm').value||'deepseek-r1:7b';sd=1;$('snd').disabled=1;$('cnl').style.display='inline-block';ac=new AbortController();
-    var fl='',be=am('a','<span class="sp"></span>');$('st2').textContent='thinking...';
+    var fl='',be=am('a','<span class="sp"></span>');$('st2').textContent='thinking...';$('st2').classList.add('think');
     var tl=null,tlCount=0,planEl=null;
     function toolLine(name,args,result){
       if(!tl){tl=document.createElement('div');tl.className='tline';be.parentNode.appendChild(tl)}
@@ -339,7 +339,7 @@ function send(){
   .then(function(r){if(!r.ok)throw Error(r.status);
     var rd=r.body.getReader(),dc=new TextDecoder(),bf='';
     (function rd2(){rd.read().then(function(v){
-      if(v.done){ms.push({role:'assistant',content:fl});be.innerHTML=fm(fl)||'(empty)';sd=0;$('snd').disabled=0;$('cnl').style.display='none';$('st2').textContent='';loadFiles();return}
+      if(v.done){ms.push({role:'assistant',content:fl});be.innerHTML=fm(fl)||'(empty)';sd=0;$('snd').disabled=0;$('cnl').style.display='none';$('st2').textContent='';$('st2').classList.remove('think');loadFiles();return}
       bf+=dc.decode(v.value,{stream:1});var ls=bf.split('\n');bf=ls.pop()||'';
       ls.forEach(function(l){if(l.startsWith('data: ')){try{var d=JSON.parse(l.slice(6));
         if(d.text){fl+=d.text}
@@ -351,8 +351,8 @@ function send(){
         }
       }catch(e){}}});
       be.innerHTML=fm(fl)||'<span class="sp"></span>';rd2()
-    }).catch(function(e){if(e.name!='AbortError'){be.innerHTML='Error: '+esc(e.message)}sd=0;$('snd').disabled=0;$('cnl').style.display='none';$('st2').textContent=''})})()
-  }).catch(function(e){if(e.name!='AbortError'){be.innerHTML='Error: '+esc(e.message)}sd=0;$('snd').disabled=0;$('cnl').style.display='none';$('st2').textContent=''})
+    }).catch(function(e){if(e.name!='AbortError'){be.innerHTML='Error: '+esc(e.message)}sd=0;$('snd').disabled=0;$('cnl').style.display='none';$('st2').textContent='';$('st2').classList.remove('think')})})()
+  }).catch(function(e){if(e.name!='AbortError'){be.innerHTML='Error: '+esc(e.message)}sd=0;$('snd').disabled=0;$('cnl').style.display='none';$('st2').textContent='';$('st2').classList.remove('think')})
 }
 
 function fmtMsg(t){
