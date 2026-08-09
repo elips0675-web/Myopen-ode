@@ -1,0 +1,52 @@
+# Пакет для внешней переоценки 9.5/10 (Этап 44)
+
+Проект: **My OpenCode v2** — локальный AI-агент-программист на Ollama
+(замена Cursor/Windsurf/Claude Code), полностью оффлайн, Windows.
+Репозиторий: https://github.com/elips0675-web/Myopen-ode (ветка master).
+
+## Текущий статус
+- Тесты: **107/107 ×2** (`python -X utf8 test_agent.py`) + **live 3/3** на
+  qwen3:8b (`python -X utf8 test_live.py --models qwen3:8b`: create file 18.3s,
+  simple question, edit rename).
+- Оценки истории: Kimi 8.7 → внешний 8.8 → DeepSeek 8.9 (+переоценка 8.9) →
+  внешний 8.9 (Оценка 5). ВЕСЬ план оценок P1–P3 закрыт.
+- Модель: qwen3:8b (native tool calling), RTX 3060 12GB, deepseek-r1:1.5b
+  как planner; 43 сессии, сервер :8765.
+
+## Что закрыто ПОСЛЕ оценки 8.9/10 (этапы 35–43)
+| Этап | Что | Доказательство |
+|---|---|---|
+| 35 | Rate limiting /api/chat (per-IP sliding window 60/мин, burst 6, 429+retry) | test_rate_limit |
+| 36 | Семантическая валидация путей: «looks like a directory» → подсказка list/glob ДО мутаций | test_path_dir_hint |
+| 37 | Unquoted JSON-значения в lenient-парсере (пути с точкой/слэшем) | test_unquoted_json_values |
+| 38 | Работа вне workspace: EXTRA_ROOTS / ALLOW_OUTSIDE (jail остаётся по умолчанию) | test_extra_roots + live: файл создан в E:\test mycode |
+| 39 | glob по абсолютным путям и cwd вне workspace | test_glob_outside_workspace |
+| 40 | Обучение созданию SwiftMatch-класс приложений оффлайн: 11 скиллов (.agent_skills/webapp, swiftmatch_arch, dating-app-*, react-patterns, generate-api, offline-ollama) + Rule 22 в промптах | live: агент сам вызвал skill webapp+offline-ollama |
+| 41 | DI-контейнер (core/container.py): api_* без `import agent as _agent`, живые провайдеры | test_di_container |
+| 42 | Абстракции хранилищ: RAGStore/RagAdapter + KVStore/SqliteKVStore, регистрация в DI | test_abstractions |
+| 43 | Whisper STT (опция): /api/stt + /api/stt/status, AI_STT_URL/AI_STT_BINARY, MediaRecorder-фолбэк в UI | test_stt_endpoint + live /api/stt/status |
+
+Тесты выросли: 86 → 104 → 107 (июль-август 2026).
+
+## Как проверить самому (5 минут)
+1. `git clone https://github.com/elips0675-web/Myopen-ode && cd Myopen-ode`
+2. `python -X utf8 test_agent.py` → ждать «107/107 passed»
+3. `ollama pull qwen3:8b` (если нет) → `python -X utf8 agent.py` →
+   открыть http://localhost:8765 → задать «что такое 2+2?» и «создай файл
+   hello.py с функцией greet» (деструктивные — подтвердить «да»)
+4. Для проверки обучения: «какими скиллами создашь dating-приложение
+   полностью оффлайн?» → агент вызовет skill webapp/offline-ollama
+5. Скиллы: папка .agent_skills/ (11 md). Обучение по методологии —
+   «Обучения программиста.txt» в корне репозитория.
+
+## Запрос на оценку
+Оценить версию с учётом этапов 35–43 (коммиты 6afcfb9..0ac96cc):
+- Архитектура: DI, абстракции хранилищ, модульность core/ + api_* + tools/
+- Код/тесты: 107/107 + 3/3 live, AST-guard, git-бэкапы, rate limit
+- Возможности: работа вне workspace, обучение скиллами, Whisper STT,
+  RAG over plan, self-healing, native tool calling (qwen3), Tauri desktop
+- Безопасность: path-jail + EXTRA_ROOTS, bash whitelist, rate limiting,
+  изобретённые пути блокируются
+- Оффлайн: весь стек (Ollama, MySQL-клоны, STT whisper.cpp) локальный
+
+Ожидание: 9.5/10 при подтверждении закрытия всех пунктов плана.

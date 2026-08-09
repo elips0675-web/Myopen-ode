@@ -949,3 +949,10 @@ UPDATE (2026-08-09) - Stages 41-43: remaining 10/10 items done:
   closed; only external 9.5 re-evaluation remains (needs a reviewer).
 - Server restarted and LIVE-verified: /health ok, /api/stt/status answers
   {"url":false,"binary":false}.
+
+UPDATE (2026-08-09) - Stage 44: re-evaluation package for external 9.5:
+- RE_EVAL.md created: full state (107/107 x2 + live 3/3 qwen3:8b), what was
+  closed after 8.9 (stages 35-43 table), 5-min verify steps (clone -> tests ->
+  run :8765 -> skills check), expectations. TODO.md points to it.
+- Live run reconfirmed: test_live.py --models qwen3:8b -> 3/3 (create file
+  18.3s, simple question, edit rename 11.4s).
