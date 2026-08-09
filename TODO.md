@@ -28,11 +28,11 @@ Kimi 2: 8.3/10 → DeepSeek 2: 8.5/10 → DeepSeek 3: 8.6/10 → Kimi 3: 8.7/10 
 - [x] Модель-независимость: few-shot примеры под qwen2.5-coder:7b (поднять с 1/6 до 3/6 бенча) (этап 69) — бенч 7b: 1/6 → 5/7 (пик 6/7, 84–148s); SUMMARY.md обновлён
 - [x] Prompt compression: EXAMPLES/VALID/INVALID в отдельный tier/skill, не в каждый вызов (этап 70) — SYSTEM_PROMPT_FEWSHOT в tools/__init__.py, _apply_fewshot_tier в core/agent_loop.py (it 0–1 legacy, drop на it>=2, native никогда); тест test_prompt_fewshot_tier
 - [x] AST bash guard: ast.parse + compile() вместо keyword-проверки python -c/node -e (этап 71) — core/safety/bash_guard.py: _check_python_inline (AST: блок subprocess/socket/ctypes/shutil-imports, os.system/popen/remove, shutil.rmtree, eval/exec, битый синтаксис; python -m опасных модулей), _check_node_inline (узкие структурные паттерны), inline-тела вырезаются из whitelist-сегментации; тест test_bash_ast_guard (12 разрешённых + 12 блокируемых)
-- [ ] UI polish: анимации переходов, типографика — «ощущение продукта» (этап 72)
+- [x] UI polish: анимации переходов, типографика — «ощущение продукта» (этап 72) — mIn fade+slide у сообщений, pulse у «thinking», fade-in dropzone, press-feedback на кнопках/чипах/карточках, тень Send, типографика 13.5px/1.65
 Вердикт Kimi 4: тег v2.0-stable уже заслужен; ограничение — экосистема моделей, не код.
 
 ### Недавние предложения (этапы 45–64 сделаны; остаток к «Доделать»)
-- [ ] Внешняя переоценка 9.5/10 — единственный открытый пункт «Осталось (10/10)»; пакет для ревьювера — RE_EVAL.md (этап 44, обновлён данными 49–64: 115/115, live 3/3 + @reviewer VERDICT PASS, bench 7/7)
+- [ ] Внешняя переоценка 9.5/10 — единственный открытый пункт «Осталось (10/10)»; пакет для ревьювера — RE_EVAL.md (этап 44, обновлён данными 49–72: 123/123, live 3/3 + @reviewer VERDICT PASS, bench 7/7, рекомендации DS6+Kimi4 закрыты; остался P0 — видео-демо)
 
 ### Этап 1. Динамический контекст в промпте (DS3 №1, Kimi3 P1) — СДЕЛАНО
 - [x] Перед каждым вызовом модели: «You are working in project: X (iteration N) / Last action: {tool} (result: ok|error)» (_dynamic_context, agent.py); тесты test_dynamic_context, test_dynamic_context_error_status
@@ -199,7 +199,7 @@ Kimi 2: 8.3/10 → DeepSeek 2: 8.5/10 → DeepSeek 3: 8.6/10 → Kimi 3: 8.7/10 
 - [x] DI-контейнер вместо import agent as _agent — Этап 41 (core/container.py: register/resolve/has/reset; провайдеры-коллбэки (work_dir/sessions_dir/memory_dir/logger/sessions_db), живые после switch_project; api_files/api_misc/api_sessions переведены на resolve, остались только прямые функции)
 - [x] Абстракции RAG/DB — Этап 42 (core/abstractions.py: RAGStore+RagAdapter (обёртка rag-модуля), KVStore+SqliteKVStore (thread-safe); init_defaults регистрирует 'rag' в контейнере, 'sessions_db' — в agent.py; точки замены FAISS→внешняя векторная БД / SQLite→Redis)
 - [x] Whisper-сервер STT — Этап 43 (stt.py: POST /api/stt multipart (wav/mp3/ogg/m4a/webm, ≤25MB) + GET /api/stt/status; бэкенды AI_STT_URL (прокси whisper-сервера) или AI_STT_BINARY (whisper.cpp main.exe -l ru -otxt); без бэкенда → 501; UI: MediaRecorder-фолбэк при отсутствии Web Speech API, мик-кнопка скрыта только если нет обоих)
-- [ ] Внешняя переоценка 9.5/10 (весь план 8.3–8.9 закрыт, тесты 115/115 + live 3/3; пакет для ревьювера — RE_EVAL.md, Этап 44)
+- [ ] Внешняя переоценка 9.5/10 (весь план 8.3–8.9 закрыт + рекомендации DS6 (65–68) и Kimi4 (69–72) выполнены, тесты 123/123 + live 3/3; пакет для ревьювера — RE_EVAL.md, Этап 44; остался P0 — видео-демо)
 
 ## Вне оценок (этапы 45–48, 2026-08-09) — развитие агента по своей дорожной карте
 - [x] Reviewer/Fixer сабагенты — Этап 45 (SUBAGENT_PROMPTS: reviewer — многошаговый разбор кода с примерами; fixer — применение правок с самопроверкой; GENERAL — общий; тул task проксирует их через run_agent_loop; тест test_reviewer_subagent)

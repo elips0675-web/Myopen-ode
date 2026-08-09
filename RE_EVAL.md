@@ -5,11 +5,11 @@
 Репозиторий: https://github.com/elips0675-web/Myopen-ode (ветка master).
 
 ## Текущий статус
-- Тесты: **115/115** (`python -X utf8 test_agent.py`) + **live 3/3** на
+- Тесты: **123/123** (`python -X utf8 test_agent.py`) + **live 3/3** на
   qwen3:8b (`python -X utf8 test_live.py --models qwen3:8b`: create file 18.3s,
   simple question, edit rename) + **бенчмарк по 3 моделям** (`python -X utf8
-  test_bench.py --models qwen3:8b`): qwen3:8b 7/7 (394s, включая subagent-review), qwen2.5-coder:7b 1/6,
-  deepseek-coder-v2:16b 0/6; отчёты bench_reports/*.json + SUMMARY.md. Live
+  test_bench.py --models qwen3:8b`): qwen3:8b 7/7 (394s, включая subagent-review), qwen2.5-coder:7b 5/7
+  (после few-shot-подстройки этапом 69; пик 6/7), deepseek-coder-v2:16b 0/6; отчёты bench_reports/*.json + SUMMARY.md. Live
   @reviewer/@fixer подтверждены: обзор → «CRITICAL: calc.py:2 (division by
   zero)» и реальное исправление файла (guard b==0 → None, 60.4s); прямой
   маркер @reviewer в чате → отчёт «VERDICT: PASS» + [DONE]; прямой маркер
@@ -18,8 +18,9 @@
 - Оценки истории: Kimi 8.7 → внешний 8.8 → DeepSeek 8.9 (+переоценка 8.9) →
   внешний 8.9 (Оценка 5) → **DeepSeek 6: 9.4/10 + Kimi 4: 9.0/10
   (2026-08-09)**.
-  ВЕСЬ план оценок P1–P3 закрыт; до 9.5 остались P0 (видео-демо) и
-  P1 (MCP-интеграционный тест) по вердикту DeepSeek 6.
+  ВЕСЬ план оценок P1–P3 закрыт; рекомендации DeepSeek 6 (этапы 65–68) и
+  Kimi 4 (этапы 69–72) ВЫПОЛНЕНЫ; до 9.5 остался P0 (видео-демо) по вердикту
+  DeepSeek 6.
 - Модель: qwen3:8b (native tool calling), RTX 3060 12GB, deepseek-r1:1.5b
   как planner; 43 сессии, сервер :8765.
 
@@ -47,11 +48,23 @@
 | 61 | GET /api/subagents — каталог (name/marker/desc/tools) | test_subagents_api |
 | 62 | Бенч-сценарий subagent-review (7-й): task(agent='reviewer') → VERDICT | test_bench_report |
 
-Тесты выросли: 86 → 104 → 107 → 111 → 113 → 114 → 115 (июль-август 2026).
+Тесты выросли: 86 → 104 → 107 → 111 → 113 → 114 → 115 → 116 → 119 → 120 → 121 → 122 → 123 (июль-август 2026).
+
+## Рекомендации DeepSeek 6 (этапы 65–68) и Kimi 4 (этапы 69–72) — ЗАКРЫТЫ
+| Этап | Что | Доказательство |
+|---|---|---|
+| 65 | MCP-интеграционный тест: встроенный stdio-сервер mcp_servers.py (JSON-RPC 2.0: initialize/ping/tools|resources/list|call/read, ошибки -32601) + полный цикл в тесте | test_mcp_integration |
+| 66 | EventBus в core/container.py (subscribe/once/unsubscribe/publish, изоляция исключений подписчиков) + публикации tool.executed/agent.iteration/agent.done/subagent.spawned/subagent.finished + подписчики в agent.py | test_event_bus, test_event_bus_tool_events, test_event_bus_subagent_audit |
+| 67 | Аудит сабагентов: отдельный .agent_subagent_audit.log (spawn+finished), GET /api/subagents/audit, кнопка в UI | test_subagent_audit_api + UI-кнопка 📊 |
+| 68 | Автовыбор embed-модели: ollama list → bge-m3/mxbai-embed-large/snowflake-arctic-embed/all-minilm, EMBED_MODEL побеждает | test_auto_pick_embed_model |
+| 69 | Модель-независимость: root-cause (бенч не передавал SYSTEM_PROMPT!) + 5 few-shot примеров под 7b + rule 24 (rename ALL occurrences) + реклама rename_symbol/extract_function/inline_variable | бенч 7b: 1/6 → 5/7 (пик 6/7); bench_reports/SUMMARY.md |
+| 70 | Prompt compression: EXAMPLES/тул-шаблоны/VALID/INVALID извлечены из SYSTEM_PROMPT в tier SYSTEM_PROMPT_FEWSHOT; _apply_fewshot_tier вставляет их как отдельное system-сообщение только на итерациях 0–1 legacy-сессий, дроп на it>=2, native никогда (~1K токенов/вызов) | test_prompt_fewshot_tier + обновлённый test_system_prompt_rules |
+| 71 | AST bash guard: python -c анализируется через ast.parse+compile (блок subprocess/socket/ctypes/shutil-импортов, os.system/popen/remove, shutil.rmtree, eval/exec, битый синтаксис, опасные python -m) вместо keyword-совпадений; node -e — узкие структурные паттерны; inline-тела вырезаются из whitelist-сегментации | test_bash_ast_guard (24 кейса) + обновлённый test_bash_filter |
+| 72 | UI polish: анимация появления сообщений (fade+slide), pulse у «thinking», fade-in dropzone, press-feedback на кнопках/чипах/карточках, тень Send, типографика 13.5px/1.65 | static/app.js + ui.py |
 
 ## Как проверить самому (5 минут)
 1. `git clone https://github.com/elips0675-web/Myopen-ode && cd Myopen-ode`
-2. `python -X utf8 test_agent.py` → ждать «115/115 passed»
+2. `python -X utf8 test_agent.py` → ждать «123/123 passed»
 3. `ollama pull qwen3:8b` (если нет) → `python -X utf8 agent.py` →
    открыть http://localhost:8765 → задать «что такое 2+2?» и «создай файл
    hello.py с функцией greet» (деструктивные — подтвердить «да»)
@@ -63,11 +76,14 @@
    отчёт bench_reports/qwen3-8b.json
 7. Маркеры сабагентов: в чате «@reviewer проверь hello.py» → отчёт
    CRITICAL/WARNINGS/VERDICT без правок файла.
+8. Количество тестов в шаге 2 — «123/123 passed».
 
 ## Запрос на оценку
-Оценить версию с учётом этапов 35–48 + 54–64 (коммиты 6afcfb9..HEAD):
-- Архитектура: DI, абстракции хранилищ, модульность core/ + api_* + tools/
-- Код/тесты: 115/115 + 3/3 live, AST-guard, git-бэкапы, rate limit
+Оценить версию с учётом этапов 35–72 (коммиты 6afcfb9..HEAD):
+- Архитектура: DI, абстракции хранилищ, модульность core/ + api_* + tools/,
+  EventBus, встроенный MCP-сервер, AST bash guard
+- Код/тесты: 123/123 + 3/3 live, AST-guard, git-бэкапы, rate limit,
+  MCP-интеграционный тест, prompt compression (few-shot tier), UI polish
 - Возможности: работа вне workspace, обучение скиллами, Whisper STT,
   RAG over plan, self-healing, native tool calling (qwen3), Tauri desktop,
   сабагенты-маркеры @reviewer/@fixer/@general в чате + тул task
@@ -96,7 +112,7 @@
 Ты — технический ревьювер кода. Дай оценку от 8.5 до 10 за 3 раунда:
 Раунд 1 — архитектура: DI-контейнер, абстракции хранилищ, модульность
 core/ + api_* + tools/, безопасность (path-jail, bash whitelist, rate
-limit), оффлайн-стек. Раунд 2 — качество: 115/115 автотестов
+limit), оффлайн-стек. Раунд 2 — качество: 123/123 автотестов
 (test_agent.py), AST-guard, git-бэкапы, бенчмарк 7/7 на qwen3:8b live.
 Раунд 3 — возможности: работа вне workspace (EXTRA_ROOTS), 11 обучающих
 скиллов, Whisper STT, RAG over plan, self-healing, native tool calling,

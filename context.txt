@@ -1076,4 +1076,48 @@ UPDATE (2026-08-09) - stages 63-64: task tool reviewer/fixer fix + bench 7/7 (11
   task(agent='reviewer') -> CRITICAL: .bench_tmp/bug2.py:3 ... VERDICT: FAIL.
   Final bench run: **7/7** (394.1s, subagent-review 38.9s), SUMMARY.md updated.
 - Tests 115/115.
+- Tests 123/123.
+
+UPDATE (2026-08-09) - stages 65-72 (DeepSeek 6 + Kimi 4 recommendations done):
+- Stage 65: built-in stdio MCP server mcp_servers.py (JSON-RPC 2.0: initialize
+  with serverInfo, ping, tools/list, resources/list, tools/call, resources/read,
+  -32601 errors) + test_mcp_integration (start -> initialize -> tools/list ->
+  call -> resources -> error cases).
+- Stage 66: EventBus in core/container.py (subscribe/once/unsubscribe/publish/
+  has_subscribers/clear, subscriber exceptions isolated); publishers:
+  tool.executed (exec.py, errors flagged via startswith Error:/Blocked:),
+  agent.iteration + agent.done (core/agent_loop.py), subagent.spawned/finished
+  (exec.py _tool_task); subscribers registered in agent.py.
+- Stage 67: subagent audit - dedicated .agent_subagent_audit.log (spawn +
+  finished lines), GET /api/subagents/audit, UI button + showSubagentAudit.
+- Stage 68: _auto_pick_embed_model - ollama list, prefer bge-m3/mxbai-embed-
+  large/snowflake-arctic-embed/all-minilm:33m/all-minilm/bge-small/bge-base,
+  then any *embed* except nomic-embed-text; explicit EMBED_MODEL wins.
+- Stage 69: bench root-cause - test_bench.py never passed SYSTEM_PROMPT;
+  patched to include system prompt in all 7 scenarios + warm-up; added few-shot
+  Example 4 (write file), Example 5 (one tool at a time), INVALID prose-code
+  bullets, rule 24 (rename ALL occurrences), advertised rename_symbol/
+  extract_function/inline_variable. qwen2.5-coder:7b bench: 1/6 -> 5/7
+  (peak 6/7; edit-rename + refactor-extract still fail - 7b stops after
+  read->edit->bash template, ignores second edit; subagent-review flaky).
+- Stage 70: prompt compression - SYSTEM_PROMPT_FEWSHOT tier (EXAMPLES + tool
+  templates + VALID/INVALID moved out of SYSTEM_PROMPT, SYSTEM 4384 chars /
+  FEWSHOT 5199); _apply_fewshot_tier in core/agent_loop.py injects it as a
+  separate system message on iterations 0-1 of legacy sessions only, dropped
+  at it>=2, native tool_calls models never receive it (~1K tokens/call saved
+  on long runs). test_prompt_fewshot_tier + updated test_system_prompt_rules.
+- Stage 71: AST bash guard - inline python via ast.parse+compile: blocks
+  subprocess/socket/ctypes/shutil imports, os.system/popen/remove/unlink/rmdir,
+  shutil.rmtree, eval/exec/execfile/compile calls, invalid syntax, dangerous
+  python -m modules (http.server/ftplib/telnetlib/socket); inline node via
+  narrow structural patterns (child_process/process.binding/process.exit/
+  eval(/new Function); interpreter bodies scrubbed from whitelist segmentation
+  (no false positives on ';' inside python -c); ImportFrom module fixed.
+  test_bash_ast_guard 24 cases + updated test_bash_filter.
+- Stage 72: UI polish - message entrance animation (mIn fade+slide), typing
+  status pulse (.think), dropzone fade-in, press feedback on send/chips/
+  session cards, send button shadow, typography 13.5px/1.65.
+- Test note: container.reset() kills agent's registrations (work_dir) and
+  breaks test_audit_api - event-bus tests save/restore old_bus via
+  container._REGISTRY instead.
 
