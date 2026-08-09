@@ -12,7 +12,9 @@
   deepseek-coder-v2:16b 0/6; отчёты bench_reports/*.json + SUMMARY.md. Live
   @reviewer/@fixer подтверждены: обзор → «CRITICAL: calc.py:2 (division by
   zero)» и реальное исправление файла (guard b==0 → None, 60.4s); прямой
-  маркер @reviewer в чате → отчёт «VERDICT: PASS» + [DONE].
+  маркер @reviewer в чате → отчёт «VERDICT: PASS» + [DONE]; прямой маркер
+  @fixer в чате → реальное исправление livefix/calc.py (guard b==0 → сообщение,
+  «Syntax: OK», подтверждение «yes» в той же сессии).
 - Оценки истории: Kimi 8.7 → внешний 8.8 → DeepSeek 8.9 (+переоценка 8.9) →
   внешний 8.9 (Оценка 5). ВЕСЬ план оценок P1–P3 закрыт.
 - Модель: qwen3:8b (native tool calling), RTX 3060 12GB, deepseek-r1:1.5b

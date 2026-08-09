@@ -39,6 +39,14 @@ function am(r,t){
   $('msgs').appendChild(m);m.scrollIntoView({behavior:'smooth',block:'end'});return b
 }
 function cancel(){if(ac){ac.abort();sd=0;$('snd').disabled=0;$('cnl').style.display='none';$('st2').textContent='cancelled'}}
+// Stage 57: subagent chips — insert "@reviewer "/"@fixer "/"@general " at cursor
+function subChip(type){
+  var ta=$('ta'),v=ta.value,p=ta.selectionStart||0;
+  var ins='@'+type+' ',nl=(v.slice(0,p).trim()?'\n':'');
+  ta.value=v.slice(0,p)+nl+ins+v.slice(p);
+  ta.selectionStart=ta.selectionEnd=p+nl.length+ins.length;
+  ta.focus();ah();setTimeout(showHints,80);
+}
 
 // Sessions
 function timeAgo(t){

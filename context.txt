@@ -1038,3 +1038,18 @@ UPDATE (2026-08-09) - stages 54-56: direct subagent markers in chat (113/113):
   punctuation/newline after marker, bare marker, no-marker passthrough;
   test_subagent_prompts_defined).
 
+UPDATE (2026-08-09) - stages 57-59: subagent UI chips + live @fixer (113/113):
+- Stage 57 (UI chips): ui.py adds three chip buttons (Ревью/Фикс/Агент) above
+  the textarea, static/app.js subChip(type) inserts "@reviewer "/"@fixer "/
+  "@general " at the cursor; placeholder now mentions the markers.
+- Stage 58 (docs): USER_GUIDE.md "Как задавать задачи" - direct markers
+  @reviewer/@fixer/@general (VERDICT report format) vs @explore/@scout
+  (model-decided task tool).
+- Stage 59 (live @fixer via marker): HTTP POST /api/chat with session_id and
+  "@fixer Исправь баг деления на ноль в livefix/calc.py" -> fixer loop read
+  the file, proposed edit (guard b == 0 -> return "Error: Division by zero
+  is not allowed."), confirmed with a second "yes" message in the same
+  session -> "Replaced in E:\My OpenCode1\livefix\calc.py, Syntax: OK".
+  Note: leading-dot dirs (.test_tmp) confuse the model's edit path - use
+  plain dir names for live subagent checks.
+

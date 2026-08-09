@@ -209,6 +209,11 @@ Kimi 2: 8.3/10 → DeepSeek 2: 8.5/10 → DeepSeek 3: 8.6/10 → Kimi 3: 8.7/10 
 - [x] UI-автокомплит маркеров — Этап 56 (static/app.js: @-подсказки reviewer/fixer/general/explore/scout с пояснением «run as subagent»)
 - [x] Тесты **113/113** (добавлены test_subagent_marker + test_subagent_prompts_defined)
 
+## Вне оценок (этапы 57–59, 2026-08-09) — UI сабагентов и live @fixer
+- [x] Чипы-кнопки сабагентов — Этап 57 (ui.py: кнопки 🧐 Ревью / 🔧 Фикс / 🧭 Агент над textarea; static/app.js subChip() вставляет @reviewer/@fixer/@general в позицию курсора; placeholder обновлён)
+- [x] Документация маркеров — Этап 58 (USER_GUIDE.md: раздел «Как задавать задачи» — прямые маркеры @reviewer/@fixer/@general + кнопки, отличия от @explore/@scout через model)
+- [x] Live @fixer через маркер — Этап 59 (HTTP /api/chat: «@fixer Исправь баг деления на ноль в livefix/calc.py» → read → edit с guard `if b == 0: return "Error: Division by zero is not allowed."` → Syntax: OK; подтверждение через второй запрос «yes» в той же сессии)
+
 ## Собственные идеи (низкий приоритет)
 - [x] Native tool calling — СДЕЛАНО (Этап 10)
 - [x] Desktop App — СДЕЛАНО как Этап 11 (pywebview fallback); Этап 20 — Tauri desktop (Rust 1.97.1 + MSVC Build Tools установлены, src-tauri/ cargo-only wrapper, WebView2 1280×860, ~50MB против ~300MB pywebview, scripts/run_tauri.bat)

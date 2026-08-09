@@ -85,6 +85,8 @@ body[data-theme="dark"]{--bg:#0f1117;--fg:#e2e8f0;--sidebar:#161b22;--sidebar-bo
 #inp button:hover{background:var(--btn-hover)}
 #inp button:disabled{opacity:.3;cursor:not-allowed}
 #inp #cnl{background:var(--cnl-btn);display:none}
+#inp .chip{background:var(--inp-bg);color:var(--st-c);border:1px solid var(--inp-border);border-radius:12px;padding:2px 10px;font-size:11px;cursor:pointer;height:auto;align-self:center;font-weight:400}
+#inp .chip:hover{border-color:var(--accent);color:var(--accent)}
 #hint-box{position:fixed;display:none;z-index:999;background:var(--sidebar);border:1px solid var(--sidebar-border);border-radius:6px;box-shadow:0 4px 16px rgba(0,0,0,.25);max-height:200px;overflow-y:auto;min-width:200px}
 #hint-box .hint-item{padding:6px 12px;font-size:12px;cursor:pointer;white-space:nowrap}
 #hint-box .hint-item.sel{background:var(--accent);color:#fff}
@@ -169,7 +171,12 @@ body[data-theme="dark"]{--bg:#0f1117;--fg:#e2e8f0;--sidebar:#161b22;--sidebar-bo
   <div id="chat">
     <div id="msgs"><div class="msg s">Agent ready. Try: &quot;create a fibonacci function&quot;</div></div>
     <div id="inp">
-      <textarea id="ta" rows="1" placeholder="Ask something... /test /review /fix /doc /deploy"></textarea>
+      <div id="sub-chips" style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:4px">
+        <button class="chip" onclick="subChip('reviewer')" title="Review code: @reviewer <task>">🧐 Ревью</button>
+        <button class="chip" onclick="subChip('fixer')" title="Fix findings: @fixer <task>">🔧 Фикс</button>
+        <button class="chip" onclick="subChip('general')" title="Research agent: @general <task>">🧭 Агент</button>
+      </div>
+      <textarea id="ta" rows="1" placeholder="Ask something... /test /review /fix /doc /deploy — @reviewer/@fixer/@general for a subagent"></textarea>
       <div id="hint-box"></div>
       <div style="display:flex;flex-direction:column;gap:4px;align-self:flex-end">
         <button id="mic" title="Voice input (STT)" style="background:none;border:1px solid var(--inp-border);border-radius:var(--radius);padding:4px 10px;cursor:pointer;font-size:14px">🎤</button>
