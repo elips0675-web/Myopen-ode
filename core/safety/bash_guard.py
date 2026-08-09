@@ -1,5 +1,6 @@
 """Bash command safety: blacklist + whitelist + nested-interpreter checks and
 the optional Docker sandbox. Extracted from tools.py (check_bash, docker run)."""
+import ast
 import logging
 import os
 import re
@@ -40,18 +41,87 @@ def _segment_token(segment):
     return tok, base.lower()
 
 
+# stage 71 (Kimi): AST bash guard — instead of keyword-matching inline Python,
+# parse the code structurally. Only genuinely dangerous constructs are blocked:
+# subprocess/esystem/eval/exec and destructive os.shutil calls; common coding
+# scripts (print/json/files) pass freely. compile() also rejects broken syntax.
+_AST_BLOCKED_IMPORTS = {"subprocess", "socket", "ctypes", "shutil"}
+_AST_BLOCKED_OS_ATTRS = {"system", "popen", "remove", "unlink", "rmdir", "removedirs"}
+_AST_BLOCKED_SHUTIL_ATTRS = {"rmtree"}
+_AST_BLOCKED_CALLS = {"eval", "exec", "execfile", "compile"}
+
+
+def _check_python_inline(code):
+    """Return a Blocked message for dangerous inline Python code, else None.
+    Structural (AST) analysis — replaces naive keyword checks."""
+    try:
+        tree = ast.parse(code)
+        compile(code, "<agent-inline>", "exec")
+    except SyntaxError as e:
+        return f"Blocked: inline python has invalid syntax ({e.__class__.__name__}: {e})"
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Call):
+            f = node.func
+            if isinstance(f, ast.Name) and f.id in _AST_BLOCKED_CALLS:
+                return f"Blocked: inline python calls {f.id}() which is not allowed"
+            if isinstance(f, ast.Attribute) and isinstance(f.value, ast.Name):
+                if f.value.id == "os" and f.attr in _AST_BLOCKED_OS_ATTRS:
+                    return f"Blocked: inline python calls os.{f.attr}() which is not allowed"
+                if f.value.id == "shutil" and f.attr in _AST_BLOCKED_SHUTIL_ATTRS:
+                    return f"Blocked: inline python calls shutil.{f.attr}() which is not allowed"
+                if f.value.id == "subprocess":
+                    return f"Blocked: inline python calls subprocess.{f.attr}() which is not allowed"
+        elif isinstance(node, (ast.Import, ast.ImportFrom)):
+            mods = [a.name.split(".")[0] for a in node.names]
+            if isinstance(node, ast.ImportFrom) and node.module:
+                mods += [node.module.split(".")[0]]
+            hit = [m for m in mods if m and m.lower() in _AST_BLOCKED_IMPORTS]
+            if hit:
+                return f"Blocked: inline python imports {hit[0].lower()} which is not allowed"
+    return None
+
+
+_NODE_BLOCKED = ("child_process", "process.binding", "process.exit", "eval(",
+                 "new Function", "require('fs')")
+
+
+def _check_node_inline(code):
+    """Node has no stdlib AST — use narrow structural keywords, not the global
+    blacklist (which would over-block harmless scripts)."""
+    low = code.replace('"', "'")
+    for pat in _NODE_BLOCKED:
+        if pat in low:
+            return f"Blocked: inline node uses {pat.split('(')[0]!r} which is not allowed"
+    return None
+
+
 def check_bash(cmd, work_dir=None):
     """Block dangerous shell commands. Whitelist for bare commands + blacklist
     patterns + recursive check of nested interpreters (bash -c, cmd /c,
-    powershell -c, python -c, node -e)."""
+    powershell -c, python -c, node -e). Inline python is analyzed via AST
+    (stage 71), inline node via narrow structural patterns."""
     norm = " ".join(cmd.lower().split())
     stripped = norm.replace('"', "").replace("'", "").replace("`", "").replace("\\", "")
     checks = [norm, stripped]
     # recursive interpreter bodies: bash/sh/cmd/powershell AND python/node inline scripts
     for m in re.finditer(r"(?:bash|sh|cmd|powershell|pwsh)\s+(?:-c|-command)\s+[\"']?([^\"']+)", norm):
         checks.append(" ".join(m.group(1).split()))
-    for m in re.finditer(r"(?:python|py|node)\s+(?:-c|-e|-m)\s+[\"']?([^\"']+)", norm):
-        checks.append(" ".join(m.group(1).split()))
+    scrub = norm
+    for m in re.finditer(r"(?:python|python3|py|node)\s+(?:-c|-e)\s+(.+)", norm):
+        body = " ".join(m.group(1).strip().strip('"').strip("'").split())
+        if m.group(0).startswith("node"):
+            err = _check_node_inline(body)
+        else:
+            err = _check_python_inline(body)
+        if err:
+            return err
+        checks.append(body)
+        scrub = scrub.replace(m.group(0), " ")
+    norm = scrub
+    for m in re.finditer(r"(?:python|py)\s+-m\s+([\w.]+)", norm):
+        mod = m.group(1).lower()
+        if mod in ("http.server", "ftplib", "telnetlib", "socket"):
+            return f"Blocked: python -m {mod} is not allowed"
     for c in checks:
         for dangerous in BASH_BLACKLIST:
             if dangerous in c:

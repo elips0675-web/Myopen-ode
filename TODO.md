@@ -25,9 +25,9 @@ Kimi 2: 8.3/10 → DeepSeek 2: 8.5/10 → DeepSeek 3: 8.6/10 → Kimi 3: 8.7/10 
 После P0–P1 → 9.5/10 (по вердикту DeepSeek 6).
 
 ### Рекомендации Kimi 4 (9.0/10, 2026-08-09) — этапы 69–72
-- [ ] Модель-независимость: few-shot примеры под qwen2.5-coder:7b (поднять с 1/6 до 3/6 бенча) (этап 69)
-- [ ] Prompt compression: EXAMPLES/VALID/INVALID в отдельный tier/skill, не в каждый вызов (этап 70)
-- [ ] AST bash guard: ast.parse + compile() вместо keyword-проверки python -c/node -e (этап 71)
+- [x] Модель-независимость: few-shot примеры под qwen2.5-coder:7b (поднять с 1/6 до 3/6 бенча) (этап 69) — бенч 7b: 1/6 → 5/7 (пик 6/7, 84–148s); SUMMARY.md обновлён
+- [x] Prompt compression: EXAMPLES/VALID/INVALID в отдельный tier/skill, не в каждый вызов (этап 70) — SYSTEM_PROMPT_FEWSHOT в tools/__init__.py, _apply_fewshot_tier в core/agent_loop.py (it 0–1 legacy, drop на it>=2, native никогда); тест test_prompt_fewshot_tier
+- [x] AST bash guard: ast.parse + compile() вместо keyword-проверки python -c/node -e (этап 71) — core/safety/bash_guard.py: _check_python_inline (AST: блок subprocess/socket/ctypes/shutil-imports, os.system/popen/remove, shutil.rmtree, eval/exec, битый синтаксис; python -m опасных модулей), _check_node_inline (узкие структурные паттерны), inline-тела вырезаются из whitelist-сегментации; тест test_bash_ast_guard (12 разрешённых + 12 блокируемых)
 - [ ] UI polish: анимации переходов, типографика — «ощущение продукта» (этап 72)
 Вердикт Kimi 4: тег v2.0-stable уже заслужен; ограничение — экосистема моделей, не код.
 
