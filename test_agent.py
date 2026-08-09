@@ -222,6 +222,47 @@ def test_prompt_fewshot_tier():
         "native sessions must never get the few-shot tier"
     print("  [OK] few-shot tier: legacy it0-1 yes, it2+ no, native never")
 
+def test_native_fewshot_tier_exclusion():
+    """Regression (stage 70 bug): the few-shot tier was injected on iteration 0
+    BEFORE native_on was determined — qwen3 then received legacy EXAMPLES and
+    answered with ```tool JSON text instead of tool_calls (live create-file
+    scenario broke, 2/3). Fixed by computing native_on first. The first native
+    call must NOT contain the EXAMPLES tier."""
+    import agent as agent_mod
+    import tools as tools_mod
+    orig_chat = tools_mod.native_chat
+    first_systems = []
+    calls = []
+    def mock_native(messages, model, tools=None):
+        calls.append(model)
+        joined = " ".join(m.get("content", "") for m in messages)
+        if not first_systems:
+            first_systems.extend([m.get("content", "") for m in messages
+                                  if m.get("role") == "system"])
+        if "FINAL" in joined:
+            return "FINAL ANSWER", [], 5
+        return "", [{"name": "write", "arguments": {
+            "path": ".test_tmp/fewshot_tier_probe.txt",
+            "content": "probe"}}], 5
+    tools_mod.native_chat = mock_native
+    old_env = os.environ.get("AI_NATIVE_TOOLS")
+    os.environ["AI_NATIVE_TOOLS"] = "1"
+    try:
+        out = agent_mod.run_agent_loop(
+            [{"role": "user", "content": "create probe file then say FINAL"}],
+            None, model="qwen3:8b")
+    finally:
+        tools_mod.native_chat = orig_chat
+        if old_env is None:
+            os.environ.pop("AI_NATIVE_TOOLS", None)
+        else:
+            os.environ["AI_NATIVE_TOOLS"] = old_env
+    assert calls, "native chat must be used"
+    assert not any("EXAMPLES" in c for c in first_systems), \
+        f"native first call must not receive the few-shot tier, got: {[c[:60] for c in first_systems]}"
+    assert "FINAL ANSWER" in out, out
+    print("  [OK] native first call excludes few-shot tier (stage-70 regression)")
+
 def test_dynamic_context():
     """Each model call gets a dynamic orientation block (project + last action
     + result status); first call has no last action yet."""
@@ -2852,6 +2893,7 @@ if __name__ == "__main__":
              test_update_check, test_rag_folder_scope, test_mcp_client, test_mcp_integration,
              test_event_bus, test_event_bus_tool_events, test_event_bus_subagent_audit,
              test_subagent_audit_api, test_auto_pick_embed_model, test_prompt_fewshot_tier,
+             test_native_fewshot_tier_exclusion,
              test_task_subagent_loop, test_task_subagent_reviewer_fixer, test_native_tools_schema,
              test_native_tool_calling, test_desktop_helpers,
              test_sess_stats_advice, test_model_router,

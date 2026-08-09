@@ -17,11 +17,11 @@ Kimi 2: 8.3/10 → DeepSeek 2: 8.5/10 → DeepSeek 3: 8.6/10 → Kimi 3: 8.7/10 
 ## ДОДЕЛАТЬ — сводка по всем оценкам (приоритет по консенсусу ревьюверов)
 
 ### Рекомендации DeepSeek 6 (9.4/10, 2026-08-09) — этапы 65–68
-- [ ] P1: MCP-интеграционный тест — запуск stdio → tools/list → call (этап 65, 2 часа)
-- [ ] P2: Событийная шина EventBus в core/container.py + подписка модулей (этап 66, 3 часа)
-- [ ] P3: Аудит сабагентов — отдельный лог .agent_subagent_audit.log (этап 67, 1 час)
-- [ ] P4: Автовыбор embed-модели — ollama list, если есть альтернатива nomic-embed-text (этап 68, 1 час)
-- [ ] P0: Видео-демо (внешнее действие пользователя): запуск → «создай датинг-приложение» → работа агента
+- [x] P1: MCP-интеграционный тест — запуск stdio → tools/list → call (этап 65) — mcp_servers.py (встроенный stdio JSON-RPC 2.0 сервер) + test_mcp_integration (полный цикл); коммит 475845b
+- [x] P2: Событийная шина EventBus в core/container.py + подписка модулей (этап 66) — pub/sub с изоляцией ошибок, publishers (tool.executed/agent.iteration/done/subagent.*), подписчики в agent.py; 3 теста; коммит cb6bdaf
+- [x] P3: Аудит сабагентов — отдельный лог .agent_subagent_audit.log (этап 67) — + GET /api/subagents/audit + кнопка в UI; коммит 84337ec
+- [x] P4: Автовыбор embed-модели — ollama list, если есть альтернатива nomic-embed-text (этап 68) — _auto_pick_embed_model (bge-m3 → all-minilm; EMBED_MODEL побеждает); коммит 9d23248
+- [ ] P0: Видео-демо (внешнее действие пользователя): запуск → «создай датинг-приложение» → работа агента — сценарий готов: VIDEO_DEMO.md
 После P0–P1 → 9.5/10 (по вердикту DeepSeek 6).
 
 ### Рекомендации Kimi 4 (9.0/10, 2026-08-09) — этапы 69–72
@@ -31,8 +31,8 @@ Kimi 2: 8.3/10 → DeepSeek 2: 8.5/10 → DeepSeek 3: 8.6/10 → Kimi 3: 8.7/10 
 - [x] UI polish: анимации переходов, типографика — «ощущение продукта» (этап 72) — mIn fade+slide у сообщений, pulse у «thinking», fade-in dropzone, press-feedback на кнопках/чипах/карточках, тень Send, типографика 13.5px/1.65
 Вердикт Kimi 4: тег v2.0-stable уже заслужен; ограничение — экосистема моделей, не код.
 
-### Недавние предложения (этапы 45–64 сделаны; остаток к «Доделать»)
-- [ ] Внешняя переоценка 9.5/10 — единственный открытый пункт «Осталось (10/10)»; пакет для ревьювера — RE_EVAL.md (этап 44, обновлён данными 49–72: 123/123, live 3/3 + @reviewer VERDICT PASS, bench 7/7, рекомендации DS6+Kimi4 закрыты; остался P0 — видео-демо)
+### Недавние предложения (этапы 45–72 сделаны; остаток к «Доделать»)
+- [ ] Внешняя переоценка 9.5/10 — единственный открытый пункт «Осталось (10/10)»; пакет для ревьювера — RE_EVAL.md (этап 44, обновлён данными 49–72: 124/124, live 3/3 + @reviewer VERDICT PASS, bench 7/7, рекомендации DS6+Kimi4 закрыты; остался P0 — видео-демо по сценарию VIDEO_DEMO.md)
 
 ### Этап 1. Динамический контекст в промпте (DS3 №1, Kimi3 P1) — СДЕЛАНО
 - [x] Перед каждым вызовом модели: «You are working in project: X (iteration N) / Last action: {tool} (result: ok|error)» (_dynamic_context, agent.py); тесты test_dynamic_context, test_dynamic_context_error_status
@@ -199,7 +199,7 @@ Kimi 2: 8.3/10 → DeepSeek 2: 8.5/10 → DeepSeek 3: 8.6/10 → Kimi 3: 8.7/10 
 - [x] DI-контейнер вместо import agent as _agent — Этап 41 (core/container.py: register/resolve/has/reset; провайдеры-коллбэки (work_dir/sessions_dir/memory_dir/logger/sessions_db), живые после switch_project; api_files/api_misc/api_sessions переведены на resolve, остались только прямые функции)
 - [x] Абстракции RAG/DB — Этап 42 (core/abstractions.py: RAGStore+RagAdapter (обёртка rag-модуля), KVStore+SqliteKVStore (thread-safe); init_defaults регистрирует 'rag' в контейнере, 'sessions_db' — в agent.py; точки замены FAISS→внешняя векторная БД / SQLite→Redis)
 - [x] Whisper-сервер STT — Этап 43 (stt.py: POST /api/stt multipart (wav/mp3/ogg/m4a/webm, ≤25MB) + GET /api/stt/status; бэкенды AI_STT_URL (прокси whisper-сервера) или AI_STT_BINARY (whisper.cpp main.exe -l ru -otxt); без бэкенда → 501; UI: MediaRecorder-фолбэк при отсутствии Web Speech API, мик-кнопка скрыта только если нет обоих)
-- [ ] Внешняя переоценка 9.5/10 (весь план 8.3–8.9 закрыт + рекомендации DS6 (65–68) и Kimi4 (69–72) выполнены, тесты 123/123 + live 3/3; пакет для ревьювера — RE_EVAL.md, Этап 44; остался P0 — видео-демо)
+- [ ] Внешняя переоценка 9.5/10 (весь план 8.3–8.9 закрыт + рекомендации DS6 (65–68) и Kimi4 (69–72) выполнены, тесты 124/124 + live 3/3; пакет для ревьювера — RE_EVAL.md, Этап 44; остался P0 — видео-демо)
 
 ## Вне оценок (этапы 45–48, 2026-08-09) — развитие агента по своей дорожной карте
 - [x] Reviewer/Fixer сабагенты — Этап 45 (SUBAGENT_PROMPTS: reviewer — многошаговый разбор кода с примерами; fixer — применение правок с самопроверкой; GENERAL — общий; тул task проксирует их через run_agent_loop; тест test_reviewer_subagent)

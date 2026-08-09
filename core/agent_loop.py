@@ -275,14 +275,15 @@ def run_agent_loop(msgs, session_id, events=None, model=None, deps=None):
         native_on = False
         native_calls = []
         # Stage 70 (Kimi): few-shot tier — EXAMPLES/templates/VALID only on
-        # iterations 0-1 of LEGACY sessions (native models never see them);
-        # dropped afterwards to save ~1K tokens per call.
-        fewshot_added = _apply_fewshot_tier(msgs, it, fewshot_added, native_on)
+        # iterations 0-1 of LEGACY sessions (native models never see them —
+        # otherwise qwen3 answers with legacy ```tool JSON text instead of
+        # tool_calls); dropped afterwards to save ~1K tokens per call.
         try:
             import tools as _tools_mod
             native_on = _tools_mod.native_supported(current_model)
         except Exception:
             pass
+        fewshot_added = _apply_fewshot_tier(msgs, it, fewshot_added, native_on)
         if native_on:
             try:
                 call_msgs = []
