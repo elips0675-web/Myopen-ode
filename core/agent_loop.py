@@ -127,6 +127,7 @@ def run_agent_loop(msgs, session_id, events=None, model=None, deps=None):
     full = ""
     max_iter = int(os.environ.get("AGENT_MAX_ITER", "12"))
     max_time = float(os.environ.get("AGENT_TIMEOUT", "300"))
+    step_budget = int(os.environ.get("AGENT_STEP_BUDGET", "0"))
     start_time = time.time()
     total_tokens = sum(len(m.get("content", "")) / 4 for m in msgs)
     format_retried = 0
@@ -151,6 +152,19 @@ def run_agent_loop(msgs, session_id, events=None, model=None, deps=None):
         if session_id and deps._cancel_pending(session_id):
             full += "\n[cancelled]\n"
             deps._cancel_clear(session_id)
+            break
+        if step_budget and it >= step_budget:
+            # Stage 47: step budget reached — force a final summary instead of
+            # letting the loop spin. One plain-text call, no tools allowed.
+            full += f"\n[tool: BUDGET — AGENT_STEP_BUDGET={step_budget} reached, forcing final summary]\n"
+            try:
+                fin = deps.call_ollama(msgs + [{"role": "system",
+                    "content": "STEP BUDGET reached. FINISH NOW with a plain-text summary: what was done so far and what still remains. Do NOT call any tools."}],
+                    user_model or deps.MODEL)
+                summary = fin if isinstance(fin, str) else (fin[0] if isinstance(fin, tuple) else str(fin))
+                full += _strip_system_markers(summary)
+            except Exception as e:
+                log.warning("budget finalize call failed: %s", e)
             break
 
         try:

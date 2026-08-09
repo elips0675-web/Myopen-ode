@@ -24,6 +24,7 @@ RAG_DIRTY = True
 RAG_CACHE_DIR = None
 FAISS_INDEX = None
 RAG_MAX_CHUNKS = int(os.environ.get("RAG_MAX_CHUNKS", "6000"))
+EXTRA_DIRS = []   # stage 46: extra roots indexed as E0/, E1/... (AI_EXTRA_RAG env)
 _FILE_STATS = {}   # rel path -> (mtime, size) from last index
 BM25_DF = {}       # term -> doc frequency
 BM25_N = 0         # doc count
@@ -44,13 +45,26 @@ SKIP_PARTS = (".git", "__pycache__", ".agent_backups", ".agent_sessions",
               "target", "dist", "build", "debug", "release")
 
 def init_rag(**kw):
-    global OLLAMA_URL, WORK_DIR, EMBED_MODEL, RAG_CACHE_DIR
+    global OLLAMA_URL, WORK_DIR, EMBED_MODEL, RAG_CACHE_DIR, EXTRA_DIRS
     for k, v in kw.items():
         if v is not None:
             globals()[k] = v
     if RAG_CACHE_DIR is None:
         RAG_CACHE_DIR = WORK_DIR / ".rag_cache"
         RAG_CACHE_DIR.mkdir(exist_ok=True)
+    # stage 46: extra roots from AI_EXTRA_RAG='folder1;folder2' (re-read on every
+    # call so env changes after startup are picked up; relative roots -> under WORK_DIR)
+    raw = os.environ.get("AI_EXTRA_RAG", "")
+    EXTRA_DIRS = []
+    for r in raw.replace("|", ";").split(";"):
+        r = r.strip().strip('"')
+        if not r:
+            continue
+        try:
+            p = Path(r)
+            EXTRA_DIRS.append(p if p.is_absolute() else WORK_DIR / p)
+        except Exception:
+            pass
 
 def _scan_files():
     files = []
@@ -65,7 +79,33 @@ def _scan_files():
             st = p.stat()
             out.append((str(p.relative_to(WORK_DIR)), st.st_mtime, st.st_size))
         except: pass
+    # stage 46: extra roots, keyed E0/<rel>, E1/<rel>...
+    for idx, root in enumerate(EXTRA_DIRS):
+        for pattern, limit in EXT_PATTERNS:
+            try:
+                files += list(glob.glob(str(root / pattern), recursive=True))[:limit]
+            except Exception:
+                continue
+        for fp in files:
+            p = Path(fp)
+            if any(x in p.parts for x in SKIP_PARTS): continue
+            if p.name.endswith((".exe", ".dll", ".bin", ".png", ".jpg", ".ico")): continue
+            try:
+                st = p.stat()
+                out.append((f"E{idx}/{str(p.relative_to(root))}", st.st_mtime, st.st_size))
+            except: pass
     return out
+
+def _file_root(key):
+    """Return the root dir a scan key belongs to (WORK_DIR for plain rels)."""
+    if key.startswith("E") and "/" in key:
+        try:
+            idx = int(key[1:key.index("/")])
+            if idx < len(EXTRA_DIRS):
+                return EXTRA_DIRS[idx]
+        except ValueError:
+            pass
+    return WORK_DIR
 
 def _file_cache_path(rel):
     h = hashlib.md5(rel.encode()).hexdigest()[:16]
@@ -230,7 +270,8 @@ def _index_file(rel, mtime, size):
         RAG_CHUNKS += cached
         _FILE_STATS[rel] = (mtime, size)
         return
-    p = WORK_DIR / rel
+    rel_path = rel.split("/", 1)[1] if (rel.startswith("E") and "/" in rel and rel[1:2].isdigit()) else rel
+    p = _file_root(rel) / rel_path
     try:
         text = p.read_text("utf-8", errors="ignore")
     except Exception as e:

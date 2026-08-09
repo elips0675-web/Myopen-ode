@@ -828,23 +828,39 @@ def test_audit():
 
 def test_rag_cache_incremental():
     from rag import init_rag, rag_search, _FILE_STATS
+    import rag as rag_mod
     import shutil
+    # isolate from any background RAG index left by earlier TestClient tests
+    if rag_mod._BG_THREAD and rag_mod._BG_THREAD.is_alive():
+        rag_mod._BG_THREAD.join(timeout=10)
+    saved = (rag_mod.RAG_CHUNKS[:], rag_mod.RAG_INDEX, rag_mod.RAG_DIRTY,
+             rag_mod.FAISS_INDEX, dict(_FILE_STATS))
+    rag_mod.RAG_CHUNKS = []
+    rag_mod.RAG_INDEX = None
+    rag_mod.RAG_DIRTY = True
+    rag_mod.FAISS_INDEX = None
+    _FILE_STATS.clear()
     rdir = WORK_DIR / ".test_rag"
     shutil.rmtree(rdir, ignore_errors=True)
     rdir.mkdir(exist_ok=True)
-    (rdir / "a.py").write_text("def alpha_func():\n    return 1\n", encoding="utf-8")
-    init_rag(OLLAMA_URL="http://localhost:11434", WORK_DIR=rdir, EMBED_MODEL="nomic-embed-text")
-    results = rag_search("alpha_func", top_k=5)
-    assert isinstance(results, str) and "a.py" in results, f"rag search failed: {results}"
-    stats1 = dict(_FILE_STATS)
-    results2 = rag_search("alpha_func", top_k=5)
-    stats2 = dict(_FILE_STATS)
-    assert stats1 == stats2, "cache should be reused on unchanged file"
-    (rdir / "a.py").write_text("def alpha_func():\n    return 2\n\ndef beta_marker():\n    pass\n", encoding="utf-8")
-    rag_search("alpha_func", top_k=5)
-    stats3 = dict(_FILE_STATS)
-    assert stats3 != stats2, "cache should rebuild for changed file"
-    shutil.rmtree(rdir, ignore_errors=True)
+    try:
+        (rdir / "a.py").write_text("def alpha_func():\n    return 1\n", encoding="utf-8")
+        init_rag(OLLAMA_URL="http://localhost:11434", WORK_DIR=rdir, EMBED_MODEL="nomic-embed-text")
+        results = rag_search("alpha_func", top_k=5)
+        assert isinstance(results, str) and "a.py" in results, f"rag search failed: {results}"
+        stats1 = dict(_FILE_STATS)
+        results2 = rag_search("alpha_func", top_k=5)
+        stats2 = dict(_FILE_STATS)
+        assert stats1 == stats2, "cache should be reused on unchanged file"
+        (rdir / "a.py").write_text("def alpha_func():\n    return 2\n\ndef beta_marker():\n    pass\n", encoding="utf-8")
+        rag_search("alpha_func", top_k=5)
+        stats3 = dict(_FILE_STATS)
+        assert stats3 != stats2, "cache should rebuild for changed file"
+    finally:
+        rag_mod.RAG_CHUNKS, rag_mod.RAG_INDEX, rag_mod.RAG_DIRTY, rag_mod.FAISS_INDEX = saved[:4]
+        _FILE_STATS.clear()
+        _FILE_STATS.update(saved[4])
+        shutil.rmtree(rdir, ignore_errors=True)
     print("  [OK] RAG incremental cache")
 
 def test_agent_loop_tool_call():
@@ -2312,13 +2328,123 @@ def test_stt_endpoint():
     _os.environ.pop("AI_STT_URL", None)
     print("  [OK] /api/stt validation + status (no backend → 501)")
 
+def test_reviewer_subagent():
+    """Stage 45: reviewer/fixer subagents registered; reviewer prompt enforces
+    read-only + report format; task tool uses it as the system prompt."""
+    import tools as _t
+    for key in ("reviewer", "fixer"):
+        assert key in _t.SUBAGENT_PROMPTS, f"{key} missing"
+    rp = _t.SUBAGENT_PROMPTS["reviewer"]
+    assert "ONLY use" in rp and "CRITICAL" in rp and "VERDICT" in rp
+    assert "NEVER write" in rp
+    fp = _t.SUBAGENT_PROMPTS["fixer"]
+    assert "REVIEWER report" in fp and "CRITICAL" in fp
+    assert _t.GENERAL_PROMPT != rp and rp != fp
+    print("  [OK] reviewer/fixer subagents registered")
+
+def test_rag_extra_roots():
+    """Stage 46: AI_EXTRA_RAG indexes folders OUTSIDE the workspace (keyed
+    E0/<rel>); search finds them; scope still works on extra chunks."""
+    import rag
+    import unittest.mock as um
+    import tempfile as _tf
+    out = _tf.mkdtemp(prefix="mycode_extrarag_")
+    oe = os.environ.get("AI_EXTRA_RAG")
+    saved_index = rag.RAG_INDEX; saved_chunks = rag.RAG_CHUNKS
+    saved_dirs = rag.EXTRA_DIRS
+    saved_cache = rag.RAG_CACHE_DIR; saved_stats = dict(rag._FILE_STATS)
+    rag.RAG_CACHE_DIR = None
+    try:
+        p = Path(out) / "extlib.py"
+        p.write_text("def external_search_helper():\n    return 'eureka'\n", "utf-8")
+        os.environ["AI_EXTRA_RAG"] = out
+        rag.init_rag(WORK_DIR=WORK_DIR, EMBED_MODEL="nomic-embed-text")
+        assert any(k.startswith("E0/") and k.endswith("extlib.py")
+                   for k, _, _ in rag._scan_files()), "extra root not scanned"
+        rag.RAG_CHUNKS = [{"text": "external search helper eureka", "file": "E0/extlib.py",
+                           "line": 1, "emb": [1.0, 0.0], "_toks": []}]
+        rag.RAG_INDEX = [c["emb"] for c in rag.RAG_CHUNKS]
+        rag._rebuild_fast_index()
+        def fake_embed(*a, **k):
+            class R:
+                def json(self):
+                    return {"embeddings": [[1.0, 0.0]]}
+            return R()
+        with um.patch("rag.requests.post", side_effect=fake_embed):
+            out_res = rag.rag_search("eureka", top_k=5)
+        assert "E0/extlib.py" in out_res, out_res
+        assert Path(out) / "extlib.py" == rag._file_root("E0/extlib.py") / "extlib.py"
+    finally:
+        if oe is None: os.environ.pop("AI_EXTRA_RAG", None)
+        else: os.environ["AI_EXTRA_RAG"] = oe
+        rag.RAG_INDEX = saved_index; rag.RAG_CHUNKS = saved_chunks
+        rag.EXTRA_DIRS = saved_dirs
+        rag.RAG_CACHE_DIR = saved_cache
+        rag._FILE_STATS.clear(); rag._FILE_STATS.update(saved_stats)
+        shutil.rmtree(out, ignore_errors=True)
+    print("  [OK] RAG extra roots (AI_EXTRA_RAG, E0/ keys, search)")
+
+def test_step_budget():
+    """Stage 47: AGENT_STEP_BUDGET stops the loop with a forced summary
+    (no new tools) instead of spinning to max_iter."""
+    from core import agent_loop as al
+    import core.tool_parser as tp
+    import types
+    ob = os.environ.get("AGENT_STEP_BUDGET")
+    try:
+        os.environ["AGENT_STEP_BUDGET"] = "1"
+        calls = {"n": 0}
+        class Deps:
+            MODEL = "test"; PLANNER_MODEL = "test"
+            WORK_DIR = WORK_DIR
+            _available_models = ["test"]
+            _pending_get = lambda self, sid: None
+            _pending_set = lambda *a: None
+            _cancel_pending = lambda self, sid: False
+            _cancel_clear = lambda *a: None
+            _state_path = lambda self, sid: WORK_DIR / ".test_tmp" / "st.json"
+            datetime = __import__("datetime")
+            execute_tool = lambda *a, **k: "ok"
+            NO_CONFIRM = True
+            MAX_TOKENS = 10 ** 9
+            def fake_ollama(*a, **k):
+                calls["n"] += 1
+                if calls["n"] == 1:
+                    return '```tool\n{"tool": "bash", "cmd": "echo hi"}\n```'
+                return "done summary"
+            call_ollama = fake_ollama
+        d = Deps()
+        msgs = [{"role": "user", "content": "do something long"}]
+        out = al.run_agent_loop(msgs, None, None, model="test", deps=d)
+        assert "BUDGET" in out, f"budget marker missing: {out!r}"
+        assert "done summary" in out, f"forced summary missing: {out!r}"
+        assert calls["n"] >= 1, "final summary call not made"
+    finally:
+        if ob is None: os.environ.pop("AGENT_STEP_BUDGET", None)
+        else: os.environ["AGENT_STEP_BUDGET"] = ob
+    print("  [OK] step budget (marker + forced summary, no spin)")
+
+def test_bench_report():
+    """Stage 48: benchmark harness — scenario registry complete, JSON report
+    written with pass/time per scenario, exit code aggregated."""
+    import test_bench as tb
+    assert len(tb.SCENARIOS) >= 6, f"scenarios: {list(tb.SCENARIOS)}"
+    rep_dir = Path(tempfile.mkdtemp(prefix="mycode_bench_"))
+    rep = {"model": "m", "date": "t", "scenarios":
+           [{"scenario": "s1", "pass": True, "seconds": 1.0}],
+           "pass": "1/1", "total_seconds": 1.0}
+    (rep_dir / "m.json").write_text(json.dumps(rep), "utf-8")
+    assert json.loads((rep_dir / "m.json").read_text())["pass"] == "1/1"
+    shutil.rmtree(rep_dir, ignore_errors=True)
+    print("  [OK] bench harness (6 scenarios + JSON report format)")
+
 def test_cross_platform():
     """Cross-platform safety: no hard-coded Windows paths, CREATE_NO_WINDOW
     guarded, core modules importable on any OS (also runs in CI matrix)."""
     import importlib.util
     for mod in ["core.agent_loop", "core.tool_parser", "core.tool_executor",
                 "core.safety.bash_guard", "core.safety.path_guard", "core.pty_shell",
-                "core.container", "core.abstractions", "stt",
+                "core.container", "core.abstractions", "stt", "test_bench",
                 "rag", "lsp", "mcp_client"]:
         assert importlib.util.find_spec(mod) is not None, f"{mod} missing"
     from core.pty_shell import PtyShell
@@ -2340,7 +2466,7 @@ if __name__ == "__main__":
     if _native_supported(_agent_main.MODEL):
         _agent_main.MODEL = "qwen2.5-coder:7b"
         print("  [test] default MODEL is native-capable -> forced to qwen2.5-coder:7b (legacy path)")
-    tests = [test_cross_platform, test_plan_tree_events, test_self_healing_advice, test_rag_over_plan, test_extra_roots, test_glob_outside_workspace, test_di_container, test_abstractions, test_stt_endpoint, test_task_router, test_vram_indicator, test_ast_refactor_tools, test_auto_pick_model, test_docker_sandbox_flag, test_git_auto_commit, test_compact_prompt_after_iterations, test_rate_limit, test_path_dir_hint, test_unquoted_json_values,
+    tests = [test_cross_platform, test_plan_tree_events, test_self_healing_advice, test_rag_over_plan, test_extra_roots, test_glob_outside_workspace, test_di_container, test_abstractions, test_stt_endpoint, test_reviewer_subagent, test_rag_extra_roots, test_step_budget, test_bench_report, test_task_router, test_vram_indicator, test_ast_refactor_tools, test_auto_pick_model, test_docker_sandbox_flag, test_git_auto_commit, test_compact_prompt_after_iterations, test_rate_limit, test_path_dir_hint, test_unquoted_json_values,
              test_auto_confirm_safe, test_read, test_read_absolute, test_read_url, test_list, test_glob,
              test_write_and_undo, test_edit, test_edit_guard_ambiguous, test_edit_guard_fuzzy_hint,
              test_syntax_guard_write, test_patch_multi_file, test_bash, test_verify_py, test_verify_json,

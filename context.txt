@@ -956,3 +956,33 @@ UPDATE (2026-08-09) - Stage 44: re-evaluation package for external 9.5:
   run :8765 -> skills check), expectations. TODO.md points to it.
 - Live run reconfirmed: test_live.py --models qwen3:8b -> 3/3 (create file
   18.3s, simple question, edit rename 11.4s).
+
+UPDATE (2026-08-09) - stages 45-48: agent development roadmap (111/111 x2):
+- Stage 45 (reviewer/fixer subagents): tools/__init__.py SUBAGENT_PROMPTS —
+  REVIEWER_PROMPT (multi-step code review: read files, list findings with
+  file:line, examples, only concrete issues) and FIXER_PROMPT (apply fixes
+  one by one, verify each, test before claiming done); GENERAL_PROMPT (big
+  tasks split into steps). task tool proxies them through run_agent_loop.
+  Test: test_reviewer_subagent.
+- Stage 46 (RAG extra roots): rag.py — AI_EXTRA_RAG='E:\a;E:\b' adds folders
+  OUTSIDE the workspace to the RAG index (keys E0/, E1/...); _file_root()
+  resolves per-file root (workspace vs extra dir), _scan_files() includes
+  extra roots; init_rag re-reads the env. Test: test_rag_extra_roots.
+- Stage 47 (step budget): core/agent_loop.py — AGENT_STEP_BUDGET=N: on
+  iteration N the loop FORCES a final plain-text summary (no tools) instead
+  of spinning to AGENT_MAX_ITER. Test: test_step_budget (Deps must provide
+  NO_CONFIRM/MAX_TOKENS; events=[] is falsy — stream path needs truthy
+  callback, call_ollama path used in tests).
+- Stage 48 (benchmark harness): test_bench.py — 6 scenarios (create-file,
+  edit-rename, find-and-fix, js-create, sql-schema, refactor-extract), each
+  = goal + verify callbacks; JSON report bench_reports/<model>.json with
+  per-scenario pass/time. Test: test_bench_report.
+- Test fixes while going 109/111 -> 111/111: test_rag_cache_incremental now
+  joins the background RAG thread and snapshots/restores RAG state (the
+  TestClient tests start the app -> a bg index of the real workspace
+  polluted RAG_CHUNKS with add.py); test_step_budget needed NO_CONFIRM +
+  MAX_TOKENS on Deps and the fake model must return a parseable tool block
+  first (call_ollama path fires when events is falsy).
+- Server restarted; EXTRA_ROOTS for E:\swiftmatch1bdnoutprod + AI_EXTRA_RAG
+  available for reference-driven app building offline.
+

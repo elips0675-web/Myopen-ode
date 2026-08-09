@@ -181,7 +181,14 @@ Kimi 2: 8.3/10 → DeepSeek 2: 8.5/10 → DeepSeek 3: 8.6/10 → Kimi 3: 8.7/10 
 - [x] DI-контейнер вместо import agent as _agent — Этап 41 (core/container.py: register/resolve/has/reset; провайдеры-коллбэки (work_dir/sessions_dir/memory_dir/logger/sessions_db), живые после switch_project; api_files/api_misc/api_sessions переведены на resolve, остались только прямые функции)
 - [x] Абстракции RAG/DB — Этап 42 (core/abstractions.py: RAGStore+RagAdapter (обёртка rag-модуля), KVStore+SqliteKVStore (thread-safe); init_defaults регистрирует 'rag' в контейнере, 'sessions_db' — в agent.py; точки замены FAISS→внешняя векторная БД / SQLite→Redis)
 - [x] Whisper-сервер STT — Этап 43 (stt.py: POST /api/stt multipart (wav/mp3/ogg/m4a/webm, ≤25MB) + GET /api/stt/status; бэкенды AI_STT_URL (прокси whisper-сервера) или AI_STT_BINARY (whisper.cpp main.exe -l ru -otxt); без бэкенда → 501; UI: MediaRecorder-фолбэк при отсутствии Web Speech API, мик-кнопка скрыта только если нет обоих)
-- [ ] Внешняя переоценка 9.5/10 (весь план 8.3–8.9 закрыт, тесты 107/107 + live 3/3; пакет для ревьювера — RE_EVAL.md, Этап 44)
+- [ ] Внешняя переоценка 9.5/10 (весь план 8.3–8.9 закрыт, тесты 111/111 + live 3/3; пакет для ревьювера — RE_EVAL.md, Этап 44)
+
+## Вне оценок (этапы 45–48, 2026-08-09) — развитие агента по своей дорожной карте
+- [x] Reviewer/Fixer сабагенты — Этап 45 (SUBAGENT_PROMPTS: reviewer — многошаговый разбор кода с примерами; fixer — применение правок с самопроверкой; GENERAL — общий; тул task проксирует их через run_agent_loop; тест test_reviewer_subagent)
+- [x] RAG по внешним корням — Этап 46 (AI_EXTRA_RAG='E:\a;E:\b' — вне workspace, ключи E0/E1..., _file_root()+_scan_files(); тест test_rag_extra_roots)
+- [x] Лимит шагов агента — Этап 47 (AGENT_STEP_BUDGET=N: на N-й итерации принудительный финальный plain-text summary без новых тулов, вместо прокрутки до max_iter; тест test_step_budget)
+- [x] Бенчмарк-обвязка — Этап 48 (test_bench.py: 6 сценариев — create-file, edit-rename, find-and-fix, js-create, sql-schema, refactor-extract; JSON-отчёт bench_reports/<model>.json с pass/time; тест test_bench_report)
+- [x] Тесты 111/111 ×2 прогона; server :8765 работает (EXTRA_ROOTS + AI_EXTRA_RAG для референса SwiftMatch)
 
 ## Собственные идеи (низкий приоритет)
 - [x] Native tool calling — СДЕЛАНО (Этап 10)

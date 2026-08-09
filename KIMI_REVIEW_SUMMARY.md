@@ -454,6 +454,26 @@ read/write/edit/patch до мутаций), unquoted string values в lenient JS
 блок изобретённых путей сохранён; тесты 103/103; live-подтверждение через
 :8765. Осталось до 10/10: DI-контейнер, абстракции RAG/DB, Whisper-сервер,
 внешняя переоценка 9.5/10.]
+[Этапы 41–43 (0ac96cc): DI-контейнер (core/container.py, register/resolve/
+has/reset, провайдеры-коллбэки — живые после switch_project; api_files/
+api_misc/api_sessions переведены с import agent as _agent), абстракции
+(core/abstractions.py: RAGStore/RagAdapter, KVStore/SqliteKVStore,
+init_defaults → 'rag'; точки замены FAISS→внешняя векторная БД,
+SQLite→Redis), Whisper-сервер (stt.py: /api/stt multipart wav/mp3/ogg/m4a/
+webm ≤25MB + /api/stt/status; AI_STT_URL прокси / AI_STT_BINARY whisper.cpp;
+без бэкенда 501; UI MediaRecorder-фолбэк). Тесты 107/107 ×2 + live 3/3.
+Осталось: внешняя переоценка 9.5/10.]
+[Этап 44 (3461853): RE_EVAL.md — пакет для внешнего ревьювера: состояние
+(107/107 ×2 + live 3/3), таблица закрытых этапов 35–43, 5-минутная проверка,
+ожидания. TODO.md ссылается на него. Осталось: внешняя переоценка 9.5/10.]
+[Этапы 45–48 (готовятся к коммиту): reviewer/fixer сабагенты
+(SUBAGENT_PROMPTS в tools/__init__.py: REVIEWER — многошаговый разбор кода
+с file:line и примерами; FIXER — правки по одному + самопроверка; GENERAL),
+RAG по внешним корням (AI_EXTRA_RAG='E:\a;E:\b', ключи E0/, _file_root+_scan_files),
+лимит шагов (AGENT_STEP_BUDGET=N — принудительный финальный summary без
+новых тулов), бенчмарк-обвязка (test_bench.py: 6 сценариев create-file/
+edit-rename/find-and-fix/js-create/sql-schema/refactor-extract → JSON-отчёт
+bench_reports/<model>.json). Тесты 111/111 ×2. Осталось: внешняя переоценка 9.5/10.]
 
 ## Вопросы для анализа (что хотим от Kimi)
 1. Правильна ли архитектура prompt-based tool calling для 7B-моделей? Что улучшить в system prompt теперь?
