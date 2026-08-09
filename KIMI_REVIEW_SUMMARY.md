@@ -491,6 +491,24 @@ VERDICT: PASS, @fixer → исправление livefix/calc.py (guard b==0, Sy
 qwen3:8b **7/7** (394s, subagent-review 38.9s — task → reviewer → VERDICT).
 Тесты 115/115. Осталось: внешняя переоценка 9.5/10 (пакет — RE_EVAL.md).]
 
+## Статус рекомендаций Kimi 4 (2026-08-09, после 9.0/10) — ВСЕ ЗАКРЫТЫ
+- Этап 69 (few-shot под qwen2.5-coder:7b): бенч 7b 1/6 → 5/7 (пик 6/7);
+  root-cause — test_bench.py не передавал SYSTEM_PROMPT. Коммит 5b7bac6.
+- Этап 70 (prompt compression): EXAMPLES/тул-шаблоны/VALID/INVALID → tier
+  SYSTEM_PROMPT_FEWSHOT (it 0–1 legacy, дроп на it>=2, native никогда;
+  ~1K токенов/вызов). Коммит 4c9b6eb. Регрессия (few-shot вставлялся до
+  определения native_on → qwen3 отвечал legacy-JSON текстом) найдена при
+  live 2/3 и исправлена (core/agent_loop.py:277), тест
+  test_native_fewshot_tier_exclusion. Коммит df56d45.
+- Этап 71 (AST bash guard): ast.parse+compile для python -c (блок
+  subprocess/os.system/eval/exec/битый синтаксис), структурные паттерны
+  для node -e; тест test_bash_ast_guard (24 кейса). Коммит 924ea4a.
+- Этап 72 (UI polish): анимации mIn/pulse/fadeIn, press-feedback,
+  типографика 13.5px/1.65. Коммит e141b7d.
+- Финал: 124/124 тестов + live 3/3 + bench 7/7 (qwen3:8b, 513.8s) +
+  bench 5/7 (qwen2.5-coder:7b). Сервер перезапущен на актуальном коде.
+  Осталось: P0 видео-демо (VIDEO_DEMO.md) + внешняя переоценка 9.5/10.
+
 ## Вопросы для анализа (что хотим от Kimi)
 1. Правильна ли архитектура prompt-based tool calling для 7B-моделей? Что улучшить в system prompt теперь?
 2. Достаточны ли анти-галлюцинационные гарды (code detector, lenient JSON, tool-error nudge)? Что ещё реально работает на 7B?

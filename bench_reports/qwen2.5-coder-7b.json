@@ -1,38 +1,43 @@
 {
   "model": "qwen2.5-coder:7b",
-  "date": "2026-08-09 11:29",
+  "date": "2026-08-09 13:54",
   "scenarios": [
     {
       "scenario": "create-file",
-      "pass": false,
-      "seconds": 6.2
+      "pass": true,
+      "seconds": 8.4
     },
     {
       "scenario": "edit-rename",
       "pass": false,
-      "seconds": 8.1
+      "seconds": 7.0
     },
     {
       "scenario": "find-and-fix",
-      "pass": false,
-      "seconds": 10.4
+      "pass": true,
+      "seconds": 6.4
     },
     {
       "scenario": "js-create",
-      "pass": false,
-      "seconds": 3.1
+      "pass": true,
+      "seconds": 11.5
     },
     {
       "scenario": "sql-schema",
       "pass": true,
-      "seconds": 11.4
+      "seconds": 11.0
     },
     {
       "scenario": "refactor-extract",
       "pass": false,
-      "seconds": 9.4
+      "seconds": 5.7
+    },
+    {
+      "scenario": "subagent-review",
+      "pass": true,
+      "seconds": 55.1
     }
   ],
-  "pass": "1/6",
-  "total_seconds": 48.6
+  "pass": "5/7",
+  "total_seconds": 105.1
 }

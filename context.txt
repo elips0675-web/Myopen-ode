@@ -1078,6 +1078,8 @@ UPDATE (2026-08-09) - stages 63-64: task tool reviewer/fixer fix + bench 7/7 (11
 - Tests 115/115.
 - Tests 123/123.
 
+FULL VERIFICATION RUN (2026-08-09): unit 124/124, live 3/3 (create 16.4s, question 2.9s, edit-rename 9.5s), bench qwen3:8b 7/7 (513.8s repeat run; 4 fallbacks 'native empty -> legacy' from VRAM, no losses), API probe 20/20 endpoints 200 (health/stats/models/projects/subagents+audit/skills/plugins/vram/update/rag-status/audit/stt-status/sessions CRUD+search/task-reviewer/lsp-completion/terminal real output/static), E2E /api/chat SSE stream ok ('4' -> [DONE]). Server restarted on current code (old process was pre-stage-67: /api/subagents/audit was 404). Expected 404/405 in probe are wrong guess paths or POST-only endpoints.
+
 BUGFIX (stage-70 regression, found via live test_live.py 2/3): few-shot tier
 was injected on iteration 0 BEFORE native_on was computed. qwen3 then received
 the legacy EXAMPLES system message and answered with `	ool JSON text
