@@ -168,6 +168,16 @@ init_rag(OLLAMA_URL=OLLAMA_URL, WORK_DIR=WORK_DIR, EMBED_MODEL=EMBED_MODEL)
 from tools import load_plugins
 load_plugins()
 
+# ─── DI container (stage 41) + storage abstractions (stage 42) ──
+from core import abstractions
+from core.container import register as _di_register
+_di_register("work_dir", lambda: WORK_DIR)
+_di_register("sessions_dir", lambda: SESSIONS_DIR)
+_di_register("memory_dir", lambda: MEMORY_DIR)
+_di_register("logger", lambda: log)
+abstractions.init_defaults()  # registers 'rag' (RagAdapter over rag module)
+_di_register("sessions_db", lambda: abstractions.SqliteKVStore(DB_PATH))
+
 # ─── projects management ──────────────────────────────────
 AGENT_HOME = Path(__file__).parent
 PROJECTS_FILE = AGENT_HOME / "projects.json"
@@ -530,9 +540,11 @@ async def cancel_chat(req: CancelReq):
 from api_sessions import router as sessions_router  # noqa: E402
 from api_files import router as files_router        # noqa: E402
 from api_misc import router as misc_router          # noqa: E402
+from stt import router as stt_router                # noqa: E402
 app.include_router(sessions_router)
 app.include_router(files_router)
 app.include_router(misc_router)
+app.include_router(stt_router)
 
 # ─── wait ollama ─────────────────────────────────────────
 def wait_ollama():

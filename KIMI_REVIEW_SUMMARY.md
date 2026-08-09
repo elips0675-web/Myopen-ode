@@ -375,12 +375,21 @@ fallback; дефолтом для локального агента не дел�
 - [x] **Plan tree UI** — визуальное дерево шагов (pending/done/error) — Этап 31 (PLAN_STEPS +
       {type:plan} SSE-события, _plan_mark после каждого тула, JS-дерево ✓/✗/○)
 ### P3 (10/10)
-- [ ] **Self-healing loop** — 2 ошибки одним тулом → агент сам меняет стратегию (edit → read→write)
-- [ ] **Multi-turn RAG** — «RAG over plan»: сначала найти все затронутые файлы, потом редактировать
+- [x] **Self-healing loop** — 2 ошибки одним тулом → агент сам меняет стратегию (edit → read→write) — Этап 32 (err_streak/err_tool → «SWITCH STRATEGY NOW» в динамическом контексте)
+- [x] **Multi-turn RAG** — «RAG over plan»: сначала найти все затронутые файлы, потом редактировать — Этап 33 (_rag_over_plan: шаги плана → rag_search → блок «Plan context» с топ-6 файлами; AI_RAG_OVER_PLAN=0 отключает)
+- [x] Голосовой ввод — Этап 34 (кнопка 🎤, Web Speech API ru-RU) + Этап 43 (Whisper-бэкенд: AI_STT_URL / AI_STT_BINARY, /api/stt, MediaRecorder-фолбэк без браузерного API)
 
-Отметки по оценке: structural prompt (XML-теги) и constrained decoding — заморозка правил 1-21 +
+Отметки по оценке: structural prompt (XML-теги) и constrained decoding — заморозка правил 1-22 +
 AI_JSON_FORMAT=1 уже частично покрывают; семантическая валидация путей — видит «директорию» на
-уровне ФС (аналогичные подсказки), unquoted values — кандидат в lenient-парсер.
+уровне ФС (аналогичные подсказки), unquoted values — в lenient-парсере (Этап 37).
+
+### Обновление 2026-08-09 — этапы 35–43 (план до 9.5 закрыт, кроме внешней переоценки)
+- 35 rate limiting /api/chat (per-IP, burst), 36 семантическая валидация путей (директория → подсказка ДО мутаций),
+  37 unquoted JSON-значения, 38 EXTRA_ROOTS/ALLOW_OUTSIDE (работа вне workspace),
+  39 glob по абсолютным путям/cwd, 40 обучение SwiftMatch-класс приложений (11 скиллов + Rule 22),
+  41 DI-контейнер (core/container.py, api_* на resolve вместо import agent), 42 абстракции RAG/DB
+  (RagAdapter/KVStore/init_defaults), 43 Whisper STT (stt.py, /api/stt, MediaRecorder-фолбэк).
+- Тесты: 86 → 104 → 107/107. Осталось: внешняя переоценка 9.5/10.
 
 ## Известные пределы (поведение модели, не кода)
 - Полный цикл «исправь баг + прогони тесты» требует follow-up «yes» на [CONFIRM] (деструктивные операции — по дизайну)

@@ -178,10 +178,10 @@ Kimi 2: 8.3/10 → DeepSeek 2: 8.5/10 → DeepSeek 3: 8.6/10 → Kimi 3: 8.7/10 
 - Тесты 104/104; сервер запущен с EXTRA_ROOTS='E:\swiftmatch1bdnoutprod;E:\test mycode' (перезапуск после ребута)
 
 ## Осталось (низкий приоритет, 10/10)
-- [ ] DI-контейнер вместо import agent as _agent (частично: этапы 7/16)
-- [ ] Абстракции RAG/DB (замена FAISS/SQLite по дереву)
-- [ ] Whisper-сервер STT (сейчас браузерный Web Speech API)
-- [ ] Внешняя переоценка 9.5/10 (весь план 8.3–8.9 закрыт, тесты 104/104)
+- [x] DI-контейнер вместо import agent as _agent — Этап 41 (core/container.py: register/resolve/has/reset; провайдеры-коллбэки (work_dir/sessions_dir/memory_dir/logger/sessions_db), живые после switch_project; api_files/api_misc/api_sessions переведены на resolve, остались только прямые функции)
+- [x] Абстракции RAG/DB — Этап 42 (core/abstractions.py: RAGStore+RagAdapter (обёртка rag-модуля), KVStore+SqliteKVStore (thread-safe); init_defaults регистрирует 'rag' в контейнере, 'sessions_db' — в agent.py; точки замены FAISS→внешняя векторная БД / SQLite→Redis)
+- [x] Whisper-сервер STT — Этап 43 (stt.py: POST /api/stt multipart (wav/mp3/ogg/m4a/webm, ≤25MB) + GET /api/stt/status; бэкенды AI_STT_URL (прокси whisper-сервера) или AI_STT_BINARY (whisper.cpp main.exe -l ru -otxt); без бэкенда → 501; UI: MediaRecorder-фолбэк при отсутствии Web Speech API, мик-кнопка скрыта только если нет обоих)
+- [ ] Внешняя переоценка 9.5/10 (весь план 8.3–8.9 закрыт, тесты 107/107)
 
 ## Собственные идеи (низкий приоритет)
 - [x] Native tool calling — СДЕЛАНО (Этап 10)

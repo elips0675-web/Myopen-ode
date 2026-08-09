@@ -2239,12 +2239,86 @@ def test_glob_outside_workspace():
         shutil.rmtree(out, ignore_errors=True)
     print("  [OK] glob absolute pattern + cwd outside workspace")
 
+def test_di_container():
+    """Stage 41: DI container — api_*.py resolve work_dir/sessions_dir/logger
+    instead of `import agent as _agent`; providers are live (switch-safe)."""
+    from core import container as di
+    import agent as _agent
+    saved = dict(di._REGISTRY)
+    try:
+        wd = str(WORK_DIR)
+        di.register("work_dir", lambda: _agent.WORK_DIR)
+        di.register("logger", lambda: _agent.log)
+        assert str(di.resolve("work_dir")) == wd
+        assert di.resolve("logger") is _agent.log
+        assert di.has("work_dir") and not di.has("nope")
+        try:
+            di.resolve("nope"); assert False, "missing key should raise"
+        except KeyError:
+            pass
+        di.reset()
+        assert not di.has("work_dir")
+        import api_misc, api_files
+        assert hasattr(api_misc, "work_dir") and hasattr(api_files, "_abs")
+    finally:
+        with di._LOCK:
+            di._REGISTRY.clear()
+            di._REGISTRY.update(saved)
+    print("  [OK] DI container (register/resolve/reset, live providers)")
+
+def test_abstractions():
+    """Stage 42: RAG/KV abstractions — SqliteKVStore roundtrip, RagAdapter
+    delegates to rag module, defaults registered."""
+    import core.abstractions as ab
+    db = ab.SqliteKVStore(os.path.join(tempfile.mkdtemp(prefix="mycode_abst_"), "t.db"))
+    db.execute("CREATE TABLE t (k TEXT, v TEXT)")
+    assert db.execute("INSERT INTO t VALUES (?, ?)", ("a", "1")) == 1
+    rows = db.query("SELECT k, v FROM t WHERE k = ?", ("a",))
+    assert rows and rows[0]["v"] == "1"
+    db.close()
+    store = ab.RagAdapter.__new__(ab.RagAdapter)
+    class FakeRag:
+        def search(self, query, top_k=5, max_files=3):
+            return [{"file": "x.py", "score": 0.9}]
+    store._rag = FakeRag()
+    res = store.search("how auth works", top_k=2, max_files=1)
+    assert res[0]["file"] == "x.py"
+    ab.init_defaults()
+    from core import container as di
+    assert di.has("rag")
+    print("  [OK] abstractions (SqliteKVStore, RagAdapter, init_defaults)")
+
+def test_stt_endpoint():
+    """Stage 43: /api/stt — validation before backend; no backend → 501;
+    status endpoint reflects env config."""
+    import os as _os
+    from fastapi.testclient import TestClient
+    from agent import app
+    _os.environ.pop("AI_STT_URL", None)
+    _os.environ.pop("AI_STT_BINARY", None)
+    c = TestClient(app)
+    r = c.post("/api/stt")
+    assert r.status_code == 422, f"missing file should 422, got {r.status_code}"
+    r2 = c.post("/api/stt", files={"file": ("v.txt", b"not audio", "text/plain")})
+    assert r2.status_code == 400, f"bad extension should 400, got {r2.status_code}"
+    r3 = c.post("/api/stt", files={"file": ("v.wav", b"", "audio/wav")})
+    assert r3.status_code == 400, f"empty audio should 400, got {r3.status_code}"
+    r4 = c.post("/api/stt", files={"file": ("v.wav", b"x" * 100, "audio/wav")})
+    assert r4.status_code == 501, f"no backend should 501, got {r4.status_code}"
+    st = c.get("/api/stt/status").json()
+    assert st["browser_stt"] == "available" and st["url"] is False and st["binary"] is False
+    _os.environ["AI_STT_URL"] = "http://127.0.0.1:9"
+    assert c.get("/api/stt/status").json()["url"] is True
+    _os.environ.pop("AI_STT_URL", None)
+    print("  [OK] /api/stt validation + status (no backend → 501)")
+
 def test_cross_platform():
     """Cross-platform safety: no hard-coded Windows paths, CREATE_NO_WINDOW
     guarded, core modules importable on any OS (also runs in CI matrix)."""
     import importlib.util
     for mod in ["core.agent_loop", "core.tool_parser", "core.tool_executor",
                 "core.safety.bash_guard", "core.safety.path_guard", "core.pty_shell",
+                "core.container", "core.abstractions", "stt",
                 "rag", "lsp", "mcp_client"]:
         assert importlib.util.find_spec(mod) is not None, f"{mod} missing"
     from core.pty_shell import PtyShell
@@ -2266,7 +2340,7 @@ if __name__ == "__main__":
     if _native_supported(_agent_main.MODEL):
         _agent_main.MODEL = "qwen2.5-coder:7b"
         print("  [test] default MODEL is native-capable -> forced to qwen2.5-coder:7b (legacy path)")
-    tests = [test_cross_platform, test_plan_tree_events, test_self_healing_advice, test_rag_over_plan, test_extra_roots, test_glob_outside_workspace, test_task_router, test_vram_indicator, test_ast_refactor_tools, test_auto_pick_model, test_docker_sandbox_flag, test_git_auto_commit, test_compact_prompt_after_iterations, test_rate_limit, test_path_dir_hint, test_unquoted_json_values,
+    tests = [test_cross_platform, test_plan_tree_events, test_self_healing_advice, test_rag_over_plan, test_extra_roots, test_glob_outside_workspace, test_di_container, test_abstractions, test_stt_endpoint, test_task_router, test_vram_indicator, test_ast_refactor_tools, test_auto_pick_model, test_docker_sandbox_flag, test_git_auto_commit, test_compact_prompt_after_iterations, test_rate_limit, test_path_dir_hint, test_unquoted_json_values,
              test_auto_confirm_safe, test_read, test_read_absolute, test_read_url, test_list, test_glob,
              test_write_and_undo, test_edit, test_edit_guard_ambiguous, test_edit_guard_fuzzy_hint,
              test_syntax_guard_write, test_patch_multi_file, test_bash, test_verify_py, test_verify_json,

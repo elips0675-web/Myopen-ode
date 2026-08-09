@@ -4,7 +4,7 @@ import asyncio, json, os, subprocess, time
 from pathlib import Path
 from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.responses import StreamingResponse, JSONResponse, FileResponse
-import agent as _agent
+from core.container import work_dir
 from agent import (MODEL, PLANNER_MODEL, OLLAMA_URL, load_projects, save_projects,
                    switch_project, list_sessions_db, ProjectReq, ProjectSwitchReq,
                    TerminalReq)
@@ -65,7 +65,7 @@ def audit_log(limit: str = "50"):
         n = 50
     n = max(1, min(n, 500))
     try:
-        lines = (_agent.WORK_DIR / ".agent_audit.log").read_text("utf-8", errors="ignore").splitlines()
+        lines = (work_dir() / ".agent_audit.log").read_text("utf-8", errors="ignore").splitlines()
         return {"lines": lines[-n:]}
     except Exception as e:
         return {"error": str(e)}
@@ -82,7 +82,7 @@ def health():
         "status": "ok",
         "model": MODEL,
         "planner": PLANNER_MODEL,
-        "workspace": str(_agent.WORK_DIR),
+        "workspace": str(work_dir()),
         "sessions": sessions,
         "rag_chunks": len(RAG_CHUNKS or []),
         "rag_embeddings": len(RAG_INDEX or []),
@@ -98,15 +98,15 @@ def update_check():
     if _UPDATE_CACHE["data"] and now - _UPDATE_CACHE["at"] < 3600:
         return _UPDATE_CACHE["data"]
     try:
-        cur = subprocess.run(["git", "rev-parse", "--short", "HEAD"], cwd=str(_agent.WORK_DIR),
+        cur = subprocess.run(["git", "rev-parse", "--short", "HEAD"], cwd=str(work_dir()),
                              capture_output=True, text=True, timeout=10).stdout.strip()
         remote = subprocess.run(["git", "ls-remote", "origin", "refs/heads/master"],
-                                cwd=str(_agent.WORK_DIR), capture_output=True, text=True, timeout=20)
+                                cwd=str(work_dir()), capture_output=True, text=True, timeout=20)
         latest = remote.stdout.split()[0][:7] if remote.stdout.split() else ""
         behind = 0
         if latest:
             bc = subprocess.run(["git", "rev-list", "--count", "HEAD..origin/master"],
-                                cwd=str(_agent.WORK_DIR), capture_output=True, text=True, timeout=20)
+                                cwd=str(work_dir()), capture_output=True, text=True, timeout=20)
             try: behind = int(bc.stdout.strip() or 0)
             except ValueError: pass
         data = {"ok": True, "current": cur, "latest": latest,
@@ -158,7 +158,7 @@ def delete_model(name: str):
         return {"error": str(e)}
 
 @router.get("/api/project")
-def get_project(): return {"name": _agent.WORK_DIR.name, "path": str(_agent.WORK_DIR)}
+def get_project(): return {"name": work_dir().name, "path": str(work_dir())}
 
 @router.get("/api/projects")
 def list_projects():
@@ -168,7 +168,7 @@ def list_projects():
 def add_project(req: ProjectReq):
     projects = load_projects()
     for p in projects: p["active"] = False
-    path = req.path or str(_agent.WORK_DIR)
+    path = req.path or str(work_dir())
     projects.append({"name": req.name or Path(path).name, "path": path, "active": True})
     save_projects(projects)
     switch_project(path)
@@ -183,7 +183,7 @@ def switch_project_api(req: ProjectSwitchReq):
         p["active"] = (p["path"] == path)
     save_projects(projects)
     switch_project(path)
-    return {"ok": True, "project": {"name": _agent.WORK_DIR.name, "path": str(_agent.WORK_DIR)}}
+    return {"ok": True, "project": {"name": work_dir().name, "path": str(work_dir())}}
 
 @router.delete("/api/projects/{idx}")
 def delete_project_api(idx: int):
@@ -212,14 +212,14 @@ def list_plugins():
 
 @router.get("/api/skills")
 def list_skills():
-    skills_dir = _agent.WORK_DIR / ".agent_skills"
+    skills_dir = work_dir() / ".agent_skills"
     if not skills_dir.exists():
         skills_dir.mkdir(exist_ok=True)
     skills = []
     for f in sorted(skills_dir.glob("*.md")):
         try:
             content = f.read_text("utf-8", errors="ignore")[:500]
-            skills.append({"name": f.stem, "path": str(f.relative_to(_agent.WORK_DIR)), "preview": content[:200]})
+            skills.append({"name": f.stem, "path": str(f.relative_to(work_dir())), "preview": content[:200]})
         except: pass
     return skills
 
@@ -234,7 +234,7 @@ async def terminal(req: TerminalReq):
     async def gen():
         try:
             proc = subprocess.Popen(
-                cmd, shell=True, cwd=req.cwd or _agent.WORK_DIR,
+                cmd, shell=True, cwd=req.cwd or work_dir(),
                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                 text=True, encoding="utf-8", errors="replace",
                 creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
@@ -304,7 +304,7 @@ async def ws_term(ws: WebSocket):
             if "cmd" in m:
                 if shell is not None:
                     shell.kill()
-                shell = PtyShell(m.get("cmd") or None, cwd=m.get("cwd") or _agent.WORK_DIR,
+                shell = PtyShell(m.get("cmd") or None, cwd=m.get("cwd") or work_dir(),
                                  cols=m.get("cols", 100), rows=m.get("rows", 30))
                 await ws.send_text(json.dumps({"out": f"$ {' '.join(m['cmd']) if isinstance(m.get('cmd'), list) else m.get('cmd', '')}\r\n"}))
             elif "input" in m and shell is not None:
@@ -332,7 +332,7 @@ def lsp_completion(req: dict):
     character = int(req.get("character", 0))
     try:
         from lsp import LSPClient, token_completions
-        client = LSPClient(_agent.WORK_DIR)
+        client = LSPClient(work_dir())
         items = client.completion(path, line, character, text)
         if items:
             return {"items": items, "source": "lsp"}

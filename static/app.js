@@ -472,11 +472,15 @@ $('ta').addEventListener('keydown',function(e){
 });
 $('ta').addEventListener('input',ah);init();
 
-// ─── Voice input (Stage 34): Web Speech API (STT) ─────────
+// ─── Voice input (Stage 34 + 43): Web Speech API; fallback MediaRecorder → /api/stt (Whisper)
 var micBtn=$('mic');
-if(micBtn&&!(window.SpeechRecognition||window.webkitSpeechRecognition)){micBtn.style.display='none'}
-if(micBtn&&(window.SpeechRecognition||window.webkitSpeechRecognition)){
-  var rec=null,recOn=false;
+var srApi=window.SpeechRecognition||window.webkitSpeechRecognition;
+var mrApi=window.MediaRecorder&&window.navigator.mediaDevices&&window.navigator.mediaDevices.getUserMedia;
+if(micBtn&&!srApi&&!mrApi){micBtn.style.display='none'}
+var recOn=false;
+function micReset(){recOn=false;if(micBtn){micBtn.style.background='';micBtn.style.color='';}}
+if(micBtn&&srApi){
+  var rec=null;
   function toggleMic(){
     if(recOn){try{rec.stop()}catch(e){recOn=false};return}
     if(!rec){
@@ -486,14 +490,37 @@ if(micBtn&&(window.SpeechRecognition||window.webkitSpeechRecognition)){
         var t='';for(var i=0;i<e.results.length;i++)t+=e.results[i][0].transcript;
         var ta=$('ta');ta.value=t;ah();
       };
-      var reset=function(){recOn=false;micBtn.style.background='';micBtn.style.color='';};
-      rec.onend=reset;rec.onerror=reset;
+      rec.onend=micReset;rec.onerror=micReset;
     }
     recOn=true;micBtn.style.background='var(--cnl-btn)';micBtn.style.color='#fff';
     try{rec.start()}catch(e){recOn=false}
   }
   micBtn.addEventListener('click',toggleMic);
   micBtn.title='Voice input (STT) — click to record';
+}else if(micBtn&&mrApi){
+  // Stage 43: no SpeechRecognition API → record audio → POST /api/stt (Whisper server/binary)
+  var mrec=null,mChunks=[];
+  function toggleMic(){
+    if(recOn){if(mrec){mrec.stop();mrec.stream&&mrec.stream.getTracks().forEach(function(t){t.stop()})}return}
+    recOn=true;micBtn.style.background='var(--cnl-btn)';micBtn.style.color='#fff';mChunks=[];
+    window.navigator.mediaDevices.getUserMedia({audio:true}).then(function(stream){
+      mrec=new MediaRecorder(stream);mrec.ondataavailable=function(e){if(e.data.size)mChunks.push(e.data)};
+      mrec.onstop=function(){
+        stream.getTracks().forEach(function(t){t.stop()});
+        var blob=new Blob(mChunks,{type:mrec.mimeType||'audio/webm'});
+        var fd=new FormData();fd.append('file',blob,'voice.webm');
+        fetch('/api/stt',{method:'POST',body:fd}).then(function(r){return r.json().catch(function(){return{}}) })
+          .then(function(d){
+            micReset();
+            if(d.text){var ta=$('ta');ta.value=(ta.value?ta.value+'\n':'')+d.text;ah();}
+            else{var msg=d.detail||'STT unavailable — set AI_STT_BINARY or AI_STT_URL';if(ta){ta.value=ta.value+'\n['+msg+']';ah();}}
+          }).catch(function(){micReset()});
+      };
+      mrec.start();
+    }).catch(function(){micReset()});
+  }
+  micBtn.addEventListener('click',toggleMic);
+  micBtn.title='Voice input — record → Whisper (/api/stt)';
 }
 
 // ─── Terminal (xterm.js + WebSocket) ───────────────────────

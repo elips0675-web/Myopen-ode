@@ -1,9 +1,10 @@
 """Session CRUD + search/export/import API routes (extracted from agent.py)."""
 import json
+import logging
 from datetime import datetime
 from fastapi import APIRouter
 from fastapi.responses import JSONResponse
-import agent as _agent
+from core.container import sessions_dir
 from agent import (_db, load_session, save_session, delete_session_db,
                    list_sessions_db, session_interrupted, ChatReq, SessionReq)
 
@@ -43,8 +44,8 @@ def search_sessions(q: str = "", limit: int = 20):
             results.append({"id": sid, "title": title, "updated": updated,
                             "snippets": snippets[:3], "matches": len(snippets)})
     except Exception as e:
-        _agent.log.warning("Session search db: %s", e)
-    for f in sorted(_agent.SESSIONS_DIR.glob("*.json"), key=lambda x: x.stat().st_mtime, reverse=True):
+        logging.getLogger("api_sessions").warning("Session search db: %s", e)
+    for f in sorted(sessions_dir().glob("*.json"), key=lambda x: x.stat().st_mtime, reverse=True):
         if any(r["id"] == f.stem for r in results):
             continue
         try:
