@@ -986,3 +986,27 @@ UPDATE (2026-08-09) - stages 45-48: agent development roadmap (111/111 x2):
 - Server restarted; EXTRA_ROOTS for E:\swiftmatch1bdnoutprod + AI_EXTRA_RAG
   available for reference-driven app building offline.
 
+UPDATE (2026-08-09) - stages 49-51: live-verified new features + polish (111/111):
+- Stage 49 (benchmark first real run): python -X utf8 test_bench.py --models
+  qwen3:8b -> 6/6 (468s total; create-file 133.5s, edit-rename 9.7s,
+  find-and-fix 41.5s, js-create 11.3s, sql-schema 132.0s, refactor-extract
+  140.3s). Report: bench_reports/qwen3-8b.json. sql-schema checker relaxed:
+  model wrote a correct inline FK (REFERENCES users(id)) — now accepts
+  "FOREIGN KEY" OR "REFERENCES".
+- Stage 50 (live checks of 45-47 on real qwen3:8b): (45) reviewer subagent
+  reviewed calc.py -> "CRITICAL: calc.py:2 (division by zero), VERDICT: FAIL"
+  in 23.5s (list -> read -> verdict); (46) AI_EXTRA_RAG=E:\swiftmatch1bdnoutprod
+  search "jwt auth middleware" -> E0/eslint.config.js + calc.py in results
+  (E0/ keys live); (47) AGENT_STEP_BUDGET=2 -> "[tool: BUDGET ...]" marker +
+  forced plain-text summary in 25.8s, no extra tools. NOTE for test scripts:
+  tools WORK_DIR must be set via init_config(WORK_DIR=...) — direct
+  st.WORK_DIR= does NOT propagate to submodule copies (stage 14 lesson).
+- Stage 51 (skill generate-api SQL section): rules for schema generation
+  (users/messages + FK in both forms, ENGINE=InnoDB / PRAGMA foreign_keys,
+  indexes on FKs, NNN_*.sql migrations) + full example from the bench
+  sql-schema scenario.
+- RE_EVAL.md updated: 111/111 x2 + live 3/3 + bench 6/6, stages 35-48 table,
+  verify step 6 (benchmark run).
+- TODO.md: stages 49-51 closed; 'Доделать' now: external 9.5 re-eval,
+  benchmark other models (qwen2.5-coder:7b, 16b), live @fixer check.
+

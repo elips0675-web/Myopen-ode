@@ -16,6 +16,11 @@ Kimi 2: 8.3/10 → DeepSeek 2: 8.5/10 → DeepSeek 3: 8.6/10 → Kimi 3: 8.7/10 
 
 ## ДОДЕЛАТЬ — сводка по всем оценкам (приоритет по консенсусу ревьюверов)
 
+### Недавние предложения (этапы 45–51 сделаны; остаток к «Доделать»)
+- [ ] Внешняя переоценка 9.5/10 — единственный открытый пункт «Осталось (10/10)»; пакет для ревьювера — RE_EVAL.md (этап 44, обновлён 49–51 данными: 111/111 ×2, live 3/3, bench 6/6)
+- [ ] Бенчмарк остальных моделей: test_bench.py --models qwen2.5-coder:7b,deepseek-coder-v2:16b (сравнить с qwen3:8b 6/6; ожидаемо ~2-3/6 как в live)
+- [ ] Live-проверка fixer-сабагента (@fixer): «исправь найденные замечания» — цикл правок с самопроверкой (reviewer уже проверен live)
+
 ### Этап 1. Динамический контекст в промпте (DS3 №1, Kimi3 P1) — СДЕЛАНО
 - [x] Перед каждым вызовом модели: «You are working in project: X (iteration N) / Last action: {tool} (result: ok|error)» (_dynamic_context, agent.py); тесты test_dynamic_context, test_dynamic_context_error_status
 
@@ -189,6 +194,12 @@ Kimi 2: 8.3/10 → DeepSeek 2: 8.5/10 → DeepSeek 3: 8.6/10 → Kimi 3: 8.7/10 
 - [x] Лимит шагов агента — Этап 47 (AGENT_STEP_BUDGET=N: на N-й итерации принудительный финальный plain-text summary без новых тулов, вместо прокрутки до max_iter; тест test_step_budget)
 - [x] Бенчмарк-обвязка — Этап 48 (test_bench.py: 6 сценариев — create-file, edit-rename, find-and-fix, js-create, sql-schema, refactor-extract; JSON-отчёт bench_reports/<model>.json с pass/time; тест test_bench_report)
 - [x] Тесты 111/111 ×2 прогона; server :8765 работает (EXTRA_ROOTS + AI_EXTRA_RAG для референса SwiftMatch)
+
+## Вне оценок (этапы 49–51, 2026-08-09) — live-подтверждение и полировка
+- [x] Live-прогон бенчмарка — Этап 49 (test_bench.py --models qwen3:8b → **6/6** (468s), отчёт bench_reports/qwen3-8b.json; чекер sql-schema смягчён: FOREIGN KEY ИЛИ REFERENCES — модель писала корректный инлайн-FK)
+- [x] Live-проверка фич 45–47 — Этап 50 (reviewer: обзор calc.py → «CRITICAL: calc.py:2 (division by zero), VERDICT: FAIL» за 23.5s; extra-rag: поиск «jwt auth middleware» по AI_EXTRA_RAG нашёл E0/eslint.config.js из SwiftMatch; step budget: маркер BUDGET + принудительный summary за 25.8s)
+- [x] Skill generate-api: SQL-раздел — Этап 51 (правила схемы: users/messages + FK обоими способами, ENGINE=InnoDB/PRAGMA, индексы на FK, миграции NNN_*.sql; пример полной схемы — из сценария sql-schema бенчмарка)
+- [x] RE_EVAL.md обновлён: 111/111 ×2 + live 3/3 + bench 6/6, таблица этапов 35–48, шаг 6 в проверке (бенчмарк)
 
 ## Собственные идеи (низкий приоритет)
 - [x] Native tool calling — СДЕЛАНО (Этап 10)

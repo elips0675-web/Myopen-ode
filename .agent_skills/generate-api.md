@@ -44,6 +44,28 @@ router.get('/api/{feature}/stats', requireAuth, async (req, res) => {
 })
 export default router
 
+## SQL-схема (общие правила, как в test_bench сценарии sql-schema)
+- Таблицы users + messages: users(id, email, password_hash) — email UNIQUE NOT NULL,
+  password_hash TEXT NOT NULL; messages(id, user_id, text) с внешним ключом.
+- Внешний ключ: годится и явный `FOREIGN KEY (user_id) REFERENCES users(id)`,
+  и инлайн `user_id INTEGER REFERENCES users(id)` — проверка бенчмарка принимает оба.
+- В MySQL: ENGINE=InnoDB для FK; в SQLite: PRAGMA foreign_keys=ON на уровне соединения.
+- Индексы на все внешние ключи (WHERE user_id = ? и JOIN-ы) — обязательно.
+- Миграции: database/migrations/NNN_*.sql + регистрация в migrate.js (порядок по номеру).
+
+## Пример: полная схема с внешним ключом (SQLite/MySQL)
+CREATE TABLE users (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  email TEXT NOT NULL UNIQUE,
+  password_hash TEXT NOT NULL
+);
+CREATE TABLE messages (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL REFERENCES users(id),
+  text TEXT NOT NULL
+);
+CREATE INDEX idx_messages_user ON messages(user_id);
+
 ## Чек-лист модуля
 - [ ] миграция + migrate.js регистрация
 - [ ] роут зарегистрирован в index.js

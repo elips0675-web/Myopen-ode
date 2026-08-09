@@ -5,9 +5,11 @@
 Репозиторий: https://github.com/elips0675-web/Myopen-ode (ветка master).
 
 ## Текущий статус
-- Тесты: **107/107 ×2** (`python -X utf8 test_agent.py`) + **live 3/3** на
+- Тесты: **111/111 ×2** (`python -X utf8 test_agent.py`) + **live 3/3** на
   qwen3:8b (`python -X utf8 test_live.py --models qwen3:8b`: create file 18.3s,
-  simple question, edit rename).
+  simple question, edit rename) + **бенчмарк 6/6** (`python -X utf8
+  test_bench.py --models qwen3:8b`: create-file, edit-rename, find-and-fix,
+  js-create, sql-schema, refactor-extract; отчёт bench_reports/qwen3-8b.json).
 - Оценки истории: Kimi 8.7 → внешний 8.8 → DeepSeek 8.9 (+переоценка 8.9) →
   внешний 8.9 (Оценка 5). ВЕСЬ план оценок P1–P3 закрыт.
 - Модель: qwen3:8b (native tool calling), RTX 3060 12GB, deepseek-r1:1.5b
@@ -25,12 +27,17 @@
 | 41 | DI-контейнер (core/container.py): api_* без `import agent as _agent`, живые провайдеры | test_di_container |
 | 42 | Абстракции хранилищ: RAGStore/RagAdapter + KVStore/SqliteKVStore, регистрация в DI | test_abstractions |
 | 43 | Whisper STT (опция): /api/stt + /api/stt/status, AI_STT_URL/AI_STT_BINARY, MediaRecorder-фолбэк в UI | test_stt_endpoint + live /api/stt/status |
+| 44 | Пакет для ревьювера (этот файл) | — |
+| 45 | Reviewer/Fixer сабагенты (SUBAGENT_PROMPTS: REVIEWER — разбор кода с file:line; FIXER — правки с самопроверкой) | test_reviewer_subagent + live: обзор calc.py → «CRITICAL: calc.py:2 (division by zero)» |
+| 46 | RAG по внешним папкам: AI_EXTRA_RAG (ключи E0/), _file_root/_scan_files | test_rag_extra_roots + live: поиск по E:\swiftmatch1bdnoutprod → E0/eslint.config.js |
+| 47 | Лимит шагов AGENT_STEP_BUDGET=N: принудительный финальный summary без новых тулов | test_step_budget + live: маркер BUDGET + summary за 25.8s |
+| 48 | Бенчмарк-обвязка: test_bench.py — 6 сценариев, JSON-отчёт bench_reports/<model>.json | test_bench_report + live 6/6 (468s) |
 
-Тесты выросли: 86 → 104 → 107 (июль-август 2026).
+Тесты выросли: 86 → 104 → 107 → 111 (июль-август 2026).
 
 ## Как проверить самому (5 минут)
 1. `git clone https://github.com/elips0675-web/Myopen-ode && cd Myopen-ode`
-2. `python -X utf8 test_agent.py` → ждать «107/107 passed»
+2. `python -X utf8 test_agent.py` → ждать «111/111 passed»
 3. `ollama pull qwen3:8b` (если нет) → `python -X utf8 agent.py` →
    открыть http://localhost:8765 → задать «что такое 2+2?» и «создай файл
    hello.py с функцией greet» (деструктивные — подтвердить «да»)
@@ -38,9 +45,11 @@
    полностью оффлайн?» → агент вызовет skill webapp/offline-ollama
 5. Скиллы: папка .agent_skills/ (11 md). Обучение по методологии —
    «Обучения программиста.txt» в корне репозитория.
+6. Бенчмарк: `python -X utf8 test_bench.py --models qwen3:8b` → 6/6,
+   отчёт bench_reports/qwen3-8b.json
 
 ## Запрос на оценку
-Оценить версию с учётом этапов 35–43 (коммиты 6afcfb9..0ac96cc):
+Оценить версию с учётом этапов 35–48 (коммиты 6afcfb9..HEAD):
 - Архитектура: DI, абстракции хранилищ, модульность core/ + api_* + tools/
 - Код/тесты: 107/107 + 3/3 live, AST-guard, git-бэкапы, rate limit
 - Возможности: работа вне workspace, обучение скиллами, Whisper STT,

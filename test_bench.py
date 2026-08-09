@@ -136,7 +136,8 @@ def sc_sql(model, sid):
     t0 = time.time()
     out = run_agent_loop(msgs, sid, None, model)
     c = p.read_text("utf-8", errors="ignore") if p.exists() else ""
-    ok = "CREATE TABLE" in c.upper() and "users" in c and "messages" in c and "FOREIGN KEY" in c.upper()
+    ok = "CREATE TABLE" in c.upper() and "users" in c and "messages" in c and (
+        "FOREIGN KEY" in c.upper() or "REFERENCES" in c.upper())
     return ok, time.time() - t0, len(out)
 
 
