@@ -439,7 +439,7 @@ function showHints(){
       if(it.length)showHintBox(it,cursor);else hideHint();
     });return;
   }else if(prefix[0]=='@'){
-    ['explore','scout','general'].forEach(function(a){if(a.startsWith(q))items.push({value:'@'+a+' ',label:'@'+a,_partial:prefix})});
+    ['reviewer','fixer','general','explore','scout'].forEach(function(a){if(a.startsWith(q))items.push({value:'@'+a+' ',label:'@'+a+' — run as subagent',_partial:prefix})});
   }
   if(items.length)showHintBox(items,cursor);else hideHint();
 }

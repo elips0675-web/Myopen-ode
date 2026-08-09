@@ -449,6 +449,31 @@ def vendor_file(fname: str):
 app.mount("/static/vendor/cm", StaticFiles(directory=WORK_DIR / "static" / "vendor" / "cm"), name="codemirror")
 
 
+_SUBAGENT_MARKER = re.compile(r"^@(reviewer|fixer|general)\b[:\s,-]*(.*)$", re.S)
+
+
+def _apply_subagent_marker(first_text, msgs):
+    """Stage 54: "@reviewer <task>" in the first user message -> run that
+    subagent directly (swap system prompt, strip the marker). Returns the
+    cleaned task text and the updated message list."""
+    m = _SUBAGENT_MARKER.match(first_text.strip())
+    if not m:
+        return first_text, msgs
+    agent_type = m.group(1)
+    task_text = (m.group(2) or "").strip()
+    try:
+        from tools import SUBAGENT_PROMPTS as _sub
+        msgs[0] = {"role": "system", "content": _sub.get(agent_type, _sub["general"])}
+        if task_text:
+            for _i in range(len(msgs) - 1, 0, -1):
+                if msgs[_i].get("role") == "user":
+                    msgs[_i] = dict(msgs[_i], content=task_text)
+                    break
+    except Exception as e:
+        log.warning("subagent marker failed: %s", e)
+    return task_text, msgs
+
+
 @app.post("/api/chat")
 async def chat(req: ChatReq, request: Request = None):
     if request and request.client and request.client.host:
@@ -466,6 +491,10 @@ async def chat(req: ChatReq, request: Request = None):
     msgs = [{"role": "system", "content": sys_content}] + session_msgs + req.messages
     first_text = next((m.get("content", "") for m in req.messages
                        if m.get("role") == "user"), "") or ""
+    # Stage 54: direct subagent markers — "@reviewer <task>", "@fixer <task>",
+    # "@general <task>" in the first user message swap the system prompt for
+    # the matching subagent and strip the marker from the task text.
+    first_text, msgs = _apply_subagent_marker(first_text, msgs)
     chosen_model = req.model or None
     if not chosen_model:
         from tools.llm import pick_task_model as _ptm

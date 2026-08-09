@@ -1021,3 +1021,20 @@ UPDATE (2026-08-09) - stages 52-53: benchmark all models + live fixer (111/111):
   b == 0 -> return None guard, function name and print kept), 60.4s.
 - Tests 111/111, no code changes (docs/reports only this round).
 
+UPDATE (2026-08-09) - stages 54-56: direct subagent markers in chat (113/113):
+- Stage 54 (@reviewer/@fixer/@general markers): agent.py _apply_subagent_marker
+  + _SUBAGENT_MARKER regex: first user token "@reviewer <task>" swaps msgs[0]
+  system prompt for SUBAGENT_PROMPTS[type] and replaces the last user message
+  content with the stripped task text (returns cleaned first_text so
+  pick_task_model sees the real task). Wired into /api/chat after first_text
+  extraction. No marker -> flow unchanged.
+- Stage 55 (rules in prompts): SYSTEM_PROMPT rule 23 (review via
+  task(agent='reviewer'), then fix with task(agent='fixer') - never patch
+  manually after a report); COMPACT_SYSTEM_PROMPT short line; NATIVE_SYSTEM_PROMPT
+  rule 17 (also mentions @-markers). test_system_prompt_rules still passes.
+- Stage 56 (UI hints): static/app.js @-autocomplete now lists
+  reviewer/fixer/general/explore/scout with label "run as subagent".
+- Tests 113/113 (added test_subagent_marker: reviewer/fixer/general,
+  punctuation/newline after marker, bare marker, no-marker passthrough;
+  test_subagent_prompts_defined).
+

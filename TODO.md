@@ -203,6 +203,12 @@ Kimi 2: 8.3/10 → DeepSeek 2: 8.5/10 → DeepSeek 3: 8.6/10 → Kimi 3: 8.7/10 
 - [x] Бенчмарк остальных моделей — Этап 52 (test_bench.py --models: qwen2.5-coder:7b → **1/6** (48.6s, отвечает инструкциями; прошёл только sql-schema), deepseek-coder-v2:16b → **0/6** (105.6s, тулы не выполняет); сводка — bench_reports/SUMMARY.md; вывод: qwen3:8b — единственная рабочая модель для полного цикла)
 - [x] Live-проверка fixer-сабагента — Этап 53 (FIXER_PROMPT через run_agent_loop на qwen3:8b: баг division by zero в calc.py исправлен — добавлена проверка b==0 → return None, файл валиден; 60.4s)
 
+## Вне оценок (этапы 54–56, 2026-08-09) — прямые сабагент-маркеры в чате
+- [x] Маркеры @reviewer/@fixer/@general в сообщении — Этап 54 (agent.py _apply_subagent_marker: первый user-токен @reviewer <задача> меняет system-промпт на SUBAGENT_PROMPTS[тип] и убирает маркер из текста; без маркера — обычный поток; тесты test_subagent_marker)
+- [x] Правило 23 в промптах — Этап 55 (SYSTEM_PROMPT rule 23 «task(agent='reviewer') → потом fixer»; COMPACT_SYSTEM_PROMPT и NATIVE_SYSTEM_PROMPT rule 17 — краткие строки про ревью/фикс и @-маркеры)
+- [x] UI-автокомплит маркеров — Этап 56 (static/app.js: @-подсказки reviewer/fixer/general/explore/scout с пояснением «run as subagent»)
+- [x] Тесты **113/113** (добавлены test_subagent_marker + test_subagent_prompts_defined)
+
 ## Собственные идеи (низкий приоритет)
 - [x] Native tool calling — СДЕЛАНО (Этап 10)
 - [x] Desktop App — СДЕЛАНО как Этап 11 (pywebview fallback); Этап 20 — Tauri desktop (Rust 1.97.1 + MSVC Build Tools установлены, src-tauri/ cargo-only wrapper, WebView2 1280×860, ~50MB против ~300MB pywebview, scripts/run_tauri.bat)

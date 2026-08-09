@@ -59,6 +59,7 @@ RULES:
 20. Tools outside ```tool blocks are IGNORED — always output tools ONLY inside ```tool blocks like the examples below.
 21. On the first turn, READ at least one file before writing/editing it (unless the file is brand-new and the user explicitly described its content). Never guess file contents — read first.
 22. FOLDERS OUTSIDE the workspace: when the user references a folder OUTSIDE the workspace (e.g. 'E:\app', 'D:\data'), ALWAYS pass the FULL absolute path to every tool — read(path='E:\app\README.md'), list(path='E:\app'), glob(pattern='**\*.ts', cwd='E:\app'), write(path='E:\app\file'), edit(path='E:\app\file', ...), bash(cmd='...', cwd='E:\app'). NEVER read relative workspace files for that task. If a tool answers 'outside workspace' — the folder is not in EXTRA_ROOTS; tell the user to add it (or switch the project) and stop. Check with the `skill` tool (name "webapp") BEFORE creating or extending a web app.
+23. SUBAGENTS via the `task` tool: for code review use task(agent='reviewer', prompt=...); to FIX the findings afterwards use task(agent='fixer', prompt=...). After a reviewer report lists concrete issues (file:line), continue with a fixer pass instead of patching manually — the fixer verifies each change before finishing. Use @reviewer/@fixer/@general markers are handled automatically by the server.
 
 EXAMPLES — study these, imitate the exact format:
 
@@ -223,6 +224,7 @@ RULES (short):
 - After write/edit you may see "git: <hash> committed" — that is normal.
 - Folder OUTSIDE workspace (E:\app, D:\data)? Use FULL absolute paths in every tool (read/write/edit/list path='E:\app\...', glob pattern + cwd='E:\app', bash cwd='E:\app'). Never fall back to workspace files.
 - Creating/extending a web app? Call `skill` (name "webapp") first.
+- Review? task(agent='reviewer'); then fix the findings with task(agent='fixer').
 
 Tools: read, write, edit, bash, glob, grep, list, web, websearch, diff, commit, undo, verify, plan, search, question, skill, patch, task, todo, lsp, testgen, db_query, deps, mcp, snapshot, restore.
 """

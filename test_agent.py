@@ -204,6 +204,44 @@ def test_dynamic_context():
     assert "Last action: list (result: ok)" in dyn[-1]["content"], dyn[-1]["content"]
     print("  [OK] dynamic context injected into model calls")
 
+def test_subagent_marker():
+    """Stage 54: "@reviewer <task>" (and @fixer/@general) in the first user
+    message swaps the system prompt for the subagent and strips the marker."""
+    from agent import _apply_subagent_marker, SYSTEM_PROMPT
+    from tools import SUBAGENT_PROMPTS
+    def mk(text):
+        return [{"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "user", "content": text}]
+    # reviewer
+    task, msgs = _apply_subagent_marker("@reviewer Check calc.py", mk("@reviewer Check calc.py"))
+    assert task == "Check calc.py", task
+    assert msgs[-1]["content"] == "Check calc.py"
+    assert msgs[0]["content"] == SUBAGENT_PROMPTS["reviewer"]
+    # fixer with punctuation+newline
+    task, msgs = _apply_subagent_marker("@fixer :  Fix it\nline2",
+        mk("@fixer :  Fix it\nline2"))
+    assert task == "Fix it\nline2", repr(task)
+    assert msgs[0]["content"] == SUBAGENT_PROMPTS["fixer"]
+    # general
+    task, msgs = _apply_subagent_marker("@general Explore", mk("@general Explore"))
+    assert task == "Explore" and msgs[0]["content"] == SUBAGENT_PROMPTS["general"]
+    # no marker -> untouched
+    task, msgs = _apply_subagent_marker("review calc.py", mk("review calc.py"))
+    assert task == "review calc.py"
+    assert msgs[0]["content"] == SYSTEM_PROMPT
+    # bare marker (no task text) -> empty task, prompt still swapped
+    task, msgs = _apply_subagent_marker("@reviewer", mk("@reviewer"))
+    assert task == "" and msgs[0]["content"] == SUBAGENT_PROMPTS["reviewer"]
+    print("  [OK] @reviewer/@fixer/@general markers")
+
+def test_subagent_prompts_defined():
+    """Stage 45: all three subagent prompts must exist and be non-empty."""
+    from tools import SUBAGENT_PROMPTS
+    for k in ("reviewer", "fixer", "general"):
+        assert k in SUBAGENT_PROMPTS, f"missing {k}"
+        assert len(SUBAGENT_PROMPTS[k]) > 200, f"{k} prompt too short"
+    print("  [OK] SUBAGENT_PROMPTS reviewer/fixer/general defined")
+
 def test_dynamic_context_error_status():
     """Failed tool result must be reported as 'error' in the next call."""
     import agent as agent_mod
@@ -2490,6 +2528,7 @@ if __name__ == "__main__":
              test_bash_docker_mode, test_bash_docker_fallback,
              test_parse_tool_json_lenient, test_tool_stats,
              test_system_prompt_rules, test_dynamic_context,
+             test_subagent_marker, test_subagent_prompts_defined,
              test_dynamic_context_error_status, test_dynamic_context_global_stats, test_tool_error_fewshot,
              test_bash_docker_flags, test_health_endpoint, test_vendor_static,
              test_json_schema_format, test_git_snapshot_restore, test_diff_preview,
