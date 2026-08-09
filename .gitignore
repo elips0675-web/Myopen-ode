@@ -16,3 +16,4 @@ projects.json
 .live_tests/
 .test_cp/
 add.py
+.bench_tmp/
