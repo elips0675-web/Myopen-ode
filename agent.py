@@ -79,6 +79,37 @@ PLANNER_MODEL = os.environ.get("PLANNER_MODEL", "deepseek-r1:1.5b")
 WORK_DIR = Path(os.environ.get("WORK_DIR") or Path(__file__).resolve().parent)
 NO_CONFIRM = os.environ.get("NO_CONFIRM", "0") == "1"
 EMBED_MODEL = os.environ.get("EMBED_MODEL", "nomic-embed-text")
+
+
+def _auto_pick_embed_model():
+    """Stage 68 (DeepSeek P4): prefer a higher-quality embed model when one
+    is installed (`ollama list`). An explicit EMBED_MODEL env var always wins;
+    otherwise pick the best known embed model from the installed set and log
+    the decision. Falls back to nomic-embed-text."""
+    global EMBED_MODEL
+    if os.environ.get("EMBED_MODEL"):
+        return EMBED_MODEL
+    try:
+        r = subprocess.run(["ollama", "list"], capture_output=True, text=True, timeout=15)
+        installed = [ln.split()[0] for ln in r.stdout.splitlines()[1:] if ln.strip()]
+        preferred = ["bge-m3", "mxbai-embed-large", "snowflake-arctic-embed",
+                     "all-minilm:33m", "all-minilm", "bge-small-en-v1.5", "bge-base-en-v1.5"]
+        for name in preferred:
+            if name in installed:
+                EMBED_MODEL = name
+                log.info("Auto-picked embed model %s (installed)", name)
+                return EMBED_MODEL
+        for name in installed:
+            if "embed" in name and name != "nomic-embed-text":
+                EMBED_MODEL = name
+                log.info("Auto-picked embed model %s (installed)", name)
+                return EMBED_MODEL
+    except Exception:
+        pass
+    return EMBED_MODEL
+
+
+_auto_pick_embed_model()
 MAX_TOKENS = int(os.environ.get("MAX_TOKENS", "0"))
 OPENAI_KEY = os.environ.get("OPENAI_API_KEY", "")
 ANTHROPIC_KEY = os.environ.get("ANTHROPIC_API_KEY", "")

@@ -837,6 +837,35 @@ def test_subagent_audit_api():
             container.register("event_bus", old_bus)
     print("  [OK] GET /api/subagents/audit")
 
+def test_auto_pick_embed_model():
+    """Stage 68 (DeepSeek P4): embed model auto-pick via `ollama list`;
+    explicit EMBED_MODEL env always wins."""
+    import agent as agent_mod
+    def fake_run(cmd, **kw):
+        class R:
+            returncode = 0
+            stdout = ("NAME                    ID              SIZE    MODIFIED\n"
+                      "nomic-embed-text        abc             300MB   1 day ago\n"
+                      "bge-m3                  def             1.2GB   2 hours ago\n"
+                      "qwen3:8b                ghi             7.5GB   1 min ago\n")
+        return R()
+    old_run, old_env, old_embed = agent_mod.subprocess.run, os.environ.copy(), agent_mod.EMBED_MODEL
+    agent_mod.subprocess.run = fake_run
+    try:
+        os.environ.pop("EMBED_MODEL", None)
+        agent_mod.EMBED_MODEL = "nomic-embed-text"
+        res = agent_mod._auto_pick_embed_model()
+        assert res == "bge-m3", f"expected bge-m3, got {res}"
+        os.environ["EMBED_MODEL"] = "my-custom-embed"
+        agent_mod.EMBED_MODEL = "my-custom-embed"
+        res = agent_mod._auto_pick_embed_model()
+        assert res == "my-custom-embed", "explicit EMBED_MODEL must win"
+    finally:
+        os.environ.clear(); os.environ.update(old_env)
+        agent_mod.subprocess.run = old_run
+        agent_mod.EMBED_MODEL = old_embed
+    print("  [OK] embed model auto-pick (ollama list, explicit env wins)")
+
 def test_task_subagent_loop():
     """task tool delegates to a subagent that runs its own tool loop."""
     import agent as agent_mod
@@ -2750,7 +2779,7 @@ if __name__ == "__main__":
              test_json_schema_format, test_git_snapshot_restore, test_diff_preview,
              test_update_check, test_rag_folder_scope, test_mcp_client, test_mcp_integration,
              test_event_bus, test_event_bus_tool_events, test_event_bus_subagent_audit,
-             test_subagent_audit_api,
+             test_subagent_audit_api, test_auto_pick_embed_model,
              test_task_subagent_loop, test_task_subagent_reviewer_fixer, test_native_tools_schema,
              test_native_tool_calling, test_desktop_helpers,
              test_sess_stats_advice, test_model_router,
