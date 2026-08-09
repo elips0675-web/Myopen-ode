@@ -466,14 +466,30 @@ webm ≤25MB + /api/stt/status; AI_STT_URL прокси / AI_STT_BINARY whisper.
 [Этап 44 (3461853): RE_EVAL.md — пакет для внешнего ревьювера: состояние
 (107/107 ×2 + live 3/3), таблица закрытых этапов 35–43, 5-минутная проверка,
 ожидания. TODO.md ссылается на него. Осталось: внешняя переоценка 9.5/10.]
-[Этапы 45–48 (готовятся к коммиту): reviewer/fixer сабагенты
+[Этапы 45–48 (2bb6e49+0ff73ef): reviewer/fixer сабагенты
 (SUBAGENT_PROMPTS в tools/__init__.py: REVIEWER — многошаговый разбор кода
 с file:line и примерами; FIXER — правки по одному + самопроверка; GENERAL),
 RAG по внешним корням (AI_EXTRA_RAG='E:\a;E:\b', ключи E0/, _file_root+_scan_files),
 лимит шагов (AGENT_STEP_BUDGET=N — принудительный финальный summary без
-новых тулов), бенчмарк-обвязка (test_bench.py: 6 сценариев create-file/
-edit-rename/find-and-fix/js-create/sql-schema/refactor-extract → JSON-отчёт
-bench_reports/<model>.json). Тесты 113/113. Осталось: внешняя переоценка 9.5/10.]
+новых тулов), бенчмарк-обвязка (test_bench.py: 7 сценариев create-file/
+edit-rename/find-and-fix/js-create/sql-schema/refactor-extract/subagent-review
+→ JSON-отчёт bench_reports/<model>.json). Live: @reviewer → «CRITICAL:
+calc.py:2 (division by zero)», @fixer реально исправил файл (60.4s).
+Осталось: внешняя переоценка 9.5/10.]
+[Этапы 49–53 (2bb6e49..86d31f8): бенч live — qwen3:8b 6/6 (468s),
+qwen2.5-coder:7b 1/6, deepseek-coder-v2:16b 0/6 (SUMMARY.md); live-проверки
+45–47; SQL-раздел в скилле generate-api; live fixer через run_agent_loop.]
+[Этапы 54–59 (6b109d2..4e04c62): прямые маркеры сабагентов
+@reviewer/@fixer/@general в первом user-сообщении — замена system-промпта
+(agent.py _apply_subagent_marker); Rule 23 в промптах; UI: автокомплит,
+чипы 🧐/🔧/🧭 (subChip), status-событие «subagent: <тип>». Live: @reviewer →
+VERDICT: PASS, @fixer → исправление livefix/calc.py (guard b==0, Syntax OK).]
+[Этапы 60–64 (906cda4..ef9894a): GET /api/subagents (каталог маркеров);
+бенч-сценарий subagent-review вскрыл баг — тул task отвергал reviewer/fixer
+(«must be one of: explore, scout, general») → исправлено в tools/exec.py
+(валидатор + guard) + описания в промптах/native-схеме; финальный бенч
+qwen3:8b **7/7** (394s, subagent-review 38.9s — task → reviewer → VERDICT).
+Тесты 115/115. Осталось: внешняя переоценка 9.5/10 (пакет — RE_EVAL.md).]
 
 ## Вопросы для анализа (что хотим от Kimi)
 1. Правильна ли архитектура prompt-based tool calling для 7B-моделей? Что улучшить в system prompt теперь?
@@ -482,3 +498,5 @@ bench_reports/<model>.json). Тесты 113/113. Осталось: внешня�
 4. Статистика тулов (TOOL_STATS) — стоит ли встраивать счётчики ошибок в system prompt для самообучения модели?
 5. Native tool calling vs legacy ```tool: стоит ли мигрировать legacy-модели или гибрид (qwen3 native, остальные legacy) — правильный выбор?
 6. Оценка версии (было 8.7/10): что поднять до «production-ready» (9.5+/10)?
+7. Прямые маркеры @reviewer/@fixer/@general: стоит ли давать их и в
+   компакт-режим, и нужен ли авто-вызов fixer после reviewer (pipeline)?

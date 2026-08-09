@@ -48,7 +48,7 @@
 
 ## Как проверить самому (5 минут)
 1. `git clone https://github.com/elips0675-web/Myopen-ode && cd Myopen-ode`
-2. `python -X utf8 test_agent.py` → ждать «113/113 passed»
+2. `python -X utf8 test_agent.py` → ждать «115/115 passed»
 3. `ollama pull qwen3:8b` (если нет) → `python -X utf8 agent.py` →
    открыть http://localhost:8765 → задать «что такое 2+2?» и «создай файл
    hello.py с функцией greet» (деструктивные — подтвердить «да»)
@@ -56,18 +56,49 @@
    полностью оффлайн?» → агент вызовет skill webapp/offline-ollama
 5. Скиллы: папка .agent_skills/ (11 md). Обучение по методологии —
    «Обучения программиста.txt» в корне репозитория.
-6. Бенчмарк: `python -X utf8 test_bench.py --models qwen3:8b` → 6/6,
+6. Бенчмарк: `python -X utf8 test_bench.py --models qwen3:8b` → 7/7,
    отчёт bench_reports/qwen3-8b.json
+7. Маркеры сабагентов: в чате «@reviewer проверь hello.py» → отчёт
+   CRITICAL/WARNINGS/VERDICT без правок файла.
 
 ## Запрос на оценку
-Оценить версию с учётом этапов 35–48 + 54–56 (коммиты 6afcfb9..HEAD):
+Оценить версию с учётом этапов 35–48 + 54–64 (коммиты 6afcfb9..HEAD):
 - Архитектура: DI, абстракции хранилищ, модульность core/ + api_* + tools/
 - Код/тесты: 115/115 + 3/3 live, AST-guard, git-бэкапы, rate limit
 - Возможности: работа вне workspace, обучение скиллами, Whisper STT,
   RAG over plan, self-healing, native tool calling (qwen3), Tauri desktop,
-  сабагенты-маркеры @reviewer/@fixer/@general в чате
+  сабагенты-маркеры @reviewer/@fixer/@general в чате + тул task
 - Безопасность: path-jail + EXTRA_ROOTS, bash whitelist, rate limiting,
   изобретённые пути блокируются
 - Оффлайн: весь стек (Ollama, MySQL-клоны, STT whisper.cpp) локальный
 
 Ожидание: 9.5/10 при подтверждении закрытия всех пунктов плана.
+
+## Как скормить Kimi (готовый промпт-пакет)
+Скопировать в один чат с Kimi (достаточно двух сообщений):
+
+1) Список файлов репозитория (открыть прямо в GitHub, развернув вкладки):
+- README.md, TODO.md (разделы «Что сделано», «Этапы 35–64»), RE_EVAL.md (этот
+  файл), USER_GUIDE.md, KIMI_REVIEW_SUMMARY.md, ARCHITECTURE.md (Mermaid),
+  context.txt, AGENTS.md, .agent_skills/*.md (11 скиллов),
+  bench_reports/SUMMARY.md + qwen3-8b.json
+- Код: agent.py (588→617 строк: /api/chat + маркеры), tools/__init__.py
+  (SUBAGENT_PROMPTS/DESCS, правила 1–23), tools/exec.py (_tool_task),
+  core/agent_loop.py, core/container.py, core/abstractions.py, rag.py,
+  test_agent.py (115 тестов), test_bench.py (7 сценариев)
+
+2) Текст промпта для Kimi (скопировать как есть):
+
+---
+Ты — технический ревьювер кода. Дай оценку от 8.5 до 10 за 3 раунда:
+Раунд 1 — архитектура: DI-контейнер, абстракции хранилищ, модульность
+core/ + api_* + tools/, безопасность (path-jail, bash whitelist, rate
+limit), оффлайн-стек. Раунд 2 — качество: 115/115 автотестов
+(test_agent.py), AST-guard, git-бэкапы, бенчмарк 7/7 на qwen3:8b live.
+Раунд 3 — возможности: работа вне workspace (EXTRA_ROOTS), 11 обучающих
+скиллов, Whisper STT, RAG over plan, self-healing, native tool calling,
+сабагенты @reviewer/@fixer/@general (прямые маркеры и тул task),
+Tauri desktop. ВЕРДИКТ: PASS/FAIL по каждому пункту плана оценок
+(KIMI_REVIEW_SUMMARY.md), итог — одна оценка и 5 конкретных улучшений
+до 10/10.
+---
