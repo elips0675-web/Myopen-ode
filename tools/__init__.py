@@ -268,4 +268,13 @@ SUBAGENT_PROMPTS = {
     "fixer": FIXER_PROMPT,
 }
 
+# Stage 61: short human-readable descriptions (API /api/subagents, UI hints)
+SUBAGENT_DESCS = {
+    "reviewer": "Код-ревью: читает файлы и выдаёт отчёт CRITICAL/WARNINGS/VERDICT, ничего не меняет",
+    "fixer": "Исправляет найденные баги: применяет правки и перепроверяет (py_compile/тесты)",
+    "general": "Полный доступ: сложные многошаговые задачи с любыми инструментами",
+    "explore": "Исследование кода (read-only): ищет структуру, определения, связи",
+    "scout": "Внешние исследования (web/read): документация, версии, API",
+}
+
 _state._sync_register(sys.modules[__name__])

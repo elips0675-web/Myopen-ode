@@ -1053,3 +1053,14 @@ UPDATE (2026-08-09) - stages 57-59: subagent UI chips + live @fixer (113/113):
   Note: leading-dot dirs (.test_tmp) confuse the model's edit path - use
   plain dir names for live subagent checks.
 
+UPDATE (2026-08-09) - stages 60-62: subagent visibility + bench scenario (114/114):
+- Stage 60 (status event): _apply_subagent_marker now returns (task, msgs,
+  agent_type|None); /api/chat emits {type:status, msg:"subagent: <type>"} so
+  the UI shows which subagent is running. test_subagent_marker updated.
+- Stage 61 (/api/subagents): tools SUBAGENT_DESCS (short RU descriptions);
+  GET /api/subagents returns name/marker/desc/tools-hint for all 5 subagents;
+  test_subagents_api added.
+- Stage 62 (bench scenario): test_bench.py "subagent-review" (7th) - model
+  must call task(agent='reviewer') for bug2.py and report VERDICT.
+- Tests 114/114.
+

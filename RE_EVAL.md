@@ -5,7 +5,7 @@
 Репозиторий: https://github.com/elips0675-web/Myopen-ode (ветка master).
 
 ## Текущий статус
-- Тесты: **113/113** (`python -X utf8 test_agent.py`) + **live 3/3** на
+- Тесты: **114/114** (`python -X utf8 test_agent.py`) + **live 3/3** на
   qwen3:8b (`python -X utf8 test_live.py --models qwen3:8b`: create file 18.3s,
   simple question, edit rename) + **бенчмарк по 3 моделям** (`python -X utf8
   test_bench.py --models qwen3:8b`): qwen3:8b 6/6 (468s), qwen2.5-coder:7b 1/6,
@@ -40,8 +40,11 @@
 | 54 | Прямые сабагент-маркеры: @reviewer/@fixer/@general в первом user-сообщении меняют system-промпт и убирают маркер (agent.py _apply_subagent_marker) | test_subagent_marker + live: «@reviewer ...» → «VERDICT: PASS» |
 | 55 | Правило 23 (task reviewer → fixer) в SYSTEM_PROMPT, строки в compact и native-промптах | test_system_prompt_rules |
 | 56 | UI-автокомплит @-маркеров (reviewer/fixer/general/explore/scout) | static/app.js |
+| 60 | Status-событие subagent в потоке чата + agent_type из маркера | test_subagent_marker |
+| 61 | GET /api/subagents — каталог (name/marker/desc/tools) | test_subagents_api |
+| 62 | Бенч-сценарий subagent-review (7-й): task(agent='reviewer') → VERDICT | test_bench_report |
 
-Тесты выросли: 86 → 104 → 107 → 111 → 113 (июль-август 2026).
+Тесты выросли: 86 → 104 → 107 → 111 → 113 → 114 (июль-август 2026).
 
 ## Как проверить самому (5 минут)
 1. `git clone https://github.com/elips0675-web/Myopen-ode && cd Myopen-ode`
@@ -59,7 +62,7 @@
 ## Запрос на оценку
 Оценить версию с учётом этапов 35–48 + 54–56 (коммиты 6afcfb9..HEAD):
 - Архитектура: DI, абстракции хранилищ, модульность core/ + api_* + tools/
-- Код/тесты: 113/113 + 3/3 live, AST-guard, git-бэкапы, rate limit
+- Код/тесты: 114/114 + 3/3 live, AST-guard, git-бэкапы, rate limit
 - Возможности: работа вне workspace, обучение скиллами, Whisper STT,
   RAG over plan, self-healing, native tool calling (qwen3), Tauri desktop,
   сабагенты-маркеры @reviewer/@fixer/@general в чате

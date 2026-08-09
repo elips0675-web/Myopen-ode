@@ -213,25 +213,30 @@ def test_subagent_marker():
         return [{"role": "system", "content": SYSTEM_PROMPT},
                 {"role": "user", "content": text}]
     # reviewer
-    task, msgs = _apply_subagent_marker("@reviewer Check calc.py", mk("@reviewer Check calc.py"))
+    task, msgs, agent = _apply_subagent_marker("@reviewer Check calc.py", mk("@reviewer Check calc.py"))
     assert task == "Check calc.py", task
+    assert agent == "reviewer"
     assert msgs[-1]["content"] == "Check calc.py"
     assert msgs[0]["content"] == SUBAGENT_PROMPTS["reviewer"]
     # fixer with punctuation+newline
-    task, msgs = _apply_subagent_marker("@fixer :  Fix it\nline2",
+    task, msgs, agent = _apply_subagent_marker("@fixer :  Fix it\nline2",
         mk("@fixer :  Fix it\nline2"))
     assert task == "Fix it\nline2", repr(task)
+    assert agent == "fixer"
     assert msgs[0]["content"] == SUBAGENT_PROMPTS["fixer"]
     # general
-    task, msgs = _apply_subagent_marker("@general Explore", mk("@general Explore"))
-    assert task == "Explore" and msgs[0]["content"] == SUBAGENT_PROMPTS["general"]
-    # no marker -> untouched
-    task, msgs = _apply_subagent_marker("review calc.py", mk("review calc.py"))
+    task, msgs, agent = _apply_subagent_marker("@general Explore", mk("@general Explore"))
+    assert task == "Explore" and agent == "general"
+    assert msgs[0]["content"] == SUBAGENT_PROMPTS["general"]
+    # no marker -> untouched, agent None
+    task, msgs, agent = _apply_subagent_marker("review calc.py", mk("review calc.py"))
     assert task == "review calc.py"
+    assert agent is None
     assert msgs[0]["content"] == SYSTEM_PROMPT
     # bare marker (no task text) -> empty task, prompt still swapped
-    task, msgs = _apply_subagent_marker("@reviewer", mk("@reviewer"))
-    assert task == "" and msgs[0]["content"] == SUBAGENT_PROMPTS["reviewer"]
+    task, msgs, agent = _apply_subagent_marker("@reviewer", mk("@reviewer"))
+    assert task == "" and agent == "reviewer"
+    assert msgs[0]["content"] == SUBAGENT_PROMPTS["reviewer"]
     print("  [OK] @reviewer/@fixer/@general markers")
 
 def test_subagent_prompts_defined():
@@ -447,6 +452,19 @@ def test_health_endpoint():
     assert isinstance(h["rag_chunks"], int), h
     assert h["uptime_s"] >= 0, h
     print("  [OK] /health endpoint payload")
+
+def test_subagents_api():
+    """Stage 61: GET /api/subagents lists marker name/desc for every subagent."""
+    import api_misc
+    subs = {s["name"]: s for s in api_misc.list_subagents()}
+    for n in ("reviewer", "fixer", "general", "explore", "scout"):
+        assert n in subs, f"missing {n}"
+        assert subs[n]["marker"] == "@" + n
+        assert subs[n]["desc"], f"{n} desc empty"
+        assert subs[n]["tools"], f"{n} tools hint empty"
+    from tools import SUBAGENT_PROMPTS
+    assert len(subs) == len(SUBAGENT_PROMPTS)
+    print("  [OK] /api/subagents catalogue")
 
 def test_vendor_static():
     """Vendored frontend libs served locally (offline UI, no CDN needed)."""
@@ -2466,7 +2484,8 @@ def test_bench_report():
     """Stage 48: benchmark harness — scenario registry complete, JSON report
     written with pass/time per scenario, exit code aggregated."""
     import test_bench as tb
-    assert len(tb.SCENARIOS) >= 6, f"scenarios: {list(tb.SCENARIOS)}"
+    assert len(tb.SCENARIOS) >= 7, f"scenarios: {list(tb.SCENARIOS)}"
+    assert "subagent-review" in tb.SCENARIOS
     rep_dir = Path(tempfile.mkdtemp(prefix="mycode_bench_"))
     rep = {"model": "m", "date": "t", "scenarios":
            [{"scenario": "s1", "pass": True, "seconds": 1.0}],
@@ -2474,7 +2493,7 @@ def test_bench_report():
     (rep_dir / "m.json").write_text(json.dumps(rep), "utf-8")
     assert json.loads((rep_dir / "m.json").read_text())["pass"] == "1/1"
     shutil.rmtree(rep_dir, ignore_errors=True)
-    print("  [OK] bench harness (6 scenarios + JSON report format)")
+    print("  [OK] bench harness (7 scenarios + JSON report format)")
 
 def test_cross_platform():
     """Cross-platform safety: no hard-coded Windows paths, CREATE_NO_WINDOW
@@ -2530,7 +2549,7 @@ if __name__ == "__main__":
              test_system_prompt_rules, test_dynamic_context,
              test_subagent_marker, test_subagent_prompts_defined,
              test_dynamic_context_error_status, test_dynamic_context_global_stats, test_tool_error_fewshot,
-             test_bash_docker_flags, test_health_endpoint, test_vendor_static,
+             test_bash_docker_flags, test_health_endpoint, test_subagents_api, test_vendor_static,
              test_json_schema_format, test_git_snapshot_restore, test_diff_preview,
              test_update_check, test_rag_folder_scope, test_mcp_client,
              test_task_subagent_loop, test_native_tools_schema,

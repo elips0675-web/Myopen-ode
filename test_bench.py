@@ -155,6 +155,22 @@ def sc_extract(model, sid):
     return ok, time.time() - t0, len(out)
 
 
+@_register("subagent-review")
+def sc_subagent_review(model, sid):
+    """Stage 62: model must delegate to the reviewer subagent (task tool) and
+    surface its VERDICT report."""
+    p = BENCH_DIR / "bug2.py"
+    p.write_text("def div(a, b):\n    return a / b\nprint(div(2, 0))\n", "utf-8")
+    msgs = [{"role": "user", "content":
+             f"Review {p.relative_to(agent_mod.WORK_DIR).as_posix()} with the reviewer subagent "
+             "(call the task tool with agent='reviewer'), do not edit anything, "
+             "and report its verdict."}]
+    t0 = time.time()
+    out = run_agent_loop(msgs, sid, None, model)
+    ok = "VERDICT" in out
+    return ok, time.time() - t0, len(out)
+
+
 def main():
     models, have = pick_models()
     if not models:

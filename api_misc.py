@@ -205,6 +205,19 @@ async def run_task(agent_type: str, prompt: str = ""):
     result, _ = call_ollama(msgs, PLANNER_MODEL)
     return {"result": result[:3000]}
 
+@router.get("/api/subagents")
+def list_subagents():
+    """Stage 61: subagent catalogue (markers + descriptions) for UI/API."""
+    from tools import SUBAGENT_PROMPTS, SUBAGENT_DESCS
+    return [{"name": n, "marker": "@" + n, "desc": SUBAGENT_DESCS.get(n, ""),
+             "tools": _subagent_tool_hint(n)} for n in SUBAGENT_PROMPTS]
+
+def _subagent_tool_hint(name):
+    from tools import SUBAGENT_PROMPTS
+    import re as _re
+    m = _re.search(r"can ONLY use: ([^\n]+)", SUBAGENT_PROMPTS[name])
+    return m.group(1) if m else "all tools"
+
 @router.get("/api/plugins")
 def list_plugins():
     from tools import PLUGINS

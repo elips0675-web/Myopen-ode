@@ -455,10 +455,10 @@ _SUBAGENT_MARKER = re.compile(r"^@(reviewer|fixer|general)\b[:\s,-]*(.*)$", re.S
 def _apply_subagent_marker(first_text, msgs):
     """Stage 54: "@reviewer <task>" in the first user message -> run that
     subagent directly (swap system prompt, strip the marker). Returns the
-    cleaned task text and the updated message list."""
+    cleaned task text, the updated message list and the agent type (or None)."""
     m = _SUBAGENT_MARKER.match(first_text.strip())
     if not m:
-        return first_text, msgs
+        return first_text, msgs, None
     agent_type = m.group(1)
     task_text = (m.group(2) or "").strip()
     try:
@@ -471,7 +471,8 @@ def _apply_subagent_marker(first_text, msgs):
                     break
     except Exception as e:
         log.warning("subagent marker failed: %s", e)
-    return task_text, msgs
+        return task_text, msgs, None
+    return task_text, msgs, agent_type
 
 
 @app.post("/api/chat")
@@ -494,7 +495,7 @@ async def chat(req: ChatReq, request: Request = None):
     # Stage 54: direct subagent markers — "@reviewer <task>", "@fixer <task>",
     # "@general <task>" in the first user message swap the system prompt for
     # the matching subagent and strip the marker from the task text.
-    first_text, msgs = _apply_subagent_marker(first_text, msgs)
+    first_text, msgs, sub_agent = _apply_subagent_marker(first_text, msgs)
     chosen_model = req.model or None
     if not chosen_model:
         from tools.llm import pick_task_model as _ptm
@@ -503,6 +504,9 @@ async def chat(req: ChatReq, request: Request = None):
     loop = asyncio.get_running_loop()
     def emit(ev):
         loop.call_soon_threadsafe(q.put_nowait, ev)
+    if sub_agent:
+        # Stage 60: surface the active subagent to the UI as a status event
+        emit({"type": "status", "msg": f"subagent: {sub_agent}"})
     _rate_inc(request.client.host if request and request.client else "?")
     task = asyncio.create_task(asyncio.to_thread(run_agent_loop, msgs, req.session_id, emit, chosen_model or None))
     task.add_done_callback(lambda _t: _rate_dec(request.client.host if request and request.client else "?"))
