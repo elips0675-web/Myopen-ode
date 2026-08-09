@@ -184,7 +184,7 @@ Kimi 2: 8.3/10 → DeepSeek 2: 8.5/10 → DeepSeek 3: 8.6/10 → Kimi 3: 8.7/10 
 - [x] DI-контейнер вместо import agent as _agent — Этап 41 (core/container.py: register/resolve/has/reset; провайдеры-коллбэки (work_dir/sessions_dir/memory_dir/logger/sessions_db), живые после switch_project; api_files/api_misc/api_sessions переведены на resolve, остались только прямые функции)
 - [x] Абстракции RAG/DB — Этап 42 (core/abstractions.py: RAGStore+RagAdapter (обёртка rag-модуля), KVStore+SqliteKVStore (thread-safe); init_defaults регистрирует 'rag' в контейнере, 'sessions_db' — в agent.py; точки замены FAISS→внешняя векторная БД / SQLite→Redis)
 - [x] Whisper-сервер STT — Этап 43 (stt.py: POST /api/stt multipart (wav/mp3/ogg/m4a/webm, ≤25MB) + GET /api/stt/status; бэкенды AI_STT_URL (прокси whisper-сервера) или AI_STT_BINARY (whisper.cpp main.exe -l ru -otxt); без бэкенда → 501; UI: MediaRecorder-фолбэк при отсутствии Web Speech API, мик-кнопка скрыта только если нет обоих)
-- [ ] Внешняя переоценка 9.5/10 (весь план 8.3–8.9 закрыт, тесты 114/114 + live 3/3; пакет для ревьювера — RE_EVAL.md, Этап 44)
+- [ ] Внешняя переоценка 9.5/10 (весь план 8.3–8.9 закрыт, тесты 115/115 + live 3/3; пакет для ревьювера — RE_EVAL.md, Этап 44)
 
 ## Вне оценок (этапы 45–48, 2026-08-09) — развитие агента по своей дорожной карте
 - [x] Reviewer/Fixer сабагенты — Этап 45 (SUBAGENT_PROMPTS: reviewer — многошаговый разбор кода с примерами; fixer — применение правок с самопроверкой; GENERAL — общий; тул task проксирует их через run_agent_loop; тест test_reviewer_subagent)
@@ -219,6 +219,12 @@ Kimi 2: 8.3/10 → DeepSeek 2: 8.5/10 → DeepSeek 3: 8.6/10 → Kimi 3: 8.7/10 
 - [x] Каталог сабагентов — Этап 61 (tools/__init__.py SUBAGENT_DESCS; GET /api/subagents: name/marker/desc/tools для всех 5 сабагентов; тест test_subagents_api)
 - [x] Бенч-сценарий subagent-review — Этап 62 (test_bench.py: 7-й сценарий — модель должна вызвать task(agent='reviewer') и доложить VERDICT)
 - [x] Тесты **114/114**
+
+## Вне оценок (этапы 63–64, 2026-08-09) — фикс task-тула и live 7 сценариев
+- [x] Бенч 7 сценариев на qwen3:8b — Этап 63 (live: create-file/edit-rename/find-and-fix/js-create/sql-schema/refactor-extract — 6/6 как раньше, но subagent-review провалился: **тул task отвергал agent='reviewer'** — «must be one of: explore, scout, general»)
+- [x] Баг task-тула исправлен — Этап 64 (tools/exec.py _tool_task + валидатор: агенты reviewer/fixer разрешены; описания в SYSTEM_PROMPT (Task: … reviewer, fixer) и native-схеме обновлены; тест test_task_subagent_reviewer_fixer; live-повтор: модель вызвала task(agent='reviewer') → CRITICAL: .bench_tmp/bug2.py:3 … VERDICT: FAIL)
+- [x] Бенч 7/7 на qwen3:8b — финальный прогон (394.1s: create-file 65.9s, edit-rename 10.9s, find-and-fix 100.8s, js-create 12.4s, sql-schema 28.0s, refactor-extract 137.3s, **subagent-review 38.9s**; отчёт обновлён bench_reports/qwen3-8b.json + SUMMARY.md 7/7)
+- [x] Тесты **115/115** (добавлен test_task_subagent_reviewer_fixer + проверки compact/native в test_system_prompt_rules)
 
 ## Собственные идеи (низкий приоритет)
 - [x] Native tool calling — СДЕЛАНО (Этап 10)

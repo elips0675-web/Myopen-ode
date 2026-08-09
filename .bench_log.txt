@@ -1,0 +1,11 @@
+Benchmark: 1 model(s) x 7 scenarios (dir=E:\My OpenCode1\.bench_tmp)
+    [OK] create-file (65.9s)
+    [OK] edit-rename (10.9s)
+    [OK] find-and-fix (100.8s)
+    [OK] js-create (12.4s)
+    [OK] sql-schema (28.0s)
+    [OK] refactor-extract (137.3s)
+    [OK] subagent-review (38.9s)
+==============================================
+  qwen3:8b: 7/7  (394.1s total)
+TOTAL 7/7 | reports: E:\My OpenCode1\bench_reports

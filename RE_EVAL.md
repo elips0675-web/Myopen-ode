@@ -5,10 +5,10 @@
 Репозиторий: https://github.com/elips0675-web/Myopen-ode (ветка master).
 
 ## Текущий статус
-- Тесты: **114/114** (`python -X utf8 test_agent.py`) + **live 3/3** на
+- Тесты: **115/115** (`python -X utf8 test_agent.py`) + **live 3/3** на
   qwen3:8b (`python -X utf8 test_live.py --models qwen3:8b`: create file 18.3s,
   simple question, edit rename) + **бенчмарк по 3 моделям** (`python -X utf8
-  test_bench.py --models qwen3:8b`): qwen3:8b 6/6 (468s), qwen2.5-coder:7b 1/6,
+  test_bench.py --models qwen3:8b`): qwen3:8b 7/7 (394s, включая subagent-review), qwen2.5-coder:7b 1/6,
   deepseek-coder-v2:16b 0/6; отчёты bench_reports/*.json + SUMMARY.md. Live
   @reviewer/@fixer подтверждены: обзор → «CRITICAL: calc.py:2 (division by
   zero)» и реальное исправление файла (guard b==0 → None, 60.4s); прямой
@@ -44,7 +44,7 @@
 | 61 | GET /api/subagents — каталог (name/marker/desc/tools) | test_subagents_api |
 | 62 | Бенч-сценарий subagent-review (7-й): task(agent='reviewer') → VERDICT | test_bench_report |
 
-Тесты выросли: 86 → 104 → 107 → 111 → 113 → 114 (июль-август 2026).
+Тесты выросли: 86 → 104 → 107 → 111 → 113 → 114 → 115 (июль-август 2026).
 
 ## Как проверить самому (5 минут)
 1. `git clone https://github.com/elips0675-web/Myopen-ode && cd Myopen-ode`
@@ -62,7 +62,7 @@
 ## Запрос на оценку
 Оценить версию с учётом этапов 35–48 + 54–56 (коммиты 6afcfb9..HEAD):
 - Архитектура: DI, абстракции хранилищ, модульность core/ + api_* + tools/
-- Код/тесты: 114/114 + 3/3 live, AST-guard, git-бэкапы, rate limit
+- Код/тесты: 115/115 + 3/3 live, AST-guard, git-бэкапы, rate limit
 - Возможности: работа вне workspace, обучение скиллами, Whisper STT,
   RAG over plan, self-healing, native tool calling (qwen3), Tauri desktop,
   сабагенты-маркеры @reviewer/@fixer/@general в чате

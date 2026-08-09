@@ -192,7 +192,7 @@ Question: ask user with multiple choice options.
 Skill: load SKILL.md instructions from .agent_skills/ directory.
 Patch: apply unified diff to a file.
 Multi-agent: planning uses a smaller model; execution uses the main model.
-Task: delegate to subagent. Agents: explore (read-only research), scout (web/external research), general (complex multi-step).
+Task: delegate to subagent. Agents: explore (read-only research), scout (web/external research), general (complex multi-step), reviewer (code review report), fixer (apply fixes).
 Todo: manage task list within session — add, complete, list items.
 LSP: code intelligence — definition, references, hover, symbols per file.
 

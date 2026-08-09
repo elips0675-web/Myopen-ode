@@ -1064,3 +1064,16 @@ UPDATE (2026-08-09) - stages 60-62: subagent visibility + bench scenario (114/11
   must call task(agent='reviewer') for bug2.py and report VERDICT.
 - Tests 114/114.
 
+UPDATE (2026-08-09) - stages 63-64: task tool reviewer/fixer fix + bench 7/7 (115/115):
+- Stage 63 (bench 7 scenarios on qwen3:8b): first run 6/7 - subagent-review
+  FAILED because the task tool rejected agent='reviewer' ("must be one of:
+  explore, scout, general") even though SUBAGENT_PROMPTS has reviewer/fixer;
+  the model degraded to general.
+- Stage 64 (fix): tools/exec.py _tool_task + _validate_tool_block now accept
+  reviewer/fixer; tool description in SYSTEM_PROMPT and native tools schema
+  updated; test_task_subagent_reviewer_fixer added (both agents delegate with
+  their prompts, unknown agent rejected). Live re-run: model called
+  task(agent='reviewer') -> CRITICAL: .bench_tmp/bug2.py:3 ... VERDICT: FAIL.
+  Final bench run: **7/7** (394.1s, subagent-review 38.9s), SUMMARY.md updated.
+- Tests 115/115.
+

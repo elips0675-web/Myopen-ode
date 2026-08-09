@@ -183,8 +183,8 @@ def validate_tool(tc):
             tc["options"] = [o.strip() for o in tc["options"].split(",") if o.strip()]
         elif not isinstance(tc["options"], list):
             return "question.options must be an array"
-    if tc.get("tool") == "task" and tc.get("agent") not in ("explore", "scout", "general"):
-        return "task.agent must be one of: explore, scout, general"
+    if tc.get("tool") == "task" and tc.get("agent") not in ("explore", "scout", "general", "reviewer", "fixer"):
+        return "task.agent must be one of: explore, scout, general, reviewer, fixer"
     if tc.get("tool") == "todo" and tc.get("action") not in ("add", "complete", "list"):
         return "todo.action must be one of: add, complete, list"
     if tc.get("tool") == "lsp" and tc.get("operation") not in ("definition", "references", "hover", "symbols", "rename", "completion"):
@@ -633,6 +633,8 @@ def _tool_patch(args):
 
 def _tool_task(args):
     agent_type = args.get("agent", "general")
+    if agent_type not in ("explore", "scout", "general", "reviewer", "fixer"):
+        return "task.agent must be one of: explore, scout, general, reviewer, fixer"
     user_prompt = args.get("prompt", "")
     import tools as _t
     sub_prompt = _t.SUBAGENT_PROMPTS.get(agent_type, _t.GENERAL_PROMPT)

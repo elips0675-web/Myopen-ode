@@ -202,7 +202,7 @@ TOOL_DESCS = {
     "question": "Ask the user a multiple choice question",
     "skill": "Load a .agent_skills/*.md skill",
     "patch": "Apply a unified diff to a file",
-    "task": "Delegate to a subagent (explore/scout/general)",
+    "task": "Delegate to a subagent (explore/scout/general/reviewer/fixer)",
     "todo": "Manage the in-session todo list",
     "lsp": "Code intelligence via LSP",
     "testgen": "Generate unit tests from code",

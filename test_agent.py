@@ -181,6 +181,11 @@ def test_system_prompt_rules():
     ]
     for label, needle in checks:
         assert needle in SYSTEM_PROMPT, f"SYSTEM_PROMPT missing: {label} ({needle!r})"
+    from tools import COMPACT_SYSTEM_PROMPT
+    from tools.llm import NATIVE_SYSTEM_PROMPT
+    assert "task(agent='reviewer'" in SYSTEM_PROMPT, "rule 23 missing"
+    assert "reviewer" in COMPACT_SYSTEM_PROMPT, "compact prompt missing subagent line"
+    assert "reviewer" in NATIVE_SYSTEM_PROMPT, "native prompt missing subagent rule"
     print("  [OK] system prompt: rules 16-19 + EXAMPLES present")
 
 def test_dynamic_context():
@@ -681,6 +686,32 @@ def test_task_subagent_loop():
     finally:
         agent_mod.call_ollama = orig_c
     print("  [OK] hierarchical subagent (tool loop)")
+
+def test_task_subagent_reviewer_fixer():
+    """Stage 64: task tool must accept reviewer/fixer agents and delegate
+    with their prompts; invalid agent names still rejected."""
+    import agent as agent_mod
+    import tools as tools_mod
+    orig_c = agent_mod.call_ollama
+    seen = []
+    def mock_ollama(msgs, model):
+        seen.append(msgs[0]["content"][:40])
+        return ("VERDICT: FAIL (mock)", 10)
+    agent_mod.call_ollama = orig_c
+    agent_mod.call_ollama = mock_ollama
+    try:
+        from tools import SUBAGENT_PROMPTS
+        for ag in ("reviewer", "fixer"):
+            r = tools_mod.execute_tool("task", {"agent": ag, "prompt": "check bug"})
+            assert f"[SUBAGENT:{ag}]" in r, r
+            assert "VERDICT" in r, r
+        assert "REVIEWER agent" in seen[0], seen
+        assert "FIXER agent" in seen[1], seen
+        bad = tools_mod.execute_tool("task", {"agent": "nobody", "prompt": "x"})
+        assert "must be one of" in bad, bad
+    finally:
+        agent_mod.call_ollama = orig_c
+    print("  [OK] task tool: reviewer/fixer agents accepted")
 
 def test_native_tools_schema():
     """native_tools_schema covers all tools incl. snapshot/restore; support
@@ -2552,7 +2583,7 @@ if __name__ == "__main__":
              test_bash_docker_flags, test_health_endpoint, test_subagents_api, test_vendor_static,
              test_json_schema_format, test_git_snapshot_restore, test_diff_preview,
              test_update_check, test_rag_folder_scope, test_mcp_client,
-             test_task_subagent_loop, test_native_tools_schema,
+             test_task_subagent_loop, test_task_subagent_reviewer_fixer, test_native_tools_schema,
              test_native_tool_calling, test_desktop_helpers,
              test_sess_stats_advice, test_model_router,
              test_rag_status_api, test_audit_api,
