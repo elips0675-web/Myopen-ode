@@ -16,10 +16,8 @@ Kimi 2: 8.3/10 → DeepSeek 2: 8.5/10 → DeepSeek 3: 8.6/10 → Kimi 3: 8.7/10 
 
 ## ДОДЕЛАТЬ — сводка по всем оценкам (приоритет по консенсусу ревьюверов)
 
-### Недавние предложения (этапы 45–51 сделаны; остаток к «Доделать»)
-- [ ] Внешняя переоценка 9.5/10 — единственный открытый пункт «Осталось (10/10)»; пакет для ревьювера — RE_EVAL.md (этап 44, обновлён 49–51 данными: 111/111 ×2, live 3/3, bench 6/6)
-- [ ] Бенчмарк остальных моделей: test_bench.py --models qwen2.5-coder:7b,deepseek-coder-v2:16b (сравнить с qwen3:8b 6/6; ожидаемо ~2-3/6 как в live)
-- [ ] Live-проверка fixer-сабагента (@fixer): «исправь найденные замечания» — цикл правок с самопроверкой (reviewer уже проверен live)
+### Недавние предложения (этапы 45–53 сделаны; остаток к «Доделать»)
+- [ ] Внешняя переоценка 9.5/10 — единственный открытый пункт «Осталось (10/10)»; пакет для ревьювера — RE_EVAL.md (этап 44, обновлён данными 49–53: 111/111 ×2, live 3/3, bench 3 моделей)
 
 ### Этап 1. Динамический контекст в промпте (DS3 №1, Kimi3 P1) — СДЕЛАНО
 - [x] Перед каждым вызовом модели: «You are working in project: X (iteration N) / Last action: {tool} (result: ok|error)» (_dynamic_context, agent.py); тесты test_dynamic_context, test_dynamic_context_error_status
@@ -200,6 +198,10 @@ Kimi 2: 8.3/10 → DeepSeek 2: 8.5/10 → DeepSeek 3: 8.6/10 → Kimi 3: 8.7/10 
 - [x] Live-проверка фич 45–47 — Этап 50 (reviewer: обзор calc.py → «CRITICAL: calc.py:2 (division by zero), VERDICT: FAIL» за 23.5s; extra-rag: поиск «jwt auth middleware» по AI_EXTRA_RAG нашёл E0/eslint.config.js из SwiftMatch; step budget: маркер BUDGET + принудительный summary за 25.8s)
 - [x] Skill generate-api: SQL-раздел — Этап 51 (правила схемы: users/messages + FK обоими способами, ENGINE=InnoDB/PRAGMA, индексы на FK, миграции NNN_*.sql; пример полной схемы — из сценария sql-schema бенчмарка)
 - [x] RE_EVAL.md обновлён: 111/111 ×2 + live 3/3 + bench 6/6, таблица этапов 35–48, шаг 6 в проверке (бенчмарк)
+
+## Вне оценок (этапы 52–53, 2026-08-09) — бенчмарк по моделям + live @fixer
+- [x] Бенчмарк остальных моделей — Этап 52 (test_bench.py --models: qwen2.5-coder:7b → **1/6** (48.6s, отвечает инструкциями; прошёл только sql-schema), deepseek-coder-v2:16b → **0/6** (105.6s, тулы не выполняет); сводка — bench_reports/SUMMARY.md; вывод: qwen3:8b — единственная рабочая модель для полного цикла)
+- [x] Live-проверка fixer-сабагента — Этап 53 (FIXER_PROMPT через run_agent_loop на qwen3:8b: баг division by zero в calc.py исправлен — добавлена проверка b==0 → return None, файл валиден; 60.4s)
 
 ## Собственные идеи (низкий приоритет)
 - [x] Native tool calling — СДЕЛАНО (Этап 10)

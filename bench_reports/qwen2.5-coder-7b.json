@@ -1,0 +1,38 @@
+{
+  "model": "qwen2.5-coder:7b",
+  "date": "2026-08-09 11:29",
+  "scenarios": [
+    {
+      "scenario": "create-file",
+      "pass": false,
+      "seconds": 6.2
+    },
+    {
+      "scenario": "edit-rename",
+      "pass": false,
+      "seconds": 8.1
+    },
+    {
+      "scenario": "find-and-fix",
+      "pass": false,
+      "seconds": 10.4
+    },
+    {
+      "scenario": "js-create",
+      "pass": false,
+      "seconds": 3.1
+    },
+    {
+      "scenario": "sql-schema",
+      "pass": true,
+      "seconds": 11.4
+    },
+    {
+      "scenario": "refactor-extract",
+      "pass": false,
+      "seconds": 9.4
+    }
+  ],
+  "pass": "1/6",
+  "total_seconds": 48.6
+}

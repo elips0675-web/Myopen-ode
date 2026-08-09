@@ -1,0 +1,38 @@
+{
+  "model": "deepseek-coder-v2:16b",
+  "date": "2026-08-09 11:31",
+  "scenarios": [
+    {
+      "scenario": "create-file",
+      "pass": false,
+      "seconds": 12.0
+    },
+    {
+      "scenario": "edit-rename",
+      "pass": false,
+      "seconds": 11.8
+    },
+    {
+      "scenario": "find-and-fix",
+      "pass": false,
+      "seconds": 18.2
+    },
+    {
+      "scenario": "js-create",
+      "pass": false,
+      "seconds": 13.6
+    },
+    {
+      "scenario": "sql-schema",
+      "pass": false,
+      "seconds": 25.1
+    },
+    {
+      "scenario": "refactor-extract",
+      "pass": false,
+      "seconds": 24.9
+    }
+  ],
+  "pass": "0/6",
+  "total_seconds": 105.6
+}

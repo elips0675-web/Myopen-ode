@@ -7,9 +7,11 @@
 ## Текущий статус
 - Тесты: **111/111 ×2** (`python -X utf8 test_agent.py`) + **live 3/3** на
   qwen3:8b (`python -X utf8 test_live.py --models qwen3:8b`: create file 18.3s,
-  simple question, edit rename) + **бенчмарк 6/6** (`python -X utf8
-  test_bench.py --models qwen3:8b`: create-file, edit-rename, find-and-fix,
-  js-create, sql-schema, refactor-extract; отчёт bench_reports/qwen3-8b.json).
+  simple question, edit rename) + **бенчмарк по 3 моделям** (`python -X utf8
+  test_bench.py --models qwen3:8b`): qwen3:8b 6/6 (468s), qwen2.5-coder:7b 1/6,
+  deepseek-coder-v2:16b 0/6; отчёты bench_reports/*.json + SUMMARY.md. Live
+  @reviewer/@fixer подтверждены: обзор → «CRITICAL: calc.py:2 (division by
+  zero)» и реальное исправление файла (guard b==0 → None, 60.4s).
 - Оценки истории: Kimi 8.7 → внешний 8.8 → DeepSeek 8.9 (+переоценка 8.9) →
   внешний 8.9 (Оценка 5). ВЕСЬ план оценок P1–P3 закрыт.
 - Модель: qwen3:8b (native tool calling), RTX 3060 12GB, deepseek-r1:1.5b
