@@ -27,7 +27,7 @@ sys.path.insert(0, r"E:\My OpenCode1")
 os.environ.setdefault("PYTHONUTF8", "1")
 
 import requests
-from tools import init_config, init_backup
+from tools import init_config, init_backup, SYSTEM_PROMPT
 import agent as agent_mod
 from agent import run_agent_loop, _pending_clear
 
@@ -74,7 +74,8 @@ def _register(name):
 def sc_create(model, sid):
     p = BENCH_DIR / "app.py"
     p.unlink(missing_ok=True)
-    msgs = [{"role": "user", "content":
+    msgs = [{"role": "system", "content": SYSTEM_PROMPT},
+             {"role": "user", "content":
              f"Create the file {p.relative_to(agent_mod.WORK_DIR).as_posix()} with "
              "def sum(a, b): return a + b. Do not ask, just do it."}]
     t0 = time.time()
@@ -87,7 +88,8 @@ def sc_create(model, sid):
 def sc_edit(model, sid):
     p = BENCH_DIR / "fixme.py"
     p.write_text("def old_fn():\n    return 1\nprint(old_fn())\n", "utf-8")
-    msgs = [{"role": "user", "content":
+    msgs = [{"role": "system", "content": SYSTEM_PROMPT},
+             {"role": "user", "content":
              f"Rename the function old_fn to new_fn in {p.relative_to(agent_mod.WORK_DIR).as_posix()}. "
              "Do not ask, just do it."}]
     t0 = time.time()
@@ -102,7 +104,8 @@ def sc_fix(model, sid):
     p = BENCH_DIR / "bug.py"
     p.write_text("def divide(a, b):\n    return a / b  # BUG: division by zero possible\n"
                  "print(divide(1, 0))\n", "utf-8")
-    msgs = [{"role": "user", "content":
+    msgs = [{"role": "system", "content": SYSTEM_PROMPT},
+             {"role": "user", "content":
              f"Fix the bug in {p.relative_to(agent_mod.WORK_DIR).as_posix()}: division by zero "
              "must not crash (return None instead). Do not ask, just do it."}]
     t0 = time.time()
@@ -116,7 +119,8 @@ def sc_fix(model, sid):
 def sc_js(model, sid):
     p = BENCH_DIR / "utils.js"
     p.unlink(missing_ok=True)
-    msgs = [{"role": "user", "content":
+    msgs = [{"role": "system", "content": SYSTEM_PROMPT},
+             {"role": "user", "content":
              f"Create the file {p.relative_to(agent_mod.WORK_DIR).as_posix()} with "
              "'export function add(a, b) { return a + b; }'. Do not ask, just do it."}]
     t0 = time.time()
@@ -129,7 +133,8 @@ def sc_js(model, sid):
 def sc_sql(model, sid):
     p = BENCH_DIR / "schema.sql"
     p.unlink(missing_ok=True)
-    msgs = [{"role": "user", "content":
+    msgs = [{"role": "system", "content": SYSTEM_PROMPT},
+             {"role": "user", "content":
              f"Create the file {p.relative_to(agent_mod.WORK_DIR).as_posix()} with SQL schema: "
              "tables users(id, email, password_hash) and messages(id, user_id FOREIGN KEY, text). "
              "Do not ask, just do it."}]
@@ -145,7 +150,8 @@ def sc_sql(model, sid):
 def sc_extract(model, sid):
     p = BENCH_DIR / "main.py"
     p.write_text("x = 1\nprint(x + 2)\nprint(x * 3)\n", "utf-8")
-    msgs = [{"role": "user", "content":
+    msgs = [{"role": "system", "content": SYSTEM_PROMPT},
+             {"role": "user", "content":
              f"In {p.relative_to(agent_mod.WORK_DIR).as_posix()} extract the print lines "
              "into a function show(x) and call it. Do not ask, just do it."}]
     t0 = time.time()
@@ -161,7 +167,8 @@ def sc_subagent_review(model, sid):
     surface its VERDICT report."""
     p = BENCH_DIR / "bug2.py"
     p.write_text("def div(a, b):\n    return a / b\nprint(div(2, 0))\n", "utf-8")
-    msgs = [{"role": "user", "content":
+    msgs = [{"role": "system", "content": SYSTEM_PROMPT},
+             {"role": "user", "content":
              f"Review {p.relative_to(agent_mod.WORK_DIR).as_posix()} with the reviewer subagent "
              "(call the task tool with agent='reviewer'), do not edit anything, "
              "and report its verdict."}]
@@ -183,7 +190,8 @@ def main():
           f"(dir={BENCH_DIR})")
     table = []
     for model in models:
-        run_agent_loop([{"role": "user", "content": "Warm up: reply with the word ready."}],
+        run_agent_loop([{"role": "system", "content": SYSTEM_PROMPT},
+                       {"role": "user", "content": "Warm up: reply with the word ready."}],
                        f"bench-warm-{model.split(':')[0]}", None, model)
         rows, ok_n, t_sum = [], 0, 0.0
         for i, name in enumerate(names):

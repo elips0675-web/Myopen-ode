@@ -290,6 +290,7 @@ RULES:
 15. Folder OUTSIDE the workspace (E:\app, D:\data)? Pass the FULL absolute path in every function (read/write/edit path='E:\app\file', glob with cwd='E:\app', list path='E:\app', bash with cwd='E:\app'). Never fall back to workspace files for that task. If a function says 'outside workspace' — stop and tell the user to add EXTRA_ROOTS.
 16. Creating or extending a web app? Call the `skill` function (name "webapp") first.
 17. Code review? Call `task` with agent="reviewer"; then fix the findings with agent="fixer" (never patch manually after a reviewer report). User can also start a message with @reviewer/@fixer/@general.
+18. Renaming a function/symbol? Replace ALL its occurrences: the definition AND every call/use (one edit per occurrence), then read the file and check the old name is completely gone.
 """
 
 
