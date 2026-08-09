@@ -169,11 +169,19 @@ Kimi 2: 8.3/10 → DeepSeek 2: 8.5/10 → DeepSeek 3: 8.6/10 → Kimi 3: 8.7/10 
 - [x] Семантическая валидация путей (read «looks like a directory» до выполнения) — Этап 36 (_path_dir_hint в read/write/edit/patch: существующая директория → Error с подсказкой list/glob, до мутаций)
 - [x] Unquoted string values в lenient JSON — Этап 37 (_parse_tool_json: значения без кавычек, включая пути с точкой/слэшем; {"tool": write, "path": test.py})
 - [x] Работа вне workspace (создание приложений в произвольной папке) — Этап 38 (EXTRA_ROOTS='E:\test mycode' — доп. разрешённые корни; ALLOW_OUTSIDE=1 — полное снятие jail; блок изобретённых путей сохранён; live: агент :8765 создал файл в E:\test mycode)
+
+## Вне оценок (этапы 39–40, 2026-08-09) — обучение созданию SwiftMatch-класс приложений полностью оффлайн
+- [x] glob по абсолютным путям и cwd вне workspace — Этап 39 (модель не могла изучить E:\swiftmatch1bdnoutprod: glob игнорировал absolute pattern; теперь pattern 'E:\proj\README.md' и cwd='E:\proj' работают, jail сохранён; тест test_glob_outside_workspace)
+- [x] Правило 22 в системных промптах (SYSTEM_PROMPT/COMPACT/NATIVE): внешние папки → полные абсолютные пути в каждом туле; ошибка 'outside workspace' → просить EXTRA_ROOTS; перед web-приложением — вызывать skill webapp
+- [x] Обучающие скиллы .agent_skills/ по методологии «Обучения программиста.txt»: webapp (маршрутизатор), swiftmatch_arch (полная сводка образца: стек из package.json, 22 роутера, WS-эвенты, 53 таблицы, security, оффлайн-замены), dating-app-auth/-websocket/-payments/-geo/-admin/-architecture, react-patterns, generate-api (few-shot), offline-ollama (Redis→Map, Bull→setInterval, Stripe→mock, OpenAI→banned-words, S3→uploads/, Sentry→winston, Twilio→console; Laragon/MySQL; домен-за-доменом)
+- [x] Live-проверка обучения: агент :8765 на вопрос «какими скиллами создашь dating-приложение оффлайн?» сам вызвал skill webapp + skill offline-ollama
+- Тесты 104/104; сервер запущен с EXTRA_ROOTS='E:\swiftmatch1bdnoutprod;E:\test mycode' (перезапуск после ребута)
+
 ## Осталось (низкий приоритет, 10/10)
 - [ ] DI-контейнер вместо import agent as _agent (частично: этапы 7/16)
 - [ ] Абстракции RAG/DB (замена FAISS/SQLite по дереву)
 - [ ] Whisper-сервер STT (сейчас браузерный Web Speech API)
-- [ ] Внешняя переоценка 9.5/10 (весь план 8.3–8.9 закрыт, тесты 102/102)
+- [ ] Внешняя переоценка 9.5/10 (весь план 8.3–8.9 закрыт, тесты 104/104)
 
 ## Собственные идеи (низкий приоритет)
 - [x] Native tool calling — СДЕЛАНО (Этап 10)

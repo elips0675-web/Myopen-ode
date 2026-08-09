@@ -1,0 +1,377 @@
+Вот пошаговая методология, как заставить My OpenCode v2 клонировать/повторять архитектуру SwiftMatch1BD (или любого другого production-приложения) — от анализа до генерации кода.
+1. Подготовка: индексация репозитория-образца через RAG
+Сначала агент должен понять проект. SwiftMatch — ~200+ файлов, 10 миграций, 3 очереди, 30 WS-эвентов. Читать всё руками — смерть.
+Промпт для агента:
+plain
+@skill architect
+
+Проанализируй репозиторий-образец по пути E:\swiftmatch1bdnoutprod и создай архитектурную сводку:
+1. Стек технологий (фронтенд, бэкенд, БД, инфраструктура)
+2. Ключевые модули и их связи (нарисуй текстовую диаграмму)
+3. Схема БД — все таблицы и связи
+4. API endpoints (группировка по доменам: auth, profile, social, premium...)
+5. WebSocket события и их payload
+6. Фича-флаги и точки монетизации
+7. Security patterns (JWT flow, rate limiting, CORS, upload validation)
+
+Используй: glob, grep, read, list. Не пиши код — только анализ.
+Сохрани результат в .agent_skills/swiftmatch_arch.md
+Какие тулы агент будет использовать:
+glob → найти все .ts, .tsx, .js, .sql, .json
+grep → найти router., socket.on(, CREATE TABLE, export default
+read → ключевые файлы: server/src/index.js, server/src/routes/, src/App.tsx, database/mysql_schema.sql
+search (RAG) → если репозиторий уже проиндексирован, задавать вопросы по архитектуре
+Важно: перед анализом убедитесь, что WORK_DIR указывает на папку с SwiftMatch, и запустите RAG-индексацию:
+bash
+# В UI агента или через API
+{"tool":"search","query":"index all files in the repository"}
+2. Создание Skill-файлов (переиспользуемые инструкции)
+После анализа агент должен создать .agent_skills/ — это шаблоны для генерации похожих приложений.
+Промпт:
+plain
+На основе анализа SwiftMatch создай 5 skill-файлов:
+
+1. .agent_skills/dating-app-auth.md — JWT auth flow: регистрация, login, refresh tokens, logout, middleware защиты роутов, dev-login для админки
+2. .agent_skills/dating-app-websocket.md — Socket.IO архитектура: namespaces, rooms, typing indicator, read receipts, онлайн-статус, WebRTC сигналинг
+3. .agent_skills/dating-app-payments.md — Stripe integration: Checkout Session, idempotency-key middleware, webhook handler, subscription tiers (Plus/Gold/Platinum), premium gating
+4. .agent_skills/dating-app-geo.md — MySQL Spatial: POINT SRID 4326, ST_Distance_Sphere, геопоиск по радиусу, background GPS обновление
+5. .agent_skills/dating-app-admin.md — Admin panel: dashboard, analytics (retention, revenue-mix), user management, feature flags, moderation queue
+
+Каждый skill: паттерн кода (как в SwiftMatch) + адаптация под generic naming (не хардкодить "swiftmatch").
+Зачем: в следующий раз, когда вы скажете «сделай приложение знакомств», агент подтянет эти скиллы через @skill dating-app-auth и сгенерирует код по проверенному паттерну, а не с нуля.
+3. Декомпозиция через Plan Tool
+SwiftMatch — это не «один файл». Это 15+ доменов. Агент должен разбить на этапы.
+Промпт:
+plain
+@skill architect
+@skill dating-app-auth
+@skill dating-app-websocket
+
+Создай пошаговый план для создания клона SwiftMatch под названием "LoveLocal".
+Стек: React + Vite + Tailwind (фронт), Node.js + Express + MySQL (бэк), Redis, Socket.IO.
+
+План должен включать:
+- Этап 0: Базовая инфраструктура (Vite-проект, Express сервер, Docker Compose с MySQL+Redis)
+- Этап 1: Auth (регистрация, JWT, refresh tokens, middleware)
+- Этап 2: Профиль (анкета, фото, интересы, геолокация)
+- Этап 3: Matching (лайки, мэтчи, smart matching алгоритм)
+- Этап 4: Чаты (Socket.IO, typing, read receipts, emoji-реакции)
+- Этап 5: Премиум (Stripe, подписки, лимиты для free)
+- Этап 6: Админка (dashboard, модерация, аналитика)
+- Этап 7: DevOps (Docker, nginx, CI/CD, monitoring)
+
+Каждый этап: что создавать, какие файлы, зависимости от предыдущих.
+Агент вызовет plan tool — вы увидите дерево шагов, подтвердите или отредактируете.
+4. Генерация кода: стратегия Multi-File Patch
+Главная ошибка — просить агент «сделай всё сразу». 7B-модель потеряется в 50 файлах.
+Правильная стратегия:
+Этап A: Скелет проекта (один вызов)
+plain
+Этап 0. Создай скелет проекта LoveLocal:
+
+Файлы:
+- docker-compose.yml (MySQL 8, Redis 7, app)
+- server/package.json (express, mysql2, socket.io, bull, ioredis, bcryptjs, jsonwebtoken, stripe, winston, helmet, cors, express-rate-limit)
+- client/package.json (react, react-router-dom, socket.io-client, tailwindcss, vite)
+- server/src/index.js (Express app, базовый middleware, health checks)
+- client/src/main.tsx (точка входа)
+- database/schema.sql (базовые таблицы: users, profiles, photos, interests, matches, chats, messages, subscriptions, feature_flags, audit_log)
+
+Используй patch с files=[...] для создания всех файлов одним вызовом.
+Агент использует patch tool в режиме files=[{path, diff}] — создаёт 10+ файлов за один turn.
+Этап B: Домен за доменом (итеративно)
+plain
+Этап 1. Auth модуль:
+
+Используй @skill dating-app-auth
+
+Создай:
+- server/src/routes/auth.js (register, login, refresh, logout, dev-login)
+- server/src/middleware/auth.js (verifyToken, requireAuth, requireAdmin)
+- server/src/utils/jwt.js (generateTokens, verifyRefreshToken)
+- client/src/hooks/useAuth.ts (context, login/logout/refresh)
+- client/src/pages/Login.tsx, Register.tsx
+
+После создания — verify (syntax check) и commit.
+Этап C: Миграции и БД (параллельно с кодом)
+plain
+Добавь миграции:
+- database/migrations/001_create_users.sql
+- database/migrations/002_create_profiles.sql
+...
+- database/migrate.js (runner с таблицей _migrations)
+
+И seed-данные: 10 demo-пользователей.
+5. Специфические паттерны SwiftMatch — что копировать
+Таблица
+Паттерн SwiftMatch	Как агенту это сделать
+MySQL Spatial (POINT, ST_Distance_Sphere)	Скилл dating-app-geo + read оригинала database/migrations/005_add_spatial_location.sql
+Bull Queue (email/push/image)	Скилл + read server/src/queue.js, server/src/jobs/*.js
+Idempotency-Key (Stripe)	read server/src/routes/premium.js, извлечь middleware, адаптировать
+Socket.IO Redis Adapter	read server/src/ws.js, скопировать логику подключения ioredis
+Feature Flags (7 toggle'ов в БД)	read server/src/routes/admin/features.js + grep "feature_flags"
+Audit Log + Soft Delete	read server/src/audit.js, адаптировать хелперы
+Sentry beforeSend (PII filter)	read server/src/index.js (Sentry init), скопировать beforeSend
+Промпт для копирования конкретного паттерна:
+plain
+Скопируй паттерн "Soft Delete + Audit Log" из SwiftMatch в LoveLocal:
+1. Прочитай server/src/audit.js из WORK_DIR/swiftmatch1bdnoutprod
+2. Создай аналогичный модуль в LoveLocal/server/src/audit.js
+3. Адаптируй под таблицы LoveLocal (users, profiles, matches, messages)
+4. Добавь миграцию для audit_log таблицы
+6. Тестирование через агента
+SwiftMatch имеет 124 серверных теста (Vitest) + 55 фронтенд + 30 E2E (Playwright). Агент может генерировать тесты параллельно с кодом.
+Промпт:
+plain
+Для каждого созданного роута сгенерируй тесты Vitest:
+- server/src/routes/__tests__/auth.test.js (register: 200, 400 duplicate, 401 wrong password)
+- server/src/routes/__tests__/profile.test.js (CRUD, upload validation)
+- server/src/routes/__tests__/matches.test.js (like, mutual match, limit for free users)
+
+Используй @skill testgen или тул testgen.
+Моки: MySQL (mysql2/promise mock), Redis (ioredis mock), JWT (фиксированный secret).
+7. Практический пример: полный цикл
+Вот как выглядит реальный диалог с агентом:
+Вы:
+plain
+Создай приложение знакомств "LoveLocal" по образцу SwiftMatch.
+@skill dating-app-auth
+@skill dating-app-geo
+
+Этап 0: скелет проекта (Docker, package.json, базовый сервер, Vite клиент).
+Рабочая папка: E:\projects\lovelocal
+Агент (примерный ход):
+plan → показывает дерево этапов
+write → docker-compose.yml, server/package.json, client/package.json
+write → server/src/index.js (Express + middleware)
+write → client/src/main.tsx
+verify → Syntax: OK
+[CONFIRM] → вы жмёте yes
+commit → git add -A && git commit -m "stage 0: skeleton"
+Вы:
+plain
+Этап 1: Auth. Используй паттерн из SwiftMatch (JWT + refresh + dev-login).
+Агент:
+read → swiftmatch1bdnoutprod/server/src/routes/auth.js (читает образец)
+patch → files=[{path:"server/src/routes/auth.js", diff:"..."}, {path:"server/src/middleware/auth.js", diff:"..."}]
+verify → Syntax: OK
+bash → npm test -- auth.test.js (если тесты уже есть)
+8. Что делать с огромными файлами (лимит контекста 7B)
+SwiftMatch server/src/index.js может быть 300+ строк. 7B-модель не переварит целиком.
+Техника: Chunked Read через агента
+plain
+Прочитай server/src/index.js из SwiftMatch по частям:
+1. Сначала строки 1-50 (imports + setup)
+2. Потом 51-120 (middleware)
+3. Потом 121-200 (routes)
+4. Потом 201-300 (WS + graceful shutdown)
+
+После каждого read — кратко summarizируй что увидел.
+Агент сам вызовет read 4 раза, а потом write адаптированную версию.
+9. Capacitor / Мобильная сборка
+SwiftMatch поддерживает Android через Capacitor. Агент может добавить это:
+Промпт:
+plain
+Добавь Capacitor в LoveLocal:
+1. npm install @capacitor/core @capacitor/cli @capacitor/camera @capacitor/filesystem @capacitor/preferences
+2. Создай capacitor.config.ts (appId: com.lovelocal.app, webDir: dist)
+3. Скопируй паттерн native-адаптера из SwiftMatch: src/lib/native.ts
+4. Добавь скрипты в package.json: build:native, sync:android, run:android
+10. Чек-лист для каждого этапа
+После каждого этапа заставляйте агента проверять:
+Таблица
+Проверка	Тул
+Синтаксис JS/TS	verify (или node --check)
+SQL миграции валидны	bash → mysql -u root < migration.sql
+Тесты проходят	bash → npm test
+Docker собирается	bash → docker-compose build
+Нет утечек секретов	grep → JWT_SECRET|API_KEY|password в коммите
+Итоговая методология
+plain
+1. RAG-индексация образца → агент "знает" SwiftMatch
+2. Skill-файлы → переиспользуемые паттерны (.agent_skills/*.md)
+3. Plan tool → декомпозиция на 7 этапов
+4. Multi-file patch → создание 5-10 файлов за раз
+5. Read-by-chunks → анализ больших файлов образца
+6. Verify + commit → каждый этап проверен и закоммичен
+7. testgen / bash test → тесты параллельно с кодом
+Ключевое преимущество My OpenCode v2: благодаря patch (multi-file), task (subagent), search (RAG по образцу) и skill (переиспользуемые инструкции) — агент способен клонировать сложные архитектуры поэтапно, не теряя контекст, с промежуточными verify и git-коммитами. На чистом ChatGPT/Claude такое невозможно из-за отсутствия tool calling и файловой системы.
+
+
+Анализ приложения swiftmatch1bdnoutprod
+Это полноценный production-готовый dating-сервис с гибридной архитектурой:
+
+Компонент	Технологии
+Фронтенд	React + Vite (порт 8081)
+Бэкенд	Node.js + Express (порт 3002)
+База данных	MySQL (Laragon) с Spatial-поиском (ST_Distance_Sphere)
+Реальное время	Socket.IO (чаты, онлайн-статус, печатание, реакции)
+Кеш/очереди	Redis (кеш профилей, Bull Queue для email/push/image)
+Платежи	Stripe Checkout (3 тарифа, idempotency-защита)
+Модерация	OpenAI Moderation + AWS Rekognition + эвристика
+Мобильное	Capacitor (камера, геолокация, нативные адаптеры)
+DevOps	Docker Compose + Nginx + Prometheus + Grafana + GitHub Actions
+Тесты	Vitest (179 тестов) + Playwright (30 E2E) — 0 failures
+Объём кода: ~50+ файлов бэкенда, ~30+ компонентов фронтенда, 11 таблиц MySQL, миграции, Redis-очереди, WebSocket-события, Docker-сборка.
+
+Как обучить ИИ-агента создавать такие приложения
+У вас уже есть My OpenCode v2 — идеальный инструмент для этой задачи. Вот пошаговый план:
+
+1. Индексация кодовой базы через RAG
+My OpenCode v2 поддерживает гибридный RAG (BM25 + FAISS-эмбеддинги) с инкрементальным кешем. Чтобы модель понимала архитектуру приложения:
+
+bash
+# Убедитесь, что WORK_DIR указывает на репозиторий
+export WORK_DIR=/path/to/swiftmatch1bdnoutprod
+python agent.py
+Затем в чате:
+
+text
+Проиндексируй весь код проекта для RAG-поиска
+Агент вызовет search (RAG-тул) и проиндексирует все файлы. После этого модель сможет находить релевантные фрагменты кода по запросам вроде «как устроена авторизация» или «где логика мэтчинга».
+
+2. Создание skills-файлов для архитектурных паттернов
+Создайте .agent_skills/ с инструкциями, которые агент будет загружать через @skill:
+
+.agent_skills/dating-app-architecture.md:
+
+markdown
+# Архитектура dating-приложения
+
+## Бэкенд-слои
+1. **Роуты** (`server/src/routes/`) — Express-роутеры (auth, users, matches, chats, payments)
+2. **Контроллеры** (`server/src/controllers/`) — бизнес-логика
+3. **Сервисы** (`server/src/services/`) — внешние интеграции (Stripe, AWS, SMTP)
+4. **Модели** (`server/src/models/`) — SQL-запросы к MySQL
+5. **Миграции** (`database/migrations/`) — нумерованные .sql с `migrate.js`
+
+## Ключевые паттерны
+- **JWT + Refresh Tokens** — в `server/src/middleware/auth.js`
+- **Socket.IO** — в `server/src/socket/` с Redis adapter
+- **Bull Queue** — в `server/src/queues/` (email, push, image)
+- **Геопоиск** — `ST_Distance_Sphere` с SPATIAL INDEX
+- **Soft Delete** — `deleted_at` на всех таблицах
+- **Audit Log** — таблица `audit_log` со всеми мутациями
+.agent_skills/react-patterns.md:
+
+markdown
+# React-паттерны в проекте
+
+- **Роутинг**: React Router v6
+- **Стейт-менеджмент**: Context API + хуки (Zustand не используется)
+- **API-клиент**: axios с интерцепторами для JWT
+- **WebSocket**: Socket.IO-client с хуком `useSocket`
+- **Формы**: react-hook-form + zod-валидация
+- **i18n**: translation keys (ru/en)
+- **Тесты**: Vitest + React Testing Library
+3. Few-shot промпты для генерации кода
+My OpenCode v2 поддерживает few-shot обучение через системный промпт. Создайте файл .agent_skills/prompts/generate-api.md:
+
+markdown
+# Как генерировать API-эндпоинты
+
+## Пример: эндпоинт для реферальной системы
+
+**Запрос:** "Создай API для реферальной системы"
+
+**Шаги:**
+1. Изучи существующие роуты в `server/src/routes/` через `list` и `read`
+2. Найди паттерн: `router.get('/...', auth, ...)`
+3. Создай новый файл `referral.js` с роутами:
+   - `GET /api/referral/code` — получить код
+   - `POST /api/referral/apply` — применить код
+   - `GET /api/referral/stats` — статистика
+4. Добавь контроллеры в `server/src/controllers/referral.js`
+5. Добавь модель в `server/src/models/referral.js`
+6. Зарегистрируй роутер в `server/src/index.js`
+7. Напиши миграцию `database/migrations/012_add_referral_tables.sql`
+8. Напиши тесты (Vitest)
+
+**Код модели (пример):**
+```sql
+CREATE TABLE referrals (
+  id INT PRIMARY KEY AUTO_INCREMENT,
+  referrer_id INT NOT NULL,
+  referee_id INT NOT NULL,
+  status ENUM('pending','completed') DEFAULT 'pending',
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (referrer_id) REFERENCES users(id),
+  FOREIGN KEY (referee_id) REFERENCES users(id)
+);
+text
+
+### 4. Использование тулов для автоматической генерации
+
+| Задача | Тул в My OpenCode v2 |
+|--------|---------------------|
+| Изучить структуру проекта | `list`, `glob`, `grep` |
+| Прочитать существующий код | `read` |
+| Написать новый код | `write` (с verify + syntax check) |
+| Изменить существующий | `edit` или `patch` (multi-file) |
+| Сгенерировать тесты | `testgen` |
+| Проанализировать зависимости | `deps` |
+| Найти похожие паттерны | `search` (RAG) |
+
+### 5. Пошаговый сценарий для агента
+
+Запустите агента с задачей:
+Создай новый модуль "видео-чаты" по аналогии с существующими чатами в swiftmatch1bdnoutprod.
+
+Изучи структуру чатов через list/grep
+
+Прочитай server/src/socket/chat.js и server/src/routes/chats.js
+
+Создай WebRTC-сигналинг поверх Socket.IO:
+
+События: call-user, ice-candidate, end-call
+
+Храни active_calls в Redis
+
+Добавь таблицу video_calls в MySQL
+
+Создай API-эндпоинты: /api/video/start, /api/video/end
+
+Напиши React-компонент VideoCall с использованием @capacitor/camera
+
+Напиши тесты (Vitest + Playwright)
+
+Обнови Swagger-документацию
+
+text
+
+Агент выполнит цикл: **план → чтение кода → написание → проверка → тесты**.
+
+---
+
+## Ключевые возможности My OpenCode v2 для этой задачи
+
+| Возможность | Как помогает |
+|-------------|--------------|
+| **RAG с FAISS** | Мгновенный поиск по всей кодовой базе — модель находит аналоги【context†L42-L44】 |
+| **Patch с multi-file** | Одним вызовом правит несколько файлов (миграции + роуты + модели)【context†L56-L57】 |
+| **AST syntax guard** | Автопроверка синтаксиса после записи — модель видит ошибки сразу【context†L59-L60】 |
+| **testgen** | Генерирует unit-тесты для нового кода【context†L61】 |
+| **Native tool calling** | Для qwen3/llama3.1 — модель вызывает тулы нативно, без ````tool`-блоков【context†L62-L63】 |
+| **Tauri desktop** | Нативное окно ~50MB RAM для работы с проектом【context†L64-L65】 |
+| **CLI mode** | `python -m myopencode "задача"` — без UI, для batch-генерации【context†L66】 |
+
+---
+
+## Рекомендуемая модель
+
+| Модель | VRAM | Почему |
+|--------|------|--------|
+| **qwen3:8b** | ~7.5GB | Лучшая для сложных multi-file задач, native tool calling【context†L67-L68】 |
+| **qwen2.5-coder:7b** | ~5.5GB | Запасной вариант, стабильный legacy-путь |
+| **deepseek-coder-v2:16b** | ~8.9GB | Для очень сложного кода, но legacy-only (без native)【context†L69-L70】 |
+
+---
+
+## Итог: 4 шага к обучению
+
+1. **Индексация** — `search` по всему репозиторию → RAG-индекс
+2. **Skills** — создайте `.agent_skills/` с архитектурными паттернами
+3. **Few-shot** — добавьте примеры генерации API/компонентов в промпт
+4. **Итерация** — давайте агенту задачи по частям: сначала модели, потом роуты, потом фронтенд
+
+My OpenCode v2 **уже умеет** всё необходимое для этого — вам остаётся только дать правильные инструкции и использовать RAG для доступа к кодовой базе.

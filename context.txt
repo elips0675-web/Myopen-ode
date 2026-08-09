@@ -887,3 +887,39 @@ UPDATE (2026-08-08) - Stage 38: EXTRA_ROOTS / ALLOW_OUTSIDE (outside-workspace s
   EXTRA_ROOTS='E:\test mycode'; via /api/chat the agent created
   E:\test mycode\probe_live.txt (write confirmed 'yes') - works.
 - Server currently running with EXTRA_ROOTS set (restart needed after reboot).
+
+UPDATE (2026-08-09) - Stages 39-40: agent can now work OUTSIDE workspace on
+request + trained to build SwiftMatch-class apps fully offline on Ollama:
+- Stage 39 (glob outside workspace): _tool_glob accepts absolute patterns
+  ('E:\proj\README.md', 'E:\proj\**\*.json') and cwd=<absolute folder>;
+  jail still enforced (EXTRA_ROOTS/ALLOW_OUTSIDE). Reason: user asked the
+  :8765 agent to study E:\swiftmatch1bdnoutprod - old glob only matched
+  inside WORK_DIR ('No matches' on absolute patterns).
+- Stage 40 (training for offline app-building, per 'Обучения программиста.txt'):
+  - System prompts (tools/__init__.py SYSTEM_PROMPT + COMPACT_SYSTEM_PROMPT,
+    tools/llm.py NATIVE_SYSTEM_PROMPT): new Rule 22 — folders outside the
+    workspace => FULL absolute paths in every tool (read/write/edit/list,
+    glob cwd=, bash cwd=); never fall back to workspace files; if 'outside
+    workspace' -> ask user for EXTRA_ROOTS; call `skill` webapp before
+    creating/extending web apps.
+  - New skills in .agent_skills/ (methodology from 'Обучения программиста.txt'):
+    webapp (main, chains siblings), swiftmatch_arch (full reference summary:
+    stack/versions from package.json, 22 routers, WS events, 53 tables,
+    security patterns, offline replacements), dating-app-auth (JWT+refresh+
+    dev-login+rate-limit), dating-app-websocket (Socket.IO auth, user:{id}
+    rooms, WebRTC signalling, TTL cleanup, typing/read-receipts events),
+    dating-app-payments (Stripe+idempotency+webhook raw body+gating+mock
+    offline mode), dating-app-geo (POINT SRID 4326, ST_Distance_Sphere,
+    spatial index, offline fallback), dating-app-admin (adminAuth, ban/unban,
+    feature_flags, moderation escalation, audit), dating-app-architecture
+    (layers, soft delete, audit log, request-id, graceful shutdown),
+    react-patterns (api.ts JWT client, RHF+zod, swipe framer-motion, chat
+    socket hook, i18n), generate-api (few-shot module template + checklist),
+    offline-ollama (replacements table: Redis->Map, Bull->setInterval,
+    Stripe->mock, OpenAI mod->banned-words, S3->uploads/, Sentry->winston,
+    Twilio->console; run on Laragon/MySQL; stage-by-stage workflow).
+- Tests +1 (test_glob_outside_workspace) -> 104/104 x1; live: agent :8765
+  answered 'какими скиллами создашь dating-приложение' by calling skill
+  webapp + skill offline-ollama itself - training works.
+- Server running with EXTRA_ROOTS='E:\swiftmatch1bdnoutprod;E:\test mycode'
+  (restart needed after reboot).

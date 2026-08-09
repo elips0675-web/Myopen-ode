@@ -474,16 +474,23 @@ def _tool_bash(args):
     return ((r.stdout or "")[-3000:] + ("\nSTDERR:\n" + (r.stderr or "")[-1000:] if r.stderr else ""))
 
 def _tool_glob(args):
+    """Find files by pattern. Supports cwd= (absolute folder, even OUTSIDE
+    the workspace when EXTRA_ROOTS allows it) and absolute patterns like
+    'E:\\project\\README.md' or 'E:\\project\\**\\*.json'."""
     pattern = args["pattern"]
-    cwd_arg = args.get("cwd", ".")
-    err = ensure_safe_path(cwd_arg)
-    if err: return err
-    base = Path(cwd_arg) if args.get("cwd") else WORK_DIR
-    if not base.is_absolute():
-        if "\\" in pattern or pattern.startswith("/") or ":" in pattern:
-            p = Path(pattern)
-            if p.is_absolute():
-                base = p.root; pattern = str(p.relative_to(p.root))
+    cwd_arg = args.get("cwd")
+    base = WORK_DIR
+    if cwd_arg:
+        err = ensure_safe_path(cwd_arg)
+        if err: return err
+        base = resolve(cwd_arg)
+    else:
+        p = Path(pattern)
+        if p.is_absolute() or (len(pattern) >= 3 and pattern[1] == ":"):
+            err = ensure_safe_path(pattern)
+            if err: return err
+            base = p.parent
+            pattern = p.name
     fs = list(_glob.glob(str(base / pattern), recursive=True))[:60]
     return "\n".join(fs) if fs else "No matches"
 

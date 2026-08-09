@@ -2215,6 +2215,30 @@ def test_extra_roots():
         shutil.rmtree(out, ignore_errors=True)
     print("  [OK] EXTRA_ROOTS / ALLOW_OUTSIDE: outside-workspace writes")
 
+def test_glob_outside_workspace():
+    """Stage 39: glob accepts absolute patterns and cwd= OUTSIDE the
+    workspace (EXTRA_ROOTS) — 'study the app in E:\\swiftmatch1bdnoutprod'."""
+    import core.safety.path_guard as pg
+    out = tempfile.mkdtemp(prefix="mycode_glob_")
+    oe = os.environ.get("EXTRA_ROOTS")
+    try:
+        (Path(out) / "a.txt").write_text("x")
+        (Path(out) / "sub").mkdir()
+        (Path(out) / "sub" / "b.js").write_text("y")
+        os.environ["EXTRA_ROOTS"] = out
+        r = execute_tool("glob", {"pattern": os.path.join(out, "*.txt")})
+        assert "a.txt" in r, f"absolute pattern glob failed: {r}"
+        r2 = execute_tool("glob", {"pattern": "**/*.js", "cwd": out})
+        assert "b.js" in r2, f"cwd glob failed: {r2}"
+        os.environ.pop("EXTRA_ROOTS", None)
+        r3 = execute_tool("glob", {"pattern": os.path.join(out, "*.txt")})
+        assert "outside workspace" in r3 or r3 == "No matches", f"jail not enforced: {r3}"
+    finally:
+        if oe is None: os.environ.pop("EXTRA_ROOTS", None)
+        else: os.environ["EXTRA_ROOTS"] = oe
+        shutil.rmtree(out, ignore_errors=True)
+    print("  [OK] glob absolute pattern + cwd outside workspace")
+
 def test_cross_platform():
     """Cross-platform safety: no hard-coded Windows paths, CREATE_NO_WINDOW
     guarded, core modules importable on any OS (also runs in CI matrix)."""
@@ -2242,7 +2266,7 @@ if __name__ == "__main__":
     if _native_supported(_agent_main.MODEL):
         _agent_main.MODEL = "qwen2.5-coder:7b"
         print("  [test] default MODEL is native-capable -> forced to qwen2.5-coder:7b (legacy path)")
-    tests = [test_cross_platform, test_plan_tree_events, test_self_healing_advice, test_rag_over_plan, test_extra_roots, test_task_router, test_vram_indicator, test_ast_refactor_tools, test_auto_pick_model, test_docker_sandbox_flag, test_git_auto_commit, test_compact_prompt_after_iterations, test_rate_limit, test_path_dir_hint, test_unquoted_json_values,
+    tests = [test_cross_platform, test_plan_tree_events, test_self_healing_advice, test_rag_over_plan, test_extra_roots, test_glob_outside_workspace, test_task_router, test_vram_indicator, test_ast_refactor_tools, test_auto_pick_model, test_docker_sandbox_flag, test_git_auto_commit, test_compact_prompt_after_iterations, test_rate_limit, test_path_dir_hint, test_unquoted_json_values,
              test_auto_confirm_safe, test_read, test_read_absolute, test_read_url, test_list, test_glob,
              test_write_and_undo, test_edit, test_edit_guard_ambiguous, test_edit_guard_fuzzy_hint,
              test_syntax_guard_write, test_patch_multi_file, test_bash, test_verify_py, test_verify_json,

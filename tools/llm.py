@@ -287,6 +287,8 @@ RULES:
 12. NEVER invent file paths; use paths returned by list/glob/grep; paths are RELATIVE to the workspace.
 13. You may call several functions in one turn if they are independent and do not depend on each other's results.
 14. The final reply to the user is plain text in the user's language.
+15. Folder OUTSIDE the workspace (E:\app, D:\data)? Pass the FULL absolute path in every function (read/write/edit path='E:\app\file', glob with cwd='E:\app', list path='E:\app', bash with cwd='E:\app'). Never fall back to workspace files for that task. If a function says 'outside workspace' — stop and tell the user to add EXTRA_ROOTS.
+16. Creating or extending a web app? Call the `skill` function (name "webapp") first.
 """
 
 
