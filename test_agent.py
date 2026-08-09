@@ -671,6 +671,60 @@ def test_mcp_client():
         mcp_client._procs.clear()
     print("  [OK] MCP client (initialize/tools/call)")
 
+def test_mcp_integration():
+    """Stage 65 (DeepSeek P1): real stdio MCP server end-to-end — start ->
+    initialize handshake -> tools/list -> tools/call (direct + via mcp tool) ->
+    resources -> error handling -> stop."""
+    import mcp_client
+    import json as _json
+    repo = Path(__file__).resolve().parent
+    server_script = repo / "mcp_servers.py"
+    assert server_script.exists(), "built-in mcp_servers.py missing"
+    old_cfg = mcp_client.CONFIG_PATH
+    cfg = TMP / "mcp_integration.json"
+    cfg.write_text(_json.dumps({"servers": [
+        {"name": "local", "command": sys.executable,
+         "args": ["-X", "utf8", str(server_script)]}]}))
+    mcp_client.CONFIG_PATH = cfg
+    try:
+        clients = mcp_client.get_clients()
+        assert "local" in clients, clients
+        cl = clients["local"]
+        started = cl.start()
+        assert started and cl.ready, "real server failed to start"
+        assert cl.server_info.get("serverInfo", {}).get("name") == "my-opencode-local", cl.server_info
+
+        tools = mcp_client.mcp_tools_list()
+        names = [t for s, t in tools if s == "local"]
+        assert "echo" in names and "add" in names and "path_exists" in names, names
+
+        r = mcp_client.mcp_call("local", "echo", {"text": "hello mcp"})
+        assert "echo: hello mcp" in r, f"echo: {r}"
+        r = mcp_client.mcp_call("local", "add", {"a": 2, "b": 3})
+        assert "sum=5" in r, f"add: {r}"
+
+        r = execute_tool("mcp", {"server": "_list"})
+        assert "local" in r and "echo" in r, f"mcp _list via tool: {r}"
+        r = execute_tool("mcp", {"server": "local", "call": "echo", "args": {"text": "via tool"}})
+        assert "echo: via tool" in r, f"mcp call via tool: {r}"
+
+        r = mcp_client.mcp_call("local", "resources/list", {})
+        assert "local://readme" in r, f"resources/list: {r}"
+        r = mcp_client.mcp_call("local", "resources/read", {"uri": "local://readme"})
+        assert "Local MCP" in r, f"resources/read: {r}"
+
+        r = mcp_client.mcp_call("local", "no_such_tool", {})
+        assert "MCP error" in r, f"unknown tool must return error, got: {r}"
+
+        verr = validate_tool({"tool": "mcp", "server": "local"})
+        assert "call" in verr and "Missing required" in verr, f"validation error expected, got: {verr}"
+    finally:
+        mcp_client.CONFIG_PATH = old_cfg
+        for c in list(mcp_client._procs.values()):
+            c.stop()
+        mcp_client._procs.clear()
+    print("  [OK] MCP integration (real stdio server: start/list/call/resources/errors)")
+
 def test_task_subagent_loop():
     """task tool delegates to a subagent that runs its own tool loop."""
     import agent as agent_mod
@@ -2582,7 +2636,7 @@ if __name__ == "__main__":
              test_dynamic_context_error_status, test_dynamic_context_global_stats, test_tool_error_fewshot,
              test_bash_docker_flags, test_health_endpoint, test_subagents_api, test_vendor_static,
              test_json_schema_format, test_git_snapshot_restore, test_diff_preview,
-             test_update_check, test_rag_folder_scope, test_mcp_client,
+             test_update_check, test_rag_folder_scope, test_mcp_client, test_mcp_integration,
              test_task_subagent_loop, test_task_subagent_reviewer_fixer, test_native_tools_schema,
              test_native_tool_calling, test_desktop_helpers,
              test_sess_stats_advice, test_model_router,
