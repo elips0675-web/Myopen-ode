@@ -61,7 +61,13 @@ RULES:
 22. FOLDERS OUTSIDE the workspace: when the user references a folder OUTSIDE the workspace (e.g. 'E:\app', 'D:\data'), ALWAYS pass the FULL absolute path to every tool — read(path='E:\app\README.md'), list(path='E:\app'), glob(pattern='**\*.ts', cwd='E:\app'), write(path='E:\app\file'), edit(path='E:\app\file', ...), bash(cmd='...', cwd='E:\app'). NEVER read relative workspace files for that task. If a tool answers 'outside workspace' — the folder is not in EXTRA_ROOTS; tell the user to add it (or switch the project) and stop. Check with the `skill` tool (name "webapp") BEFORE creating or extending a web app.
 23. SUBAGENTS via the `task` tool: for code review use task(agent='reviewer', prompt=...); to FIX the findings afterwards use task(agent='fixer', prompt=...). After a reviewer report lists concrete issues (file:line), continue with a fixer pass instead of patching manually — the fixer verifies each change before finishing. Use @reviewer/@fixer/@general markers are handled automatically by the server.
 24. RENAME = replace ALL occurrences of the old name: the definition AND every call/use (one edit per occurrence). Tip: the `rename_symbol` tool (path, old_name, new_name) renames a Python symbol — definition AND all calls — in ONE call via AST; prefer it over several edits. After renaming, read the file and check that NOTHING with the old name remains; if it does — fix it.
+"""
 
+# few-shot tier (stage 70): EXAMPLES + tool templates + VALID/INVALID are NOT
+# part of SYSTEM_PROMPT — the agent loop injects them as a separate system
+# message on iterations 0-1 (legacy models) and drops them afterwards to save
+# tokens. Native (tool_calls) models never see them.
+SYSTEM_PROMPT_FEWSHOT = """
 EXAMPLES — study these, imitate the exact format:
 
 Example 1 (read, then answer):

@@ -28,6 +28,41 @@ def _publish_event(event, payload):
     except Exception:
         pass
 
+
+def _apply_fewshot_tier(msgs, it, fewshot_added, native_on=False):
+    """Stage 70 (Kimi): few-shot tier — EXAMPLES + tool templates + VALID/INVALID
+    are injected as a separate system message on iterations 0-1 of LEGACY
+    (non-native) sessions only, then dropped to save tokens. Returns the new
+    fewshot_added state."""
+    if native_on:
+        if fewshot_added:
+            try:
+                import tools as _t
+                fs = _t.SYSTEM_PROMPT_FEWSHOT
+                for i, m in enumerate(msgs):
+                    if m.get("content") == fs:
+                        msgs.pop(i)
+                        break
+            except Exception:
+                pass
+        return False
+    try:
+        import tools as _t
+        fs = _t.SYSTEM_PROMPT_FEWSHOT
+        if it < 2 and not fewshot_added:
+            pos = 0 if (not msgs or msgs[0].get("role") != "system") else 1
+            msgs.insert(pos, {"role": "system", "content": fs})
+            return True
+        if it >= 2 and fewshot_added:
+            for i, m in enumerate(msgs):
+                if m.get("content") == fs:
+                    msgs.pop(i)
+                    break
+            return False
+    except Exception:
+        pass
+    return fewshot_added
+
 VALID_TOOLS = ("read", "write", "edit", "bash", "glob", "grep", "list", "web",
                "diff", "commit", "undo", "verify", "plan", "search", "websearch",
                "question", "skill", "patch", "task", "todo", "lsp",
@@ -152,6 +187,7 @@ def run_agent_loop(msgs, session_id, events=None, model=None, deps=None):
     active_model = None
     user_model = model
     compacted = False
+    fewshot_added = False
     err_tool = None
     err_streak = 0
 
@@ -238,6 +274,10 @@ def run_agent_loop(msgs, session_id, events=None, model=None, deps=None):
                                            project, heal_tool=err_tool, heal_count=err_streak)}
         native_on = False
         native_calls = []
+        # Stage 70 (Kimi): few-shot tier — EXAMPLES/templates/VALID only on
+        # iterations 0-1 of LEGACY sessions (native models never see them);
+        # dropped afterwards to save ~1K tokens per call.
+        fewshot_added = _apply_fewshot_tier(msgs, it, fewshot_added, native_on)
         try:
             import tools as _tools_mod
             native_on = _tools_mod.native_supported(current_model)

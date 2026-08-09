@@ -171,11 +171,7 @@ def test_system_prompt_rules():
         ("rule17 one tool per reply", "ONE tool block per reply"),
         ("rule18 [DONE] finish", "[DONE]"),
         ("rule19 no code in text", "code goes INTO files via `write`/`edit`"),
-        ("EXAMPLES section", "EXAMPLES — study these"),
-        ("example 1 header", "Example 1 (read, then answer)"),
-        ("example 2 header", "Example 2 (edit workflow — replace ALL occurrences when renaming)"),
-        ("example 4 header", "Example 4 (create a new file"),
-        ("example 5 header", "Example 5 (one tool at a time"),
+        ("rule24 rename all occurrences", "replace ALL occurrences"),
         ("tool block fence", "```tool"),
         ("never invent tools", "NEVER invent tools"),
         ("read before edit", "ALWAYS read a file with the `read` tool BEFORE calling `edit`"),
@@ -183,12 +179,48 @@ def test_system_prompt_rules():
     ]
     for label, needle in checks:
         assert needle in SYSTEM_PROMPT, f"SYSTEM_PROMPT missing: {label} ({needle!r})"
-    from tools import COMPACT_SYSTEM_PROMPT
+    from tools import COMPACT_SYSTEM_PROMPT, SYSTEM_PROMPT_FEWSHOT
     from tools.llm import NATIVE_SYSTEM_PROMPT
     assert "task(agent='reviewer'" in SYSTEM_PROMPT, "rule 23 missing"
     assert "reviewer" in COMPACT_SYSTEM_PROMPT, "compact prompt missing subagent line"
     assert "reviewer" in NATIVE_SYSTEM_PROMPT, "native prompt missing subagent rule"
-    print("  [OK] system prompt: rules 16-19 + EXAMPLES present")
+    fewshot_checks = [
+        ("EXAMPLES section", "EXAMPLES — study these"),
+        ("example 1 header", "Example 1 (read, then answer)"),
+        ("example 2 header", "Example 2 (edit workflow — replace ALL occurrences when renaming)"),
+        ("example 4 header", "Example 4 (create a new file"),
+        ("example 5 header", "Example 5 (one tool at a time"),
+        ("VALID section", "VALID tool block"),
+        ("INVALID section", "INVALID (will be IGNORED"),
+    ]
+    for label, needle in fewshot_checks:
+        assert needle in SYSTEM_PROMPT_FEWSHOT, f"FEWSHOT missing: {label} ({needle!r})"
+    assert "EXAMPLES" not in SYSTEM_PROMPT, "EXAMPLES must live in the few-shot tier, not SYSTEM_PROMPT"
+    print("  [OK] system prompt: rules 16-24 in SYSTEM, EXAMPLES/VALID/INVALID in FEWSHOT tier")
+
+def test_prompt_fewshot_tier():
+    """Stage 70: few-shot tier is injected on iterations 0-1 (legacy) and
+    dropped afterwards; native models never see it."""
+    import agent as agent_mod
+    from core.agent_loop import _apply_fewshot_tier
+    msgs = [{"role": "system", "content": agent_mod.SYSTEM_PROMPT},
+            {"role": "user", "content": "create a file"}]
+    state = _apply_fewshot_tier(msgs, 0, False, native_on=False)
+    assert state is True
+    assert any("EXAMPLES — study these" in m.get("content", "") for m in msgs), \
+        "few-shot must be present on iteration 0"
+    state = _apply_fewshot_tier(msgs, 1, state, native_on=False)
+    assert state is True, "few-shot must stay on iteration 1"
+    state = _apply_fewshot_tier(msgs, 2, state, native_on=False)
+    assert state is False
+    assert not any("EXAMPLES — study these" in m.get("content", "") for m in msgs), \
+        "few-shot must be dropped by iteration 2"
+    msgs2 = [{"role": "system", "content": agent_mod.SYSTEM_PROMPT}]
+    state = _apply_fewshot_tier(msgs2, 0, False, native_on=True)
+    assert state is False
+    assert not any("EXAMPLES" in m.get("content", "") for m in msgs2), \
+        "native sessions must never get the few-shot tier"
+    print("  [OK] few-shot tier: legacy it0-1 yes, it2+ no, native never")
 
 def test_dynamic_context():
     """Each model call gets a dynamic orientation block (project + last action
@@ -2781,7 +2813,7 @@ if __name__ == "__main__":
              test_json_schema_format, test_git_snapshot_restore, test_diff_preview,
              test_update_check, test_rag_folder_scope, test_mcp_client, test_mcp_integration,
              test_event_bus, test_event_bus_tool_events, test_event_bus_subagent_audit,
-             test_subagent_audit_api, test_auto_pick_embed_model,
+             test_subagent_audit_api, test_auto_pick_embed_model, test_prompt_fewshot_tier,
              test_task_subagent_loop, test_task_subagent_reviewer_fixer, test_native_tools_schema,
              test_native_tool_calling, test_desktop_helpers,
              test_sess_stats_advice, test_model_router,
