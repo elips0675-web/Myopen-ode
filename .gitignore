@@ -17,3 +17,5 @@ projects.json
 .test_cp/
 add.py
 .bench_tmp/
+.bench_log.txt
+.bench_err.txt
