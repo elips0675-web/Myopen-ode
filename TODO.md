@@ -17,7 +17,7 @@ Kimi 2: 8.3/10 → DeepSeek 2: 8.5/10 → DeepSeek 3: 8.6/10 → Kimi 3: 8.7/10 
 ## ДОДЕЛАТЬ — сводка по всем оценкам (приоритет по консенсусу ревьюверов)
 
 ### Недавние предложения (этапы 45–53 сделаны; остаток к «Доделать»)
-- [ ] Внешняя переоценка 9.5/10 — единственный открытый пункт «Осталось (10/10)»; пакет для ревьювера — RE_EVAL.md (этап 44, обновлён данными 49–53: 111/111 ×2, live 3/3, bench 3 моделей)
+- [ ] Внешняя переоценка 9.5/10 — единственный открытый пункт «Осталось (10/10)»; пакет для ревьювера — RE_EVAL.md (этап 44, обновлён данными 49–56: 113/113, live 3/3 + @reviewer VERDICT PASS, bench 3 моделей)
 
 ### Этап 1. Динамический контекст в промпте (DS3 №1, Kimi3 P1) — СДЕЛАНО
 - [x] Перед каждым вызовом модели: «You are working in project: X (iteration N) / Last action: {tool} (result: ok|error)» (_dynamic_context, agent.py); тесты test_dynamic_context, test_dynamic_context_error_status
@@ -184,7 +184,7 @@ Kimi 2: 8.3/10 → DeepSeek 2: 8.5/10 → DeepSeek 3: 8.6/10 → Kimi 3: 8.7/10 
 - [x] DI-контейнер вместо import agent as _agent — Этап 41 (core/container.py: register/resolve/has/reset; провайдеры-коллбэки (work_dir/sessions_dir/memory_dir/logger/sessions_db), живые после switch_project; api_files/api_misc/api_sessions переведены на resolve, остались только прямые функции)
 - [x] Абстракции RAG/DB — Этап 42 (core/abstractions.py: RAGStore+RagAdapter (обёртка rag-модуля), KVStore+SqliteKVStore (thread-safe); init_defaults регистрирует 'rag' в контейнере, 'sessions_db' — в agent.py; точки замены FAISS→внешняя векторная БД / SQLite→Redis)
 - [x] Whisper-сервер STT — Этап 43 (stt.py: POST /api/stt multipart (wav/mp3/ogg/m4a/webm, ≤25MB) + GET /api/stt/status; бэкенды AI_STT_URL (прокси whisper-сервера) или AI_STT_BINARY (whisper.cpp main.exe -l ru -otxt); без бэкенда → 501; UI: MediaRecorder-фолбэк при отсутствии Web Speech API, мик-кнопка скрыта только если нет обоих)
-- [ ] Внешняя переоценка 9.5/10 (весь план 8.3–8.9 закрыт, тесты 111/111 + live 3/3; пакет для ревьювера — RE_EVAL.md, Этап 44)
+- [ ] Внешняя переоценка 9.5/10 (весь план 8.3–8.9 закрыт, тесты 113/113 + live 3/3; пакет для ревьювера — RE_EVAL.md, Этап 44)
 
 ## Вне оценок (этапы 45–48, 2026-08-09) — развитие агента по своей дорожной карте
 - [x] Reviewer/Fixer сабагенты — Этап 45 (SUBAGENT_PROMPTS: reviewer — многошаговый разбор кода с примерами; fixer — применение правок с самопроверкой; GENERAL — общий; тул task проксирует их через run_agent_loop; тест test_reviewer_subagent)
@@ -197,7 +197,7 @@ Kimi 2: 8.3/10 → DeepSeek 2: 8.5/10 → DeepSeek 3: 8.6/10 → Kimi 3: 8.7/10 
 - [x] Live-прогон бенчмарка — Этап 49 (test_bench.py --models qwen3:8b → **6/6** (468s), отчёт bench_reports/qwen3-8b.json; чекер sql-schema смягчён: FOREIGN KEY ИЛИ REFERENCES — модель писала корректный инлайн-FK)
 - [x] Live-проверка фич 45–47 — Этап 50 (reviewer: обзор calc.py → «CRITICAL: calc.py:2 (division by zero), VERDICT: FAIL» за 23.5s; extra-rag: поиск «jwt auth middleware» по AI_EXTRA_RAG нашёл E0/eslint.config.js из SwiftMatch; step budget: маркер BUDGET + принудительный summary за 25.8s)
 - [x] Skill generate-api: SQL-раздел — Этап 51 (правила схемы: users/messages + FK обоими способами, ENGINE=InnoDB/PRAGMA, индексы на FK, миграции NNN_*.sql; пример полной схемы — из сценария sql-schema бенчмарка)
-- [x] RE_EVAL.md обновлён: 111/111 ×2 + live 3/3 + bench 6/6, таблица этапов 35–48, шаг 6 в проверке (бенчмарк)
+- [x] RE_EVAL.md обновлён: 113/113 + live 3/3 + @reviewer VERDICT PASS + bench 6/6, таблица этапов 35–48 + 54–56, шаг 6 в проверке (бенчмарк)
 
 ## Вне оценок (этапы 52–53, 2026-08-09) — бенчмарк по моделям + live @fixer
 - [x] Бенчмарк остальных моделей — Этап 52 (test_bench.py --models: qwen2.5-coder:7b → **1/6** (48.6s, отвечает инструкциями; прошёл только sql-schema), deepseek-coder-v2:16b → **0/6** (105.6s, тулы не выполняет); сводка — bench_reports/SUMMARY.md; вывод: qwen3:8b — единственная рабочая модель для полного цикла)

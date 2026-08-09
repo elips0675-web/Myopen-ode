@@ -5,13 +5,14 @@
 Репозиторий: https://github.com/elips0675-web/Myopen-ode (ветка master).
 
 ## Текущий статус
-- Тесты: **111/111 ×2** (`python -X utf8 test_agent.py`) + **live 3/3** на
+- Тесты: **113/113** (`python -X utf8 test_agent.py`) + **live 3/3** на
   qwen3:8b (`python -X utf8 test_live.py --models qwen3:8b`: create file 18.3s,
   simple question, edit rename) + **бенчмарк по 3 моделям** (`python -X utf8
   test_bench.py --models qwen3:8b`): qwen3:8b 6/6 (468s), qwen2.5-coder:7b 1/6,
   deepseek-coder-v2:16b 0/6; отчёты bench_reports/*.json + SUMMARY.md. Live
   @reviewer/@fixer подтверждены: обзор → «CRITICAL: calc.py:2 (division by
-  zero)» и реальное исправление файла (guard b==0 → None, 60.4s).
+  zero)» и реальное исправление файла (guard b==0 → None, 60.4s); прямой
+  маркер @reviewer в чате → отчёт «VERDICT: PASS» + [DONE].
 - Оценки истории: Kimi 8.7 → внешний 8.8 → DeepSeek 8.9 (+переоценка 8.9) →
   внешний 8.9 (Оценка 5). ВЕСЬ план оценок P1–P3 закрыт.
 - Модель: qwen3:8b (native tool calling), RTX 3060 12GB, deepseek-r1:1.5b
@@ -34,12 +35,15 @@
 | 46 | RAG по внешним папкам: AI_EXTRA_RAG (ключи E0/), _file_root/_scan_files | test_rag_extra_roots + live: поиск по E:\swiftmatch1bdnoutprod → E0/eslint.config.js |
 | 47 | Лимит шагов AGENT_STEP_BUDGET=N: принудительный финальный summary без новых тулов | test_step_budget + live: маркер BUDGET + summary за 25.8s |
 | 48 | Бенчмарк-обвязка: test_bench.py — 6 сценариев, JSON-отчёт bench_reports/<model>.json | test_bench_report + live 6/6 (468s) |
+| 54 | Прямые сабагент-маркеры: @reviewer/@fixer/@general в первом user-сообщении меняют system-промпт и убирают маркер (agent.py _apply_subagent_marker) | test_subagent_marker + live: «@reviewer ...» → «VERDICT: PASS» |
+| 55 | Правило 23 (task reviewer → fixer) в SYSTEM_PROMPT, строки в compact и native-промптах | test_system_prompt_rules |
+| 56 | UI-автокомплит @-маркеров (reviewer/fixer/general/explore/scout) | static/app.js |
 
-Тесты выросли: 86 → 104 → 107 → 111 (июль-август 2026).
+Тесты выросли: 86 → 104 → 107 → 111 → 113 (июль-август 2026).
 
 ## Как проверить самому (5 минут)
 1. `git clone https://github.com/elips0675-web/Myopen-ode && cd Myopen-ode`
-2. `python -X utf8 test_agent.py` → ждать «111/111 passed»
+2. `python -X utf8 test_agent.py` → ждать «113/113 passed»
 3. `ollama pull qwen3:8b` (если нет) → `python -X utf8 agent.py` →
    открыть http://localhost:8765 → задать «что такое 2+2?» и «создай файл
    hello.py с функцией greet» (деструктивные — подтвердить «да»)
@@ -51,11 +55,12 @@
    отчёт bench_reports/qwen3-8b.json
 
 ## Запрос на оценку
-Оценить версию с учётом этапов 35–48 (коммиты 6afcfb9..HEAD):
+Оценить версию с учётом этапов 35–48 + 54–56 (коммиты 6afcfb9..HEAD):
 - Архитектура: DI, абстракции хранилищ, модульность core/ + api_* + tools/
-- Код/тесты: 107/107 + 3/3 live, AST-guard, git-бэкапы, rate limit
+- Код/тесты: 113/113 + 3/3 live, AST-guard, git-бэкапы, rate limit
 - Возможности: работа вне workspace, обучение скиллами, Whisper STT,
-  RAG over plan, self-healing, native tool calling (qwen3), Tauri desktop
+  RAG over plan, self-healing, native tool calling (qwen3), Tauri desktop,
+  сабагенты-маркеры @reviewer/@fixer/@general в чате
 - Безопасность: path-jail + EXTRA_ROOTS, bash whitelist, rate limiting,
   изобретённые пути блокируются
 - Оффлайн: весь стек (Ollama, MySQL-клоны, STT whisper.cpp) локальный

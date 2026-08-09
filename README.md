@@ -2,9 +2,9 @@
 
 Локальный AI-агент-программист на Ollama. Замена Cursor/Windsurf/Claude Code — бесплатно, приватно, офлайн.
 
-**Оценки:** Kimi 8.7/10 · Внешнее ревью 8.8/10 · DeepSeek 8.9/10 (+ переоценка 8.9) · Внешнее ревью 2 — 8.9/10 (весь план оценок P1–P3 закрыт этапами 21–34 + важные пункты 35–43, тесты 111/111; осталась только внешняя переоценка 9.5) · План до 9.5/10 — в `KIMI_REVIEW_SUMMARY.md`
+**Оценки:** Kimi 8.7/10 · Внешнее ревью 8.8/10 · DeepSeek 8.9/10 (+ переоценка 8.9) · Внешнее ревью 2 — 8.9/10 (весь план оценок P1–P3 закрыт этапами 21–34 + важные пункты 35–43, тесты 113/113; осталась только внешняя переоценка 9.5) · План до 9.5/10 — в `KIMI_REVIEW_SUMMARY.md`
 
-**Развитие агента (этапы 45–48):** reviewer/fixer сабагенты (`task @reviewer/@fixer`), RAG по внешним папкам (`AI_EXTRA_RAG="E:\a;E:\b"`), лимит шагов `AGENT_STEP_BUDGET=N` (принудительное финальное резюме), бенчмарк-обвязка `test_bench.py` (6 сценариев → `bench_reports/<model>.json`).
+**Развитие агента (этапы 45–56):** reviewer/fixer сабагенты (`@reviewer/@fixer/@general` — прямые маркеры в чате или `task`), RAG по внешним папкам (`AI_EXTRA_RAG="E:\a;E:\b"`), лимит шагов `AGENT_STEP_BUDGET=N` (принудительное финальное резюме), бенчмарк-обвязка `test_bench.py` (6 сценариев → `bench_reports/<model>.json`, qwen3:8b 6/6), Rule 23 (ревью → фикс через сабагентов).
 
 **Вне workspace:** `EXTRA_ROOTS="E:\папка;D:\data"` — разрешить агенту читать/писать в папки вне проекта («создай приложение в E:\...»); `ALLOW_OUTSIDE=1` — снять ограничение полностью (для локального использования).
 
@@ -84,7 +84,7 @@
 ## Тесты
 
 ```bash
-python test_agent.py   # 111/111 smoke-тестов
+python test_agent.py   # 113/113 smoke-тестов
 python test_live.py    # live-набор на реальных моделях (create/edit/question)
 python test_bench.py   # бенчмарк-обвязка (6 сценариев -> bench_reports/<model>.json)
 ```
@@ -291,7 +291,7 @@ Local AI coding agent powered by Ollama. Free, private, offline alternative to C
 ### Tests
 
 ```bash
-python test_agent.py   # 111/111 smoke tests
+python test_agent.py   # 113/113 smoke tests
 python test_live.py    # live suite against real models (create/edit/question)
 python test_bench.py   # benchmark harness (6 scenarios -> bench_reports/<model>.json)
 ```

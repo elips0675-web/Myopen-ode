@@ -473,7 +473,7 @@ RAG по внешним корням (AI_EXTRA_RAG='E:\a;E:\b', ключи E0/, 
 лимит шагов (AGENT_STEP_BUDGET=N — принудительный финальный summary без
 новых тулов), бенчмарк-обвязка (test_bench.py: 6 сценариев create-file/
 edit-rename/find-and-fix/js-create/sql-schema/refactor-extract → JSON-отчёт
-bench_reports/<model>.json). Тесты 111/111 ×2. Осталось: внешняя переоценка 9.5/10.]
+bench_reports/<model>.json). Тесты 113/113. Осталось: внешняя переоценка 9.5/10.]
 
 ## Вопросы для анализа (что хотим от Kimi)
 1. Правильна ли архитектура prompt-based tool calling для 7B-моделей? Что улучшить в system prompt теперь?
