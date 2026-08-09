@@ -175,8 +175,32 @@ _di_register("work_dir", lambda: WORK_DIR)
 _di_register("sessions_dir", lambda: SESSIONS_DIR)
 _di_register("memory_dir", lambda: MEMORY_DIR)
 _di_register("logger", lambda: log)
-abstractions.init_defaults()  # registers 'rag' (RagAdapter over rag module)
+abstractions.init_defaults()  # registers 'rag' (RagAdapter over rag module) + 'event_bus'
 _di_register("sessions_db", lambda: abstractions.SqliteKVStore(DB_PATH))
+
+# ─── stage 66: event bus subscriptions (module decoupling) ──
+def _event_subagent_audit(_event, payload):
+    """Subscriber: every finished subagent gets a line in .agent_audit.log."""
+    try:
+        ts = datetime.now().isoformat(timespec="seconds")
+        status = "ok" if payload.get("ok") else "error"
+        preview = (payload.get("result_preview") or "").replace("\n", " ")[:120]
+        with open(WORK_DIR / ".agent_audit.log", "a", encoding="utf-8") as f:
+            f.write(f"[{ts}] subagent {payload.get('agent_type')} finished ({status}): {preview}\n")
+    except Exception:
+        pass
+
+def _event_agent_done(_event, payload):
+    log.info("agent loop done (reason=%s)", payload.get("reason"))
+
+def setup_event_listeners():
+    from core import container as _c
+    if not _c.has("event_bus"):
+        _c.register("event_bus", _c.new_event_bus)
+    bus = _c.resolve("event_bus")
+    bus.subscribe("subagent.finished", _event_subagent_audit)
+    bus.subscribe("agent.done", _event_agent_done)
+    return bus
 
 # ─── projects management ──────────────────────────────────
 AGENT_HOME = Path(__file__).parent
@@ -595,6 +619,7 @@ def wait_ollama():
 
 # ─── main ────────────────────────────────────────────────
 def main():
+    setup_event_listeners()  # stage 66: event bus + module subscriptions
     wait_ollama()
     migrated = migrate_json_sessions()
     if migrated:

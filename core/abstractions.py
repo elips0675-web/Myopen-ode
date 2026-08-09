@@ -96,3 +96,5 @@ def init_defaults():
     """Register stage-42 defaults (overridable by agent.py after startup)."""
     if not container.has("rag"):
         container.register("rag", default_rag)
+    if not container.has("event_bus"):
+        container.register("event_bus", container.new_event_bus)

@@ -642,6 +642,8 @@ def _tool_task(args):
         {"role": "system", "content": sub_prompt},
         {"role": "user", "content": user_prompt},
     ]
+    _publish_event("subagent.spawned", {"agent_type": agent_type,
+                                        "prompt_preview": user_prompt[:200]})
     try:
         # hierarchical delegation: the subagent runs its own tool loop
         from core.agent_loop import run_agent_loop
@@ -657,10 +659,14 @@ def _tool_task(args):
             setattr(d, _name, getattr(_a, _name))
         d.NO_CONFIRM = True
         res = run_agent_loop(msgs, None, None, model=MODEL, deps=d)
+        _publish_event("subagent.finished", {"agent_type": agent_type,
+                                             "ok": True, "result_preview": res[:200]})
         return f"[SUBAGENT:{agent_type}]\n{res[:3000]}"
     except Exception as e:
         log.warning("subagent loop failed (%s), falling back to single call", e)
         result, _ = call_ollama(msgs, MODEL)
+        _publish_event("subagent.finished", {"agent_type": agent_type,
+                                             "ok": False, "result_preview": str(e)[:200]})
         return f"[SUBAGENT:{agent_type}]\n{result[:3000]}"
 
 def _tool_todo(args):
@@ -834,10 +840,28 @@ def execute_tool(name, args):
         result = _execute_tool_inner(name, args)
         _audit(name, args, result)
         _stats_record(name, result)
+        _publish_tool_event(name, result)
         return result
     except Exception as e:
         _stats_record(name, f"Error: {e}")
         return f"Error: {e}"
+
+def _publish_event(event, payload):
+    """Fire an event bus event without ever breaking the caller."""
+    try:
+        from core import container
+        if container.has("event_bus"):
+            container.resolve("event_bus").publish(event, payload)
+    except Exception:
+        pass
+
+def _publish_tool_event(name, result):
+    ok = not (isinstance(result, str) and result.startswith(("Error:", "Blocked:")))
+    _publish_event("tool.executed", {
+        "name": name,
+        "ok": ok,
+        "result_preview": (result if isinstance(result, str) else str(result))[:200],
+    })
 
 _TOOL_DISPATCH = {
     "read": _tool_read,

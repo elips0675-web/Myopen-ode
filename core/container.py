@@ -13,6 +13,7 @@ Registered services (agent.py):
     logger        -> lambda: log
     rag           -> RagStore adapter (stage 42)
     sessions_db   -> SessionsStore adapter (stage 42)
+    event_bus     -> EventBus (stage 66) — pub/sub for modules
 """
 import threading
 
@@ -54,3 +55,76 @@ def sessions_dir():
 
 def logger():
     return resolve("logger")
+
+
+# ─── stage 66: event bus (pub/sub) ────────────────────────
+class EventBus:
+    """Thread-safe publish/subscribe bus.
+
+    Modules publish lifecycle events ("tool.executed", "agent.iteration",
+    "subagent.finished"...) and other modules subscribe to react without
+    coupling to each other. Handler exceptions are logged and isolated —
+    one bad subscriber never breaks the publisher or other subscribers.
+
+    Events in use:
+        tool.executed        {"name", "ok", "result_preview"}
+        agent.iteration      {"it", "max_iter", "tool", "ok"}
+        agent.done           {"reason", "text_preview"}
+        subagent.spawned     {"agent_type", "prompt_preview"}
+        subagent.finished    {"agent_type", "ok", "result_preview"}
+    """
+
+    def __init__(self):
+        self._subs = {}  # event -> {token: handler}
+        self._lock = threading.Lock()
+        self._seq = 0
+
+    def subscribe(self, event, handler):
+        """Register handler(event, payload). Returns a token for unsubscribe()."""
+        with self._lock:
+            self._seq += 1
+            token = (event, self._seq)
+            self._subs.setdefault(event, {})[token] = handler
+            return token
+
+    def once(self, event, handler):
+        """One-shot subscription: removed after the first fire."""
+        token = []
+
+        def wrapped(ev, payload):
+            self.unsubscribe(token[0])
+            handler(ev, payload)
+
+        token.append(self.subscribe(event, wrapped))
+        return token[0]
+
+    def unsubscribe(self, token):
+        with self._lock:
+            subs = self._subs.get(token[0])
+            if subs:
+                subs.pop(token, None)
+                if not subs:
+                    self._subs.pop(token[0], None)
+
+    def publish(self, event, payload=None):
+        with self._lock:
+            handlers = list(self._subs.get(event, {}).values())
+        for h in handlers:
+            try:
+                h(event, payload)
+            except Exception:
+                import logging
+                logging.getLogger("core.container").warning(
+                    "event handler failed for %r", event, exc_info=True)
+
+    def has_subscribers(self, event):
+        with self._lock:
+            return bool(self._subs.get(event))
+
+    def clear(self):
+        with self._lock:
+            self._subs.clear()
+
+
+def new_event_bus():
+    return EventBus()

@@ -18,6 +18,16 @@ from core.tool_parser import _strip_system_markers, parse_tool_blocks
 
 log = logging.getLogger('agent_loop')
 
+
+def _publish_event(event, payload):
+    """Fire an event bus event (stage 66) without ever breaking the loop."""
+    try:
+        from core import container
+        if container.has("event_bus"):
+            container.resolve("event_bus").publish(event, payload)
+    except Exception:
+        pass
+
 VALID_TOOLS = ("read", "write", "edit", "bash", "glob", "grep", "list", "web",
                "diff", "commit", "undo", "verify", "plan", "search", "websearch",
                "question", "skill", "patch", "task", "todo", "lsp",
@@ -412,6 +422,15 @@ def run_agent_loop(msgs, session_id, events=None, model=None, deps=None):
                 deps._state_path(session_id).touch()
             except Exception:
                 pass
+
+        _publish_event("agent.iteration", {
+            "it": it + 1,
+            "max_iter": max_iter,
+            "tool": last_result_name,
+            "ok": not last_result_text.startswith(("Error:", "Blocked:")),
+        })
+
+    _publish_event("agent.done", {"reason": "completed", "text_preview": full[-200:]})
 
     if session_id:
         try:

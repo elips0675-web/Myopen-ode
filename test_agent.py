@@ -725,6 +725,84 @@ def test_mcp_integration():
         mcp_client._procs.clear()
     print("  [OK] MCP integration (real stdio server: start/list/call/resources/errors)")
 
+def test_event_bus():
+    """Stage 66: EventBus pub/sub — subscribe/publish/once/unsubscribe,
+    handler exception isolation, clear."""
+    from core.container import EventBus
+    bus = EventBus()
+    got = []
+    bus.subscribe("a.b", lambda ev, pl: got.append((ev, pl)))
+    bus.publish("a.b", {"x": 1})
+    assert got == [("a.b", {"x": 1})], got
+
+    once = []
+    bus.once("a.b", lambda ev, pl: once.append(pl))
+    bus.publish("a.b", 1)
+    bus.publish("a.b", 2)
+    assert once == [1], f"once fired twice: {once}"
+
+    def boom(ev, pl):
+        raise RuntimeError("subscriber bug")
+    bus.subscribe("a.b", boom)
+    bus.publish("a.b", "still ok")
+    assert got[-1][1] == "still ok", "broken subscriber must not break the bus"
+
+    assert bus.has_subscribers("a.b")
+    tok = bus.subscribe("a.b", lambda ev, pl: None)
+    bus.unsubscribe(tok)
+    bus.clear()
+    assert not bus.has_subscribers("a.b")
+    print("  [OK] EventBus (pub/sub/once/isolated errors/clear)")
+
+def test_event_bus_tool_events():
+    """Stage 66: execute_tool publishes 'tool.executed' with ok/error flag."""
+    from core import container
+    saved = dict(container._REGISTRY)
+    container.reset()
+    bus = container.new_event_bus()
+    container.register("event_bus", lambda: bus)
+    events = []
+    bus.subscribe("tool.executed", lambda ev, pl: events.append(pl))
+    try:
+        r = execute_tool("read", {"path": "agent.py"})
+        assert "#!/usr/bin/env python3" in r
+        r = execute_tool("read", {"path": "no_such_file_zzz_12345.txt"})
+        assert "not found" in r
+    finally:
+        container.reset()
+        container._REGISTRY.update(saved)
+    assert len(events) == 2, events
+    assert events[0]["name"] == "read" and events[0]["ok"] is True, events
+    assert events[1]["name"] == "read" and events[1]["ok"] is False, events
+    print("  [OK] EventBus tool.executed events (ok/error)")
+
+def test_event_bus_subagent_audit():
+    """Stage 66: subagent.finished subscriber writes a line into .agent_audit.log."""
+    import agent as agent_mod
+    from core import container
+    saved = dict(container._REGISTRY)
+    container.reset()
+    bus = container.new_event_bus()
+    container.register("event_bus", lambda: bus)
+    agent_mod.setup_event_listeners()  # subscribes subagent.finished -> audit log
+    audit_log = agent_mod.WORK_DIR / ".agent_audit.log"
+    before = audit_log.read_text(encoding="utf-8") if audit_log.exists() else ""
+    def mock_ollama(msgs, model):
+        return ("subagent audit reply", 10)
+    old = agent_mod.call_ollama
+    agent_mod.call_ollama = mock_ollama
+    try:
+        r = execute_tool("task", {"agent": "reviewer", "prompt": "check x"})
+        assert "[SUBAGENT:reviewer]" in r, r
+    finally:
+        agent_mod.call_ollama = old
+        container.reset()
+        container._REGISTRY.update(saved)
+    after = audit_log.read_text(encoding="utf-8") if audit_log.exists() else ""
+    new_lines = [ln for ln in after.splitlines() if ln not in before.splitlines()]
+    assert any("subagent reviewer finished (ok)" in ln for ln in new_lines), new_lines
+    print("  [OK] EventBus subagent.finished -> audit log line")
+
 def test_task_subagent_loop():
     """task tool delegates to a subagent that runs its own tool loop."""
     import agent as agent_mod
@@ -2637,6 +2715,7 @@ if __name__ == "__main__":
              test_bash_docker_flags, test_health_endpoint, test_subagents_api, test_vendor_static,
              test_json_schema_format, test_git_snapshot_restore, test_diff_preview,
              test_update_check, test_rag_folder_scope, test_mcp_client, test_mcp_integration,
+             test_event_bus, test_event_bus_tool_events, test_event_bus_subagent_audit,
              test_task_subagent_loop, test_task_subagent_reviewer_fixer, test_native_tools_schema,
              test_native_tool_calling, test_desktop_helpers,
              test_sess_stats_advice, test_model_router,
