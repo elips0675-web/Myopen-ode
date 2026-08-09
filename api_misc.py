@@ -70,6 +70,20 @@ def audit_log(limit: str = "50"):
     except Exception as e:
         return {"error": str(e)}
 
+@router.get("/api/subagents/audit")
+def subagents_audit(limit: str = "50"):
+    """Stage 67: last N lines of .agent_subagent_audit.log (subagent trail)."""
+    try:
+        n = int(limit)
+    except (TypeError, ValueError):
+        n = 50
+    n = max(1, min(n, 500))
+    try:
+        lines = (work_dir() / ".agent_subagent_audit.log").read_text("utf-8", errors="ignore").splitlines()
+        return {"lines": lines[-n:]}
+    except Exception as e:
+        return {"error": str(e)}
+
 @router.get("/health")
 def health():
     """Liveness + basic diagnostics for monitoring (uptime, model, session count)."""

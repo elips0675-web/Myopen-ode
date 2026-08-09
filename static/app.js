@@ -264,6 +264,14 @@ function showAudit(){
       (d.lines?esc(d.lines.join('\n')):(d.error||'empty'))+'</body></html>');w.document.close();
   }).catch(function(e){w.document.write('Error: '+e.message);w.document.close()});
 }
+function showSubagentAudit(){
+  var w=window.open('','subaudit','width=700,height=500');
+  if(!w){alert('Popup blocked — allow popups to view the subagent audit log');return}
+  fetch(A+'/api/subagents/audit?limit=100').then(function(r){return r.json()}).then(function(d){
+    w.document.write('<html><head><title>Subagent audit log</title><style>body{background:#111;color:#ddd;font:12px monospace;padding:10px;white-space:pre-wrap;word-break:break-all}</style></head><body>'+
+      (d.lines?esc(d.lines.join('\n')):(d.error||'empty'))+'</body></html>');w.document.close();
+  }).catch(function(e){w.document.write('Error: '+e.message);w.document.close()});
+}
 function cl(){fetch(A+'/api/models').then(function(){$('old').className='g';$('ols').textContent='Ollama OK'}).catch(function(){$('old').className='r';$('ols').textContent='Ollama -';setTimeout(cl,3000)})}
 
 // Slash commands config

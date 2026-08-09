@@ -178,17 +178,25 @@ _di_register("logger", lambda: log)
 abstractions.init_defaults()  # registers 'rag' (RagAdapter over rag module) + 'event_bus'
 _di_register("sessions_db", lambda: abstractions.SqliteKVStore(DB_PATH))
 
-# ─── stage 66: event bus subscriptions (module decoupling) ──
-def _event_subagent_audit(_event, payload):
-    """Subscriber: every finished subagent gets a line in .agent_audit.log."""
+# ─── stage 66-67: event bus subscriptions (module decoupling) ──
+def _subagent_audit_line(text):
+    """Stage 67: every subagent gets its own audit trail (spawn + finish)."""
     try:
-        ts = datetime.now().isoformat(timespec="seconds")
-        status = "ok" if payload.get("ok") else "error"
-        preview = (payload.get("result_preview") or "").replace("\n", " ")[:120]
-        with open(WORK_DIR / ".agent_audit.log", "a", encoding="utf-8") as f:
-            f.write(f"[{ts}] subagent {payload.get('agent_type')} finished ({status}): {preview}\n")
+        with open(WORK_DIR / ".agent_subagent_audit.log", "a", encoding="utf-8") as f:
+            f.write(text + "\n")
     except Exception:
         pass
+
+def _event_subagent_spawn(_event, payload):
+    ts = datetime.now().isoformat(timespec="seconds")
+    preview = (payload.get("prompt_preview") or "").replace("\n", " ")[:120]
+    _subagent_audit_line(f"[{ts}] spawn {payload.get('agent_type')} \"{preview}\"")
+
+def _event_subagent_finished(_event, payload):
+    ts = datetime.now().isoformat(timespec="seconds")
+    status = "ok" if payload.get("ok") else "error"
+    preview = (payload.get("result_preview") or "").replace("\n", " ")[:120]
+    _subagent_audit_line(f"[{ts}] finished {payload.get('agent_type')} ({status}) \"{preview}\"")
 
 def _event_agent_done(_event, payload):
     log.info("agent loop done (reason=%s)", payload.get("reason"))
@@ -198,7 +206,8 @@ def setup_event_listeners():
     if not _c.has("event_bus"):
         _c.register("event_bus", _c.new_event_bus)
     bus = _c.resolve("event_bus")
-    bus.subscribe("subagent.finished", _event_subagent_audit)
+    bus.subscribe("subagent.spawned", _event_subagent_spawn)
+    bus.subscribe("subagent.finished", _event_subagent_finished)
     bus.subscribe("agent.done", _event_agent_done)
     return bus
 

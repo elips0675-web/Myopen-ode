@@ -757,8 +757,7 @@ def test_event_bus():
 def test_event_bus_tool_events():
     """Stage 66: execute_tool publishes 'tool.executed' with ok/error flag."""
     from core import container
-    saved = dict(container._REGISTRY)
-    container.reset()
+    old_bus = container._REGISTRY.get("event_bus")
     bus = container.new_event_bus()
     container.register("event_bus", lambda: bus)
     events = []
@@ -769,23 +768,24 @@ def test_event_bus_tool_events():
         r = execute_tool("read", {"path": "no_such_file_zzz_12345.txt"})
         assert "not found" in r
     finally:
-        container.reset()
-        container._REGISTRY.update(saved)
+        if old_bus is None:
+            container._REGISTRY.pop("event_bus", None)
+        else:
+            container.register("event_bus", old_bus)
     assert len(events) == 2, events
     assert events[0]["name"] == "read" and events[0]["ok"] is True, events
     assert events[1]["name"] == "read" and events[1]["ok"] is False, events
     print("  [OK] EventBus tool.executed events (ok/error)")
 
 def test_event_bus_subagent_audit():
-    """Stage 66: subagent.finished subscriber writes a line into .agent_audit.log."""
+    """Stage 67: subagent.spawned/finished subscribers write the subagent trail."""
     import agent as agent_mod
     from core import container
-    saved = dict(container._REGISTRY)
-    container.reset()
+    old_bus = container._REGISTRY.get("event_bus")
     bus = container.new_event_bus()
     container.register("event_bus", lambda: bus)
-    agent_mod.setup_event_listeners()  # subscribes subagent.finished -> audit log
-    audit_log = agent_mod.WORK_DIR / ".agent_audit.log"
+    agent_mod.setup_event_listeners()  # subscribes subagent events -> audit log
+    audit_log = agent_mod.WORK_DIR / ".agent_subagent_audit.log"
     before = audit_log.read_text(encoding="utf-8") if audit_log.exists() else ""
     def mock_ollama(msgs, model):
         return ("subagent audit reply", 10)
@@ -796,12 +796,46 @@ def test_event_bus_subagent_audit():
         assert "[SUBAGENT:reviewer]" in r, r
     finally:
         agent_mod.call_ollama = old
-        container.reset()
-        container._REGISTRY.update(saved)
+        if old_bus is None:
+            container._REGISTRY.pop("event_bus", None)
+        else:
+            container.register("event_bus", old_bus)
     after = audit_log.read_text(encoding="utf-8") if audit_log.exists() else ""
     new_lines = [ln for ln in after.splitlines() if ln not in before.splitlines()]
-    assert any("subagent reviewer finished (ok)" in ln for ln in new_lines), new_lines
-    print("  [OK] EventBus subagent.finished -> audit log line")
+    assert any("spawn reviewer" in ln and "check x" in ln for ln in new_lines), new_lines
+    assert any("finished reviewer (ok)" in ln for ln in new_lines), new_lines
+    print("  [OK] EventBus subagent spawn/finished -> .agent_subagent_audit.log")
+
+def test_subagent_audit_api():
+    """Stage 67: GET /api/subagents/audit returns recent subagent trail lines."""
+    import agent as agent_mod
+    from fastapi.testclient import TestClient
+    from core import container
+    old_bus = container._REGISTRY.get("event_bus")
+    bus = container.new_event_bus()
+    container.register("event_bus", lambda: bus)
+    agent_mod.setup_event_listeners()
+    def mock_ollama(msgs, model):
+        return ("subagent api reply", 10)
+    old = agent_mod.call_ollama
+    agent_mod.call_ollama = mock_ollama
+    try:
+        r = execute_tool("task", {"agent": "fixer", "prompt": "fix api"})
+        assert "[SUBAGENT:fixer]" in r, r
+        client = TestClient(agent_mod.app)
+        r = client.get("/api/subagents/audit?limit=20")
+        assert r.status_code == 200, f"subagents audit: {r.status_code} {r.text}"
+        d = r.json()
+        assert "lines" in d, d
+        text = "\n".join(d["lines"])
+        assert "spawn fixer" in text and "finished fixer (ok)" in text, text
+    finally:
+        agent_mod.call_ollama = old
+        if old_bus is None:
+            container._REGISTRY.pop("event_bus", None)
+        else:
+            container.register("event_bus", old_bus)
+    print("  [OK] GET /api/subagents/audit")
 
 def test_task_subagent_loop():
     """task tool delegates to a subagent that runs its own tool loop."""
@@ -2716,6 +2750,7 @@ if __name__ == "__main__":
              test_json_schema_format, test_git_snapshot_restore, test_diff_preview,
              test_update_check, test_rag_folder_scope, test_mcp_client, test_mcp_integration,
              test_event_bus, test_event_bus_tool_events, test_event_bus_subagent_audit,
+             test_subagent_audit_api,
              test_task_subagent_loop, test_task_subagent_reviewer_fixer, test_native_tools_schema,
              test_native_tool_calling, test_desktop_helpers,
              test_sess_stats_advice, test_model_router,
