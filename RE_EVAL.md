@@ -5,7 +5,7 @@
 Репозиторий: https://github.com/elips0675-web/Myopen-ode (ветка master).
 
 ## Текущий статус
-- Тесты: **125/125** (`python -X utf8 test_agent.py`) + **live 3/3** на
+- Тесты: **126/126** (`python -X utf8 test_agent.py`) + **live 3/3** на
   qwen3:8b (`python -X utf8 test_live.py --models qwen3:8b`: create file 18.3s,
   simple question, edit rename) + **бенчмарк по 3 моделям** (`python -X utf8
   test_bench.py --models qwen3:8b`): qwen3:8b 7/7 (394s, включая subagent-review), qwen2.5-coder:7b 5/7
@@ -64,7 +64,7 @@
 
 ## Как проверить самому (5 минут)
 1. `git clone https://github.com/elips0675-web/Myopen-ode && cd Myopen-ode`
-2. `python -X utf8 test_agent.py` → ждать «125/125 passed»
+2. `python -X utf8 test_agent.py` → ждать «126/126 passed»
 3. `ollama pull qwen3:8b` (если нет) → `python -X utf8 agent.py` →
    открыть http://localhost:8765 → задать «что такое 2+2?» и «создай файл
    hello.py с функцией greet» (деструктивные — подтвердить «да»)
@@ -76,13 +76,13 @@
    отчёт bench_reports/qwen3-8b.json
 7. Маркеры сабагентов: в чате «@reviewer проверь hello.py» → отчёт
    CRITICAL/WARNINGS/VERDICT без правок файла.
-8. Количество тестов в шаге 2 — «125/125 passed».
+8. Количество тестов в шаге 2 — «126/126 passed».
 
 ## Запрос на оценку
 Оценить версию с учётом этапов 35–72 (коммиты 6afcfb9..HEAD):
 - Архитектура: DI, абстракции хранилищ, модульность core/ + api_* + tools/,
   EventBus, встроенный MCP-сервер, AST bash guard
-- Код/тесты: 125/125 + 3/3 live, AST-guard, git-бэкапы, rate limit,
+- Код/тесты: 126/126 + 3/3 live, AST-guard, git-бэкапы, rate limit,
   MCP-интеграционный тест, prompt compression (few-shot tier), UI polish
 - Возможности: работа вне workspace, обучение скиллами, Whisper STT,
   RAG over plan, self-healing, native tool calling (qwen3), Tauri desktop,
@@ -112,7 +112,7 @@
 Ты — технический ревьювер кода. Дай оценку от 8.5 до 10 за 3 раунда:
 Раунд 1 — архитектура: DI-контейнер, абстракции хранилищ, модульность
 core/ + api_* + tools/, безопасность (path-jail, bash whitelist, rate
-limit), оффлайн-стек. Раунд 2 — качество: 125/125 автотестов
+limit), оффлайн-стек. Раунд 2 — качество: 126/126 автотестов
 (test_agent.py), AST-guard, git-бэкапы, бенчмарк 7/7 на qwen3:8b live.
 Раунд 3 — возможности: работа вне workspace (EXTRA_ROOTS), 11 обучающих
 скиллов, Whisper STT, RAG over plan, self-healing, native tool calling,

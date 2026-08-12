@@ -4,7 +4,7 @@
 
 **Оценки:** Kimi 8.7/10 · Внешнее ревью 8.8/10 · DeepSeek 8.9/10 (+ переоценка 8.9) · Внешнее ревью 2 — 8.9/10 · **DeepSeek 6 (2026-08-09) — 9.4/10** · **Kimi 4 (2026-08-09) — 9.0/10** (весь план оценок P1–P3 закрыт этапами 21–34 + важные пункты 35–43, тесты 115/115; до 9.5 осталось: видео-демо и MCP-интеграционный тест) · План до 9.5/10 — в `KIMI_REVIEW_SUMMARY.md`
 
-**Развитие агента (этапы 65–72, рекомендации DeepSeek 6 + Kimi 4 закрыты):** MCP-интеграционный тест со встроенным stdio-сервером (`mcp_servers.py`, JSON-RPC 2.0), **EventBus** (core/container.py — pub/sub с изоляцией ошибок подписчиков: tool.executed, agent.iteration/done, subagent.spawned/finished), аудит сабагентов (`.agent_subagent_audit.log` + `GET /api/subagents/audit` + кнопка в UI), автовыбор embed-модели (bge-m3 → all-minilm; `EMBED_MODEL` побеждает), few-shot-тюнинг промптов под qwen2.5-coder:7b (бенч 7b: 1/6 → **5/7**), prompt compression (EXAMPLES/VALID/INVALID — отдельный tier на итерациях 0–1, ~1K токенов/вызов экономии), **AST bash guard** (python -c через ast.parse+compile вместо keyword-фильтра), UI polish (анимации, типографика). Тесты **124/124**.
+**Развитие агента (этапы 65–72, рекомендации DeepSeek 6 + Kimi 4 закрыты):** MCP-интеграционный тест со встроенным stdio-сервером (`mcp_servers.py`, JSON-RPC 2.0), **EventBus** (core/container.py — pub/sub с изоляцией ошибок подписчиков: tool.executed, agent.iteration/done, subagent.spawned/finished), аудит сабагентов (`.agent_subagent_audit.log` + `GET /api/subagents/audit` + кнопка в UI), автовыбор embed-модели (bge-m3 → all-minilm; `EMBED_MODEL` побеждает), few-shot-тюнинг промптов под qwen2.5-coder:7b (бенч 7b: 1/6 → **5/7**), prompt compression (EXAMPLES/VALID/INVALID — отдельный tier на итерациях 0–1, ~1K токенов/вызов экономии), **AST bash guard** (python -c через ast.parse+compile вместо keyword-фильтра), UI polish (анимации, типографика). Тесты **126/126**.
 
 **Развитие агента (этапы 45–64):** reviewer/fixer сабагенты (`@reviewer/@fixer/@general` — прямые маркеры в чате или `task`), RAG по внешним папкам (`AI_EXTRA_RAG="E:\a;E:\b"`), лимит шагов `AGENT_STEP_BUDGET=N` (принудительное финальное резюме), бенчмарк-обвязка `test_bench.py` (7 сценариев → `bench_reports/<model>.json`, qwen3:8b **7/7**), Rule 23 (ревью → фикс через сабагентов), чипы 🧐/🔧/🧭 в UI, `GET /api/subagents`.
 
@@ -86,7 +86,7 @@
 ## Тесты
 
 ```bash
-python test_agent.py   # 124/124 smoke-тестов
+python test_agent.py   # 126/126 smoke-тестов
 python test_live.py    # live-набор на реальных моделях (create/edit/question)
 python test_bench.py   # бенчмарк-обвязка (6 сценариев -> bench_reports/<model>.json)
 ```
@@ -293,7 +293,7 @@ Local AI coding agent powered by Ollama. Free, private, offline alternative to C
 ### Tests
 
 ```bash
-python test_agent.py   # 124/124 smoke tests
+python test_agent.py   # 126/126 smoke tests
 python test_live.py    # live suite against real models (create/edit/question)
 python test_bench.py   # benchmark harness (6 scenarios -> bench_reports/<model>.json)
 ```

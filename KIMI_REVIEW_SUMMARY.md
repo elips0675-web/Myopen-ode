@@ -505,7 +505,7 @@ qwen3:8b **7/7** (394s, subagent-review 38.9s — task → reviewer → VERDICT)
   для node -e; тест test_bash_ast_guard (24 кейса). Коммит 924ea4a.
 - Этап 72 (UI polish): анимации mIn/pulse/fadeIn, press-feedback,
   типографика 13.5px/1.65. Коммит e141b7d.
-- Финал: 124/124 тестов + live 3/3 + bench 7/7 (qwen3:8b, 513.8s) +
+- Финал: 126/126 тестов + live 3/3 + bench 7/7 (qwen3:8b, 513.8s) +
   bench 5/7 (qwen2.5-coder:7b). Сервер перезапущен на актуальном коде.
   Осталось: P0 видео-демо (VIDEO_DEMO.md) + внешняя переоценка 9.5/10.
 
