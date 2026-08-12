@@ -397,6 +397,14 @@ def test_bash():
     assert "hello" in r, "bash failed"
     print("  [OK] bash")
 
+def test_bash_non_utf8_output():
+    """Stage 73: bash output with non-UTF-8 bytes (0xAD from cp866/cp1251)
+    must decode with errors='replace' instead of raising UnicodeDecodeError
+    inside subprocess reader threads (rare Windows flake)."""
+    r = execute_tool("bash", {"cmd": "python -c \"import sys; sys.stdout.buffer.write(b'\\xadnonutf8OK')\""})
+    assert "OK" in r, f"non-utf8 bash output failed: {r!r}"
+    print("  [OK] bash non-utf8 output decodes with replace")
+
 def test_parse_tool_json_lenient():
     """Lenient tool-JSON parsing: single quotes, unquoted keys, trailing
     comma/garbage after the block must all still yield a valid tool dict."""
@@ -2865,7 +2873,7 @@ if __name__ == "__main__":
     tests = [test_cross_platform, test_plan_tree_events, test_self_healing_advice, test_rag_over_plan, test_extra_roots, test_glob_outside_workspace, test_di_container, test_abstractions, test_stt_endpoint, test_reviewer_subagent, test_rag_extra_roots, test_step_budget, test_bench_report, test_task_router, test_vram_indicator, test_ast_refactor_tools, test_auto_pick_model, test_docker_sandbox_flag, test_git_auto_commit, test_compact_prompt_after_iterations, test_rate_limit, test_path_dir_hint, test_unquoted_json_values,
              test_auto_confirm_safe, test_read, test_read_absolute, test_read_url, test_list, test_glob,
              test_write_and_undo, test_edit, test_edit_guard_ambiguous, test_edit_guard_fuzzy_hint,
-             test_syntax_guard_write, test_patch_multi_file, test_bash, test_verify_py, test_verify_json,
+             test_syntax_guard_write, test_patch_multi_file, test_bash, test_bash_non_utf8_output, test_verify_py, test_verify_json,
              test_backup_undo, test_db_query, test_testgen, test_validation, test_save_api,
              test_terminal_api, test_pty_shell, test_ws_terminal, test_deps_tool, test_audit, test_rag_cache_incremental,
              test_agent_loop_tool_call, test_agent_loop_plain_text, test_agent_loop_shell_alias,

@@ -50,9 +50,9 @@
   Redis→Map, Stripe→mock, Whisper STT».
 
 ### 4:30–5:00 — Итоги
-- Показать `/api/stats`, бейдж VRAM, тёмную тему, «124/124 тестов» на
+- Показать `/api/stats`, бейдж VRAM, тёмную тему, «125/125 тестов» на
   терминале (скриншот вставкой), ссылку на GitHub.
-- Текст: «124 автотеста, бенчмарк 7/7 на qwen3:8b, бенч qwen2.5-coder:7b
+- Текст: «125 автотестов, бенчмарк 7/7 на qwen3:8b, бенч qwen2.5-coder:7b
   5/7 после few-shot подстройки. Open source: github.com/elips0675-web/
   Myopen-ode».
 

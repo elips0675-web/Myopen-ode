@@ -49,7 +49,7 @@ def _syntax_check(path):
             return f"ERROR: invalid JSON ({e})"
     try:
         r = subprocess.run(["node", "--check", str(path)], capture_output=True,
-                           text=True, timeout=30)
+                           text=True, encoding="utf-8", errors="replace", timeout=30)
         if r.returncode == 0:
             return "OK"
         tail = (r.stderr or r.stdout).strip().split("\n")[-1]
@@ -470,7 +470,7 @@ def _tool_bash(args):
     out = docker_bash(cmd, WORK_DIR, bt)
     if out is not None:
         return out
-    r = subprocess.run(cmd, shell=True, cwd=str(cwd) if cwd else str(WORK_DIR), capture_output=True, text=True, timeout=bt)
+    r = subprocess.run(cmd, shell=True, cwd=str(cwd) if cwd else str(WORK_DIR), capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=bt)
     return ((r.stdout or "")[-3000:] + ("\nSTDERR:\n" + (r.stderr or "")[-1000:] if r.stderr else ""))
 
 def _tool_glob(args):

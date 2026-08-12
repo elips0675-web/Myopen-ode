@@ -1,6 +1,6 @@
 # My OpenCode — Status
 
-## Что сделано (Core) — 124/124 тестов
+## Что сделано (Core) — 125/125 тестов
 - [x] FastAPI + SSE, agent loop (12 итераций, таймаут, cancel), prompt-based tool calling, стриминг тулов в UI
 - [x] 27 инструментов (read/write/edit/bash/glob/grep/list/web/websearch/diff/commit/undo/verify/plan/search/question/skill/patch/task/todo/lsp/testgen/db_query/deps/mcp/snapshot/restore + плагины)
 - [x] Сессии SQLite (+миграция из JSON), multi-project, RAG (BM25+эмбеддинги, FAISS/numpy, RAG_MAX_CHUNKS, фоновая индексация), LLM кеш TTL, memory, skills, subagents, slash-команды, MCP сервер+клиенты, LSP (18 серверов), CodeMirror + терминал SSE, pywebview desktop, плагины, audit log
@@ -29,6 +29,7 @@ Kimi 2: 8.3/10 → DeepSeek 2: 8.5/10 → DeepSeek 3: 8.6/10 → Kimi 3: 8.7/10 
 - [x] Prompt compression: EXAMPLES/VALID/INVALID в отдельный tier/skill, не в каждый вызов (этап 70) — SYSTEM_PROMPT_FEWSHOT в tools/__init__.py, _apply_fewshot_tier в core/agent_loop.py (it 0–1 legacy, drop на it>=2, native никогда); тест test_prompt_fewshot_tier
 - [x] AST bash guard: ast.parse + compile() вместо keyword-проверки python -c/node -e (этап 71) — core/safety/bash_guard.py: _check_python_inline (AST: блок subprocess/socket/ctypes/shutil-imports, os.system/popen/remove, shutil.rmtree, eval/exec, битый синтаксис; python -m опасных модулей), _check_node_inline (узкие структурные паттерны), inline-тела вырезаются из whitelist-сегментации; тест test_bash_ast_guard (12 разрешённых + 12 блокируемых)
 - [x] UI polish: анимации переходов, типографика — «ощущение продукта» (этап 72) — mIn fade+slide у сообщений, pulse у «thinking», fade-in dropzone, press-feedback на кнопках/чипах/карточках, тень Send, типографика 13.5px/1.65
+- [x] Windows-стабильность bash-вывода (этап 73) — subprocess.run в _tool_bash и node --check получил encoding="utf-8", errors="replace": вывод bash с не-UTF8 байтами (0xAD из cp866/cp1251) больше не роняет тесты UnicodeDecodeError во внутренних _readerthread-потоках (редкий флак 1/4 прогонов); регрессионный тест test_bash_non_utf8_output; 125/125 ×3 подряд
 Вердикт Kimi 4: тег v2.0-stable уже заслужен; ограничение — экосистема моделей, не код.
 
 ### Недавние предложения (этапы 45–72 сделаны; остаток к «Доделать»)
