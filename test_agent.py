@@ -2863,6 +2863,52 @@ def test_cross_platform():
     assert r is None, f"safe echo blocked: {r}"
     print("  [OK] cross-platform (modules, CREATE_NO_WINDOW guard, bash guard)")
 
+def test_yes_all_auto_confirm():
+    """Stage 84: 'yes all' enables session-wide auto-confirm; CONFIRM messages
+    are numbered per session; later destructive tools run without asking."""
+    from core.tool_executor import execute_tool_block
+    from tools import _state as st
+    import core.tool_executor as te
+    st.AUTO_CONFIRM_SESSIONS = set()
+    st.CONFIRM_COUNTS = {}
+    emitted = []
+
+    def mkctx(last_word):
+        return {
+            "msgs": [{"role": "user", "content": last_word}],
+            "content": "x", "full": [""],
+            "emit": lambda ev: emitted.append(ev),
+            "no_confirm": False, "session_id": "sid-yesall",
+            "sess_stats": {}, "pending_set": lambda *a: None,
+            "state": {"last_result_name": None, "last_result_text": "",
+                      "last_call_key": None, "repeats": 0},
+        }
+
+    orig = te.execute_tool
+    try:
+        te.execute_tool = lambda name, tc: f"ran {name}"
+        ctx = mkctx("сделай")
+        e, c, brk = execute_tool_block(0, {"tool": "write", "path": "a.txt", "content": "x"}, ctx)
+        assert brk is True, "destructive tool without confirm must stop"
+        assert "[CONFIRM]" in ctx["full"][0], "destructive tool without confirm must stop"
+        assert "session confirm #1" in ctx["full"][0], "first confirm must be numbered #1"
+        assert "yes all" in ctx["full"][0], "yes-all hint must be shown"
+
+        ctx = mkctx("yes all")
+        e, c, brk = execute_tool_block(0, {"tool": "write", "path": "a.txt", "content": "x"}, ctx)
+        assert not brk and c == ["write"], "yes all must execute the tool"
+        assert "sid-yesall" in st.AUTO_CONFIRM_SESSIONS, "session must be flagged"
+        assert "auto-confirm ON" in ctx["full"][0]
+
+        ctx = mkctx("продолжай")
+        e, c, brk = execute_tool_block(0, {"tool": "bash", "cmd": "echo hi"}, ctx)
+        assert not brk and "[CONFIRM" not in ctx["full"][0], "auto-confirm skips asking"
+    finally:
+        te.execute_tool = orig
+        st.AUTO_CONFIRM_SESSIONS = set()
+        st.CONFIRM_COUNTS = {}
+    print("  [OK] session auto-confirm 'yes all' (CONFIRM #N + auto-run)")
+
 if __name__ == "__main__":
     print(f"\nSmoke tests for agent.py\n{'='*40}")
     import agent as _agent_main
@@ -2870,7 +2916,7 @@ if __name__ == "__main__":
     if _native_supported(_agent_main.MODEL):
         _agent_main.MODEL = "qwen2.5-coder:7b"
         print("  [test] default MODEL is native-capable -> forced to qwen2.5-coder:7b (legacy path)")
-    tests = [test_cross_platform, test_plan_tree_events, test_self_healing_advice, test_rag_over_plan, test_extra_roots, test_glob_outside_workspace, test_di_container, test_abstractions, test_stt_endpoint, test_reviewer_subagent, test_rag_extra_roots, test_step_budget, test_bench_report, test_task_router, test_vram_indicator, test_ast_refactor_tools, test_auto_pick_model, test_docker_sandbox_flag, test_git_auto_commit, test_compact_prompt_after_iterations, test_rate_limit, test_path_dir_hint, test_unquoted_json_values,
+    tests = [test_cross_platform, test_plan_tree_events, test_yes_all_auto_confirm, test_self_healing_advice, test_rag_over_plan, test_extra_roots, test_glob_outside_workspace, test_di_container, test_abstractions, test_stt_endpoint, test_reviewer_subagent, test_rag_extra_roots, test_step_budget, test_bench_report, test_task_router, test_vram_indicator, test_ast_refactor_tools, test_auto_pick_model, test_docker_sandbox_flag, test_git_auto_commit, test_compact_prompt_after_iterations, test_rate_limit, test_path_dir_hint, test_unquoted_json_values,
              test_auto_confirm_safe, test_read, test_read_absolute, test_read_url, test_list, test_glob,
              test_write_and_undo, test_edit, test_edit_guard_ambiguous, test_edit_guard_fuzzy_hint,
              test_syntax_guard_write, test_patch_multi_file, test_bash, test_bash_non_utf8_output, test_verify_py, test_verify_json,

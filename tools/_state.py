@@ -36,6 +36,11 @@ LLM_CACHE_LOCK = threading.Lock()
 TODO_LOCK = threading.Lock()
 GLOBAL_LOCK = threading.RLock()
 
+# Stage 84: session-wide auto-confirm ("yes all") + per-session confirm counter
+AUTO_CONFIRM_SESSIONS = set()  # session_ids where destructive tools auto-run
+CONFIRM_LOCK = threading.Lock()
+CONFIRM_COUNTS = {}            # session_id -> number of confirms shown
+
 # ─── JSON Schema constrained output (experimental) ────────
 # Ollama `format` keeps the model honest about JSON. The agent loop enables it
 # for specific retry iterations (after format/tool-error nudges); AI_JSON_FORMAT=1

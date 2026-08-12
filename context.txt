@@ -1144,6 +1144,16 @@ UPDATE (2026-08-09) - stages 65-72 (DeepSeek 6 + Kimi 4 recommendations done):
   stub files). Stage 76: live 3/3 on fresh code (create 16.9s, question
   2.4s, edit 10.5s). Stage 77: E2E stage77-e2e - write + Syntax: OK +
   file created via /api/chat (confirm yes). Stage 78: this update.
+- UPDATE 84 (2026-08-12): session-wide auto-confirm 'yes all' (tools/_state
+  AUTO_CONFIRM_SESSIONS+CONFIRM_COUNTS, core/tool_executor destructive
+  branch): user replying "yes all"/"да всё"/"go all" runs the current tool
+  AND flags the session - further write/edit/bash/commit/undo auto-run until
+  the session ends (explicit opt-in, hint echoed); confirm messages numbered
+  per session ("(session confirm #N)"); test_yes_all_auto_confirm; live:
+  create-3-files task + "yes all" -> 3 writes in one pass, zero confirms;
+  tests 126/126 x2; keeps [CONFIRM] token layout (back-compat).
+- Note: tests assert "[CONFIRM]" substring in loop output - keep 'CONFIRM]'
+  token intact when adding annotation text inside the bracket block.
 - Note: subprocess.run(text=True) without errors= defaults to strict
   decoding on Windows - any non-utf8 pipe output kills that call; use
   errors='replace' for unknown-encoding user commands.

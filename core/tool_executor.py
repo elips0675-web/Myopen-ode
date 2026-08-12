@@ -214,8 +214,18 @@ def execute_tool_block(idx, tc, ctx):
 
     if name in DESTRUCTIVE:
         last = (msgs[-1]["content"].strip().lower() if msgs else "")[:5]
-        if _auto_confirm_safe(name, tc):
-            # AUTO_CONFIRM_SAFE=1: brand-new file writes need no confirmation
+        yes_all = (last in ("yes a", "yesal", "да вс", "go al", "ok al"))
+        auto_session = ctx["session_id"] in _s.AUTO_CONFIRM_SESSIONS
+        if yes_all:
+            _s.AUTO_CONFIRM_SESSIONS.add(ctx["session_id"])
+            auto_session = True
+            hint_auto = True
+        elif auto_session:
+            hint_auto = False
+        else:
+            hint_auto = None
+        if _auto_confirm_safe(name, tc) or auto_session:
+            # AUTO_CONFIRM_SAFE=1 or session-wide auto-confirm: no confirmation
             r = execute_tool(name, tc)
             _sess_record(ctx["sess_stats"], name, r)
             ctx["emit"]({"type": "tool", "name": name, "args": tc, "result": r[:200]})
@@ -223,6 +233,8 @@ def execute_tool_block(idx, tc, ctx):
             calls.append(name)
             state["last_result_name"], state["last_result_text"] = name, r[:2000]
             _plan_mark(ctx, r)
+            if hint_auto:
+                full[0] += "[tool: session auto-confirm ON — further destructive tools run without asking]\n"
         elif last in ("yes", "y", "go a", "да", "ok", "cont", "proc", "do i"):
             r = execute_tool(name, tc)
             _sess_record(ctx["sess_stats"], name, r)
@@ -233,9 +245,12 @@ def execute_tool_block(idx, tc, ctx):
             _plan_mark(ctx, r)
         else:
             ask = f"Allow {name}?\nArgs: {json.dumps(tc, ensure_ascii=False)[:300]}"
-            full[0] += f"\n[CONFIRM] {ask}\nReply 'yes' to proceed.\n"
+            with _s.CONFIRM_LOCK:
+                _s.CONFIRM_COUNTS[ctx["session_id"]] = _s.CONFIRM_COUNTS.get(ctx["session_id"], 0) + 1
+                n = _s.CONFIRM_COUNTS[ctx["session_id"]]
+            full[0] += f"\n[CONFIRM] (session confirm #{n}) {ask}\nReply 'yes' to proceed (or 'yes all' to auto-confirm the rest of this session).\n"
             msgs.append({"role": "assistant", "content": content})
-            hint = f"User must reply 'yes' to execute {name}."
+            hint = f"User must reply 'yes' to execute {name}. 'yes all' enables auto-confirm for the session."
             msgs.append({"role": "system", "content": hint})
             msgs.append({"role": "user", "content": ask})
             ctx["pending_set"](ctx["session_id"], name, tc)
