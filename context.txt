@@ -1133,3 +1133,17 @@ UPDATE (2026-08-09) - stages 65-72 (DeepSeek 6 + Kimi 4 recommendations done):
   breaks test_audit_api - event-bus tests save/restore old_bus via
   container._REGISTRY instead.
 
+- UPDATE 73-78 (2026-08-12): stage 73 - Windows bash-output stability:
+  errors='replace' added to subprocess.run in _tool_bash and node --check
+  (non-UTF8 bytes 0xAD from cp866/cp1251 crashed subprocess reader threads
+  with UnicodeDecodeError, rare flake 1/4 runs); regression test
+  test_bash_non_utf8_output; tests 124->125, 3 consecutive full passes.
+  Stage 74: server :8765 restarted on current code (EXTRA_ROOTS=
+  E:\swiftmatchmy;E:\swiftmatchmy1). Stage 75: E:\swiftmatchmy1 cleaned of
+  agent-generated junk (node_modules 24MB, server/, client/, database/,
+  stub files). Stage 76: live 3/3 on fresh code (create 16.9s, question
+  2.4s, edit 10.5s). Stage 77: E2E stage77-e2e - write + Syntax: OK +
+  file created via /api/chat (confirm yes). Stage 78: this update.
+- Note: subprocess.run(text=True) without errors= defaults to strict
+  decoding on Windows - any non-utf8 pipe output kills that call; use
+  errors='replace' for unknown-encoding user commands.
