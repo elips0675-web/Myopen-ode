@@ -19,3 +19,5 @@ add.py
 .bench_tmp/
 .bench_log.txt
 .bench_err.txt
+.live_tests*/
+
