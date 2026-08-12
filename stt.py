@@ -54,7 +54,7 @@ def _via_binary(binary, audio_path):
     cmd = [binary, "-m", os.environ.get("AI_STT_MODEL", "ggml-base.bin"),
            "-f", audio_path, "-np", "1", "-nt", "1",
            "-l", os.environ.get("AI_STT_LANG", "ru"), "-otxt"]
-    r = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+    r = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=300)
     if out_txt.exists():
         text = out_txt.read_text("utf-8", errors="ignore").strip()
         out_txt.unlink(missing_ok=True)

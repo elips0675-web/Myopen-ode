@@ -229,14 +229,14 @@ def verify_file(path):
         if any(ext.endswith(e) for e in pattern.split(",")):
             p = Path(path) if os.path.isabs(path) else WORK_DIR / path
             fcmd = cmd.replace("{file}", f'"{p}"')
-            r = subprocess.run(fcmd, shell=True, capture_output=True, text=True, timeout=15)
+            r = subprocess.run(fcmd, shell=True, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=15)
             return r.stdout.strip()[:1000] or r.stderr.strip()[:1000]
     return ""
 
 # ─── git helpers ──────────────────────────────────────────
 def git(*args):
     try:
-        r = subprocess.run(["git"] + list(args), cwd=str(WORK_DIR), capture_output=True, text=True, timeout=10)
+        r = subprocess.run(["git"] + list(args), cwd=str(WORK_DIR), capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=10)
         return r.stdout.strip() or r.stderr.strip()
     except (OSError, subprocess.SubprocessError, ValueError):
         return "(git not available)"

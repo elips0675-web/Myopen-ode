@@ -500,7 +500,7 @@ def _tool_grep(args):
     err = ensure_safe_path(cwd)
     if err: return err
     cwd = str(resolve(cwd))
-    r = subprocess.run(f'rg -n "{pat}" --glob "{inc}"', shell=True, cwd=cwd, capture_output=True, text=True, timeout=30)
+    r = subprocess.run(f'rg -n "{pat}" --glob "{inc}"', shell=True, cwd=cwd, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=30)
     return "\n".join(r.stdout.split("\n")[:60]) or "No matches"
 
 def _tool_list(args):

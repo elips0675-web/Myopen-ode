@@ -28,7 +28,7 @@ def _vram_info():
         r = subprocess.run(
             ["nvidia-smi", "--query-gpu=memory.total,memory.used",
              "--format=csv,noheader,nounits"],
-            capture_output=True, text=True, timeout=5)
+            capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=5)
         total, used = r.stdout.strip().split(",")[:2]
         total, used = int(total), int(used)
         data = {"total_mb": total, "used_mb": used,
@@ -113,14 +113,16 @@ def update_check():
         return _UPDATE_CACHE["data"]
     try:
         cur = subprocess.run(["git", "rev-parse", "--short", "HEAD"], cwd=str(work_dir()),
-                             capture_output=True, text=True, timeout=10).stdout.strip()
+                             capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=10).stdout.strip()
         remote = subprocess.run(["git", "ls-remote", "origin", "refs/heads/master"],
-                                cwd=str(work_dir()), capture_output=True, text=True, timeout=20)
+                                cwd=str(work_dir()), capture_output=True, text=True,
+                                encoding="utf-8", errors="replace", timeout=20)
         latest = remote.stdout.split()[0][:7] if remote.stdout.split() else ""
         behind = 0
         if latest:
             bc = subprocess.run(["git", "rev-list", "--count", "HEAD..origin/master"],
-                                cwd=str(work_dir()), capture_output=True, text=True, timeout=20)
+                                cwd=str(work_dir()), capture_output=True, text=True,
+                                encoding="utf-8", errors="replace", timeout=20)
             try: behind = int(bc.stdout.strip() or 0)
             except ValueError: pass
         data = {"ok": True, "current": cur, "latest": latest,

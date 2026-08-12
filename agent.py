@@ -42,7 +42,7 @@ def _auto_pick_model():
             return MODEL
         vr = subprocess.run(["nvidia-smi", "--query-gpu=memory.total",
                              "--format=csv,noheader,nounits"], capture_output=True,
-                            text=True, timeout=15)
+                            text=True, encoding="utf-8", errors="replace", timeout=15)
         vram = max((int(x.strip()) for x in vr.stdout.splitlines() if x.strip().isdigit()),
                    default=0)
         if vram >= 10_000:  # MB
@@ -64,7 +64,7 @@ def _detect_docker():
         return False
     try:
         r = subprocess.run(["docker", "version"], capture_output=True,
-                           text=True, timeout=5)
+                           text=True, encoding="utf-8", errors="replace", timeout=5)
         ok = r.returncode == 0
         if ok:
             log.warning("Docker detected — bash commands CAN run sandboxed: "
@@ -90,7 +90,7 @@ def _auto_pick_embed_model():
     if os.environ.get("EMBED_MODEL"):
         return EMBED_MODEL
     try:
-        r = subprocess.run(["ollama", "list"], capture_output=True, text=True, timeout=15)
+        r = subprocess.run(["ollama", "list"], capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=15)
         installed = [ln.split()[0] for ln in r.stdout.splitlines()[1:] if ln.strip()]
         preferred = ["bge-m3", "mxbai-embed-large", "snowflake-arctic-embed",
                      "all-minilm:33m", "all-minilm", "bge-small-en-v1.5", "bge-base-en-v1.5"]
