@@ -1,6 +1,6 @@
 # My OpenCode — Status
 
-## Что сделано (Core) — 83/83 тестов
+## Что сделано (Core) — 124/124 тестов
 - [x] FastAPI + SSE, agent loop (12 итераций, таймаут, cancel), prompt-based tool calling, стриминг тулов в UI
 - [x] 27 инструментов (read/write/edit/bash/glob/grep/list/web/websearch/diff/commit/undo/verify/plan/search/question/skill/patch/task/todo/lsp/testgen/db_query/deps/mcp/snapshot/restore + плагины)
 - [x] Сессии SQLite (+миграция из JSON), multi-project, RAG (BM25+эмбеддинги, FAISS/numpy, RAG_MAX_CHUNKS, фоновая индексация), LLM кеш TTL, memory, skills, subagents, slash-команды, MCP сервер+клиенты, LSP (18 серверов), CodeMirror + терминал SSE, pywebview desktop, плагины, audit log
@@ -199,7 +199,6 @@ Kimi 2: 8.3/10 → DeepSeek 2: 8.5/10 → DeepSeek 3: 8.6/10 → Kimi 3: 8.7/10 
 - [x] DI-контейнер вместо import agent as _agent — Этап 41 (core/container.py: register/resolve/has/reset; провайдеры-коллбэки (work_dir/sessions_dir/memory_dir/logger/sessions_db), живые после switch_project; api_files/api_misc/api_sessions переведены на resolve, остались только прямые функции)
 - [x] Абстракции RAG/DB — Этап 42 (core/abstractions.py: RAGStore+RagAdapter (обёртка rag-модуля), KVStore+SqliteKVStore (thread-safe); init_defaults регистрирует 'rag' в контейнере, 'sessions_db' — в agent.py; точки замены FAISS→внешняя векторная БД / SQLite→Redis)
 - [x] Whisper-сервер STT — Этап 43 (stt.py: POST /api/stt multipart (wav/mp3/ogg/m4a/webm, ≤25MB) + GET /api/stt/status; бэкенды AI_STT_URL (прокси whisper-сервера) или AI_STT_BINARY (whisper.cpp main.exe -l ru -otxt); без бэкенда → 501; UI: MediaRecorder-фолбэк при отсутствии Web Speech API, мик-кнопка скрыта только если нет обоих)
-- [ ] Внешняя переоценка 9.5/10 (весь план 8.3–8.9 закрыт + рекомендации DS6 (65–68) и Kimi4 (69–72) выполнены, тесты 124/124 + live 3/3; пакет для ревьювера — RE_EVAL.md, Этап 44; остался P0 — видео-демо)
 
 ## Вне оценок (этапы 45–48, 2026-08-09) — развитие агента по своей дорожной карте
 - [x] Reviewer/Fixer сабагенты — Этап 45 (SUBAGENT_PROMPTS: reviewer — многошаговый разбор кода с примерами; fixer — применение правок с самопроверкой; GENERAL — общий; тул task проксирует их через run_agent_loop; тест test_reviewer_subagent)

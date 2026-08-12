@@ -82,7 +82,7 @@
 Оценить версию с учётом этапов 35–72 (коммиты 6afcfb9..HEAD):
 - Архитектура: DI, абстракции хранилищ, модульность core/ + api_* + tools/,
   EventBus, встроенный MCP-сервер, AST bash guard
-- Код/тесты: 123/123 + 3/3 live, AST-guard, git-бэкапы, rate limit,
+- Код/тесты: 124/124 + 3/3 live, AST-guard, git-бэкапы, rate limit,
   MCP-интеграционный тест, prompt compression (few-shot tier), UI polish
 - Возможности: работа вне workspace, обучение скиллами, Whisper STT,
   RAG over plan, self-healing, native tool calling (qwen3), Tauri desktop,
@@ -104,7 +104,7 @@
 - Код: agent.py (588→617 строк: /api/chat + маркеры), tools/__init__.py
   (SUBAGENT_PROMPTS/DESCS, правила 1–23), tools/exec.py (_tool_task),
   core/agent_loop.py, core/container.py, core/abstractions.py, rag.py,
-  test_agent.py (115 тестов), test_bench.py (7 сценариев)
+  test_agent.py (124 теста), test_bench.py (7 сценариев)
 
 2) Текст промпта для Kimi (скопировать как есть):
 
