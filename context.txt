@@ -1157,3 +1157,18 @@ UPDATE (2026-08-09) - stages 65-72 (DeepSeek 6 + Kimi 4 recommendations done):
 - Note: subprocess.run(text=True) without errors= defaults to strict
   decoding on Windows - any non-utf8 pipe output kills that call; use
   errors='replace' for unknown-encoding user commands.
+- UPDATE 85 (2026-08-12): stage 79 - video-demo rehearsal via /api/chat:
+  create-file 31.3s, rename_symbol 19.7s, @reviewer 14.2s (VERDICT PASS),
+  skills 15.0s (skill calls intermittent - fallback wording added to
+  VIDEO_DEMO.md). Stage 82: all remaining strict-UTF8 subprocess closed
+  (backup.py verify_file+git, exec.py _tool_grep/rg, stt.py, agent.py
+  ollama/nvidia-smi/docker list, api_misc.py vram+update) - bench qwen3:8b
+  7/7 record 270.5s, 0 UnicodeDecodeError; SUMMARY.md rewritten UTF-8.
+  Stage 83: server :8765 restarted (EXTRA_ROOTS must be re-set at every
+  restart). Stage 84: 'yes all' (see UPDATE 84 above). Stage 85: docs synced
+  to 126/126 (README ru+en, KIMI_REVIEW_SUMMARY, RE_EVAL probe steps + Kimi
+  prompt, TODO header/stage-73 note/re-eval line, VIDEO_DEMO numbers),
+  USER_GUIDE documents 'yes all' batch mode; historical dated entries
+  (115/115, 123/123, 124/124) kept as-is on purpose (dated journal).
+- Note: history.txt/context.txt are dated journals - do NOT retro-edit stale
+  dated entries during count-sync passes; only append new UPDATE entries.

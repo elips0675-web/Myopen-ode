@@ -8,7 +8,8 @@
 - Тесты: **126/126** (`python -X utf8 test_agent.py`) + **live 3/3** на
   qwen3:8b (`python -X utf8 test_live.py --models qwen3:8b`: create file 18.3s,
   simple question, edit rename) + **бенчмарк по 3 моделям** (`python -X utf8
-  test_bench.py --models qwen3:8b`): qwen3:8b 7/7 (394s, включая subagent-review), qwen2.5-coder:7b 5/7
+  test_bench.py --models qwen3:8b`): qwen3:8b 7/7 (рекорд 270.5s, 0 ошибок
+   кодировки; прежние 394s → 426.7s), qwen2.5-coder:7b 5/7
   (после few-shot-подстройки этапом 69; пик 6/7), deepseek-coder-v2:16b 0/6; отчёты bench_reports/*.json + SUMMARY.md. Live
   @reviewer/@fixer подтверждены: обзор → «CRITICAL: calc.py:2 (division by
   zero)» и реальное исправление файла (guard b==0 → None, 60.4s); прямой
@@ -19,10 +20,11 @@
   внешний 8.9 (Оценка 5) → **DeepSeek 6: 9.4/10 + Kimi 4: 9.0/10
   (2026-08-09)**.
   ВЕСЬ план оценок P1–P3 закрыт; рекомендации DeepSeek 6 (этапы 65–68) и
-  Kimi 4 (этапы 69–72) ВЫПОЛНЕНЫ; до 9.5 остался P0 (видео-демо) по вердикту
-  DeepSeek 6.
+  Kimi 4 (этапы 69–72) ВЫПОЛНЕНЫ; дополнительно закрыты этапы 73/80/82/84–85
+  (стабильность кодировки, «yes all», синхронизация доков, см. таблицу ниже);
+  до 9.5 остался P0 (видео-демо) по вердикту DeepSeek 6.
 - Модель: qwen3:8b (native tool calling), RTX 3060 12GB, deepseek-r1:1.5b
-  как planner; 43 сессии, сервер :8765.
+  как planner; сервер :8765.
 
 ## Что закрыто ПОСЛЕ оценки 8.9/10 (этапы 35–43)
 | Этап | Что | Доказательство |
@@ -62,6 +64,16 @@
 | 71 | AST bash guard: python -c анализируется через ast.parse+compile (блок subprocess/socket/ctypes/shutil-импортов, os.system/popen/remove, shutil.rmtree, eval/exec, битый синтаксис, опасные python -m) вместо keyword-совпадений; node -e — узкие структурные паттерны; inline-тела вырезаются из whitelist-сегментации | test_bash_ast_guard (24 кейса) + обновлённый test_bash_filter |
 | 72 | UI polish: анимация появления сообщений (fade+slide), pulse у «thinking», fade-in dropzone, press-feedback на кнопках/чипах/карточках, тень Send, типографика 13.5px/1.65 | static/app.js + ui.py |
 
+## Дополнительно закрыто: стабильность и UX (этапы 73–85)
+| Этап | Что | Доказательство |
+|---|---|---|
+| 73 | Устранён редкий Windows-флак кодировки: errors='replace' в subprocess (non-UTF8 байты 0xAD из cp866/cp1251 ломали читающие потоки) | test_bash_non_utf8_output; 125/125 ×3 |
+| 79 | Репетиция сценария видео-демо через API (тайминги записаны в VIDEO_DEMO.md) | create-file 31.3s, rename_symbol 19.7s, @reviewer 14.2s, skills 15.0s |
+| 80 | Стабильность: 5 прогонов 125/125 подряд | test_agent.py |
+| 82 | Все оставшиеся strict-UTF8 subprocess закрыты (backup verify/git, rg, STT, ollama/nvidia-smi/docker, update-проверки) | бенч qwen3:8b 7/7 рекорд 270.5s, 0 ошибок кодировки |
+| 83–84 | «yes all»: opt-in авто-подтверждение всех деструктивных тулов до конца сессии + нумерация подтверждений, токен [CONFIRM] сохранён (обратная совместимость); сервер на свежем коде | test_yes_all_auto_confirm; live: 3 файла одним ходом, 0 подтверждений |
+| 85 | Полная синхронизация 126/126 во всех доках; USER_GUIDE документирует «yes all» | README/KIMI_REVIEW_SUMMARY/RE_EVAL/TODO/VIDEO_DEMO |
+
 ## Как проверить самому (5 минут)
 1. `git clone https://github.com/elips0675-web/Myopen-ode && cd Myopen-ode`
 2. `python -X utf8 test_agent.py` → ждать «126/126 passed»
@@ -79,7 +91,7 @@
 8. Количество тестов в шаге 2 — «126/126 passed».
 
 ## Запрос на оценку
-Оценить версию с учётом этапов 35–72 (коммиты 6afcfb9..HEAD):
+Оценить версию с учётом этапов 35–85 (коммиты 6afcfb9..892702a):
 - Архитектура: DI, абстракции хранилищ, модульность core/ + api_* + tools/,
   EventBus, встроенный MCP-сервер, AST bash guard
 - Код/тесты: 126/126 + 3/3 live, AST-guard, git-бэкапы, rate limit,
@@ -104,7 +116,7 @@
 - Код: agent.py (588→617 строк: /api/chat + маркеры), tools/__init__.py
   (SUBAGENT_PROMPTS/DESCS, правила 1–23), tools/exec.py (_tool_task),
   core/agent_loop.py, core/container.py, core/abstractions.py, rag.py,
-  test_agent.py (124 теста), test_bench.py (7 сценариев)
+  test_agent.py (126 тестов), test_bench.py (7 сценариев)
 
 2) Текст промпта для Kimi (скопировать как есть):
 
@@ -113,11 +125,12 @@
 Раунд 1 — архитектура: DI-контейнер, абстракции хранилищ, модульность
 core/ + api_* + tools/, безопасность (path-jail, bash whitelist, rate
 limit), оффлайн-стек. Раунд 2 — качество: 126/126 автотестов
-(test_agent.py), AST-guard, git-бэкапы, бенчмарк 7/7 на qwen3:8b live.
+(test_agent.py), AST-guard, git-бэкапы, стабильность Windows-кодировки
+(errors='replace', 0 флаков), бенчмарк 7/7 рекорд 270.5s на qwen3:8b live.
 Раунд 3 — возможности: работа вне workspace (EXTRA_ROOTS), 11 обучающих
 скиллов, Whisper STT, RAG over plan, self-healing, native tool calling,
 сабагенты @reviewer/@fixer/@general (прямые маркеры и тул task),
-Tauri desktop. ВЕРДИКТ: PASS/FAIL по каждому пункту плана оценок
+«yes all» (пакетное подтверждение деструктивных тулов), Tauri desktop. ВЕРДИКТ: PASS/FAIL по каждому пункту плана оценок
 (KIMI_REVIEW_SUMMARY.md), итог — одна оценка и 5 конкретных улучшений
 до 10/10.
 ---
