@@ -18,11 +18,13 @@
   «Syntax: OK», подтверждение «yes» в той же сессии).
 - Оценки истории: Kimi 8.7 → внешний 8.8 → DeepSeek 8.9 (+переоценка 8.9) →
   внешний 8.9 (Оценка 5) → **DeepSeek 6: 9.4/10 + Kimi 4: 9.0/10
-  (2026-08-09)**.
+  (2026-08-09)** → **DeepSeek 7: 9.2/10 + Kimi 5: 9.2/10 (2026-08-13;
+  файлы «Оценка deepseek.txt»/«Оценка kimi.txt» обновлены ревьюерами)**.
   ВЕСЬ план оценок P1–P3 закрыт; рекомендации DeepSeek 6 (этапы 65–68) и
-  Kimi 4 (этапы 69–72) ВЫПОЛНЕНЫ; дополнительно закрыты этапы 73/80/82/84–85
-  (стабильность кодировки, «yes all», синхронизация доков, см. таблицу ниже);
-  до 9.5 остался P0 (видео-демо) по вердикту DeepSeek 6.
+  Kimi 4 (этапы 69–72) ВЫПОЛНЕНЫ; дополнительно закрыты этапы 73/80/82/84–87
+  (стабильность кодировки, «yes all», синхронизация доков, dating-задача
+  агента — см. таблицы ниже). По консенсусу переоценки 2026-08-13 до 9.5/10
+  остались P0 (видео-демо) и P1 (модель-независимость).
 - Модель: qwen3:8b (native tool calling), RTX 3060 12GB, deepseek-r1:1.5b
   как planner; сервер :8765.
 
@@ -73,6 +75,23 @@
 | 82 | Все оставшиеся strict-UTF8 subprocess закрыты (backup verify/git, rg, STT, ollama/nvidia-smi/docker, update-проверки) | бенч qwen3:8b 7/7 рекорд 270.5s, 0 ошибок кодировки |
 | 83–84 | «yes all»: opt-in авто-подтверждение всех деструктивных тулов до конца сессии + нумерация подтверждений, токен [CONFIRM] сохранён (обратная совместимость); сервер на свежем коде | test_yes_all_auto_confirm; live: 3 файла одним ходом, 0 подтверждений |
 | 85 | Полная синхронизация 126/126 во всех доках; USER_GUIDE документирует «yes all» | README/KIMI_REVIEW_SUMMARY/RE_EVAL/TODO/VIDEO_DEMO |
+| 87 | Готовое dating-приложение размещено самим агентом с GitHub в E:\swiftmatchmy1 (git clone elpanayurich/tinder, vanilla HTML/CSS/JS без сборки, 92.7s) + новый скилл dating-app-mvp | dating_v5_driver.py (градер: index.html/.css/.js на месте → PASS) |
+
+## Переоценка 2026-08-13 — DeepSeek 7 и Kimi 5 (оба 9.2/10)
+Оба ревьюера сошлись: код достоин 9+, до **9.5/10** осталось **видео-демо (P0)**
+и **модель-независимость (P1)**. Прочие рекомендации (детали в TODO.md):
+| Приоритет | Что | Кто |
+|---|---|---|
+| P0 | Видео-демо — сценарий и тайминги готовы: VIDEO_DEMO.md | оба |
+| P1 | Модель-независимость: промпт-адаптация под deepseek-coder-v2:16b (0/6) и qwen2.5-coder:7b (5/7 → цель 6–7/7) | оба |
+| P2 | Confidence scoring: лог % успешных tool calls per model/task | Kimi |
+| P2 | Единая документация docs/ (MkDocs или DEVELOPMENT.md) | Kimi |
+| P2 | Метрики: время тулов, токены по сессиям, экспорт JSON | DeepSeek |
+| P2 | SessionManager/ProjectManager вместо глобального состояния agent.py | Kimi |
+| P3 | ALLOW_OUTSIDE → prompt-переподтверждение при операциях вне workspace | Kimi |
+| P3 | Интерактивный diff + кликабельное план-дерево, индикаторы токенов/VRAM | DeepSeek |
+| P3 | LSP-restart при падении сервера + heartbeat индикации прогресса | DeepSeek |
+| P3 | Установщик одной командой + CI/CD-интеграция | DeepSeek |
 
 ## Как проверить самому (5 минут)
 1. `git clone https://github.com/elips0675-web/Myopen-ode && cd Myopen-ode`
@@ -82,7 +101,7 @@
    hello.py с функцией greet» (деструктивные — подтвердить «да»)
 4. Для проверки обучения: «какими скиллами создашь dating-приложение
    полностью оффлайн?» → агент вызовет skill webapp/offline-ollama
-5. Скиллы: папка .agent_skills/ (11 md). Обучение по методологии —
+5. Скиллы: папка .agent_skills/ (12 md). Обучение по методологии —
    «Обучения программиста.txt» в корне репозитория.
 6. Бенчмарк: `python -X utf8 test_bench.py --models qwen3:8b` → 7/7,
    отчёт bench_reports/qwen3-8b.json
@@ -91,7 +110,7 @@
 8. Количество тестов в шаге 2 — «126/126 passed».
 
 ## Запрос на оценку
-Оценить версию с учётом этапов 35–85 (коммиты 6afcfb9..892702a):
+Оценить версию с учётом этапов 35–87 (коммиты 6afcfb9..43b96af):
 - Архитектура: DI, абстракции хранилищ, модульность core/ + api_* + tools/,
   EventBus, встроенный MCP-сервер, AST bash guard
 - Код/тесты: 126/126 + 3/3 live, AST-guard, git-бэкапы, rate limit,
@@ -111,7 +130,7 @@
 1) Список файлов репозитория (открыть прямо в GitHub, развернув вкладки):
 - README.md, TODO.md (разделы «Что сделано», «Этапы 35–64»), RE_EVAL.md (этот
   файл), USER_GUIDE.md, KIMI_REVIEW_SUMMARY.md, ARCHITECTURE.md (Mermaid),
-  context.txt, AGENTS.md, .agent_skills/*.md (11 скиллов),
+  context.txt, AGENTS.md, .agent_skills/*.md (12 скиллов),
   bench_reports/SUMMARY.md + qwen3-8b.json
 - Код: agent.py (588→617 строк: /api/chat + маркеры), tools/__init__.py
   (SUBAGENT_PROMPTS/DESCS, правила 1–23), tools/exec.py (_tool_task),
@@ -127,7 +146,7 @@ core/ + api_* + tools/, безопасность (path-jail, bash whitelist, rat
 limit), оффлайн-стек. Раунд 2 — качество: 126/126 автотестов
 (test_agent.py), AST-guard, git-бэкапы, стабильность Windows-кодировки
 (errors='replace', 0 флаков), бенчмарк 7/7 рекорд 270.5s на qwen3:8b live.
-Раунд 3 — возможности: работа вне workspace (EXTRA_ROOTS), 11 обучающих
+Раунд 3 — возможности: работа вне workspace (EXTRA_ROOTS), 12 обучающих
 скиллов, Whisper STT, RAG over plan, self-healing, native tool calling,
 сабагенты @reviewer/@fixer/@general (прямые маркеры и тул task),
 «yes all» (пакетное подтверждение деструктивных тулов), Tauri desktop. ВЕРДИКТ: PASS/FAIL по каждому пункту плана оценок

@@ -386,7 +386,7 @@ AI_JSON_FORMAT=1 уже частично покрывают; семантиче�
 ### Обновление 2026-08-09 — этапы 35–43 (план до 9.5 закрыт, кроме внешней переоценки)
 - 35 rate limiting /api/chat (per-IP, burst), 36 семантическая валидация путей (директория → подсказка ДО мутаций),
   37 unquoted JSON-значения, 38 EXTRA_ROOTS/ALLOW_OUTSIDE (работа вне workspace),
-  39 glob по абсолютным путям/cwd, 40 обучение SwiftMatch-класс приложений (11 скиллов + Rule 22),
+  39 glob по абсолютным путям/cwd, 40 обучение SwiftMatch-класс приложений (12 скиллов + Rule 22),
   41 DI-контейнер (core/container.py, api_* на resolve вместо import agent), 42 абстракции RAG/DB
   (RagAdapter/KVStore/init_defaults), 43 Whisper STT (stt.py, /api/stt, MediaRecorder-фолбэк).
 - Тесты: 86 → 104 → 107/107. Осталось: внешняя переоценка 9.5/10.

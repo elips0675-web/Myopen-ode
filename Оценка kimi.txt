@@ -1,393 +1,68 @@
-Вот объективная оценка проекта AI Coding Agent v2 (My OpenCode) по исходникам.
-Общая оценка: 7.8 / 10
-Это очень крепкий pet-project уровня «production-ready prototype». Автор решил нетривиальную инженерную задачу — заставить 7B локальную модель вести себя как полноценный coding agent с 25+ инструментами, — и справился с ней. Но между «работает на демо» и «можно доверить реальный код» есть зазор в виде багов, race conditions и дыр в безопасности.
-Сильные стороны
+Оценка проекта My OpenCode v2 на основе предоставленных артефактов:
+Итоговая оценка: 9.2 / 10
+Это зрелый, production-ready проект с одной из самых продвинутых архитектур среди локальных open-source агентов-программистов. Ниже разбивка по осям.
+1. Архитектура и код: 9.5 / 10
+Что впечатляет:
+Модульность: разбиение на core/, tools/, api_*.py, DI-контейнер, EventBus — уровень enterprise-разработки.
+Абстракции: RAGStore/KVStore протоколы позволяют заменить FAISS/SQLite на внешние решения без переписывания бизнес-логики.
+Два режима работы: native tool calling (qwen3) + legacy prompt-based (все остальные) — правильный прагматичный подход.
+Сабагенты: reviewer/fixer/general с @-маркерами — реализовано лучше, чем в большинстве облачных решений.
+Минус:
+agent.py всё ещё ~470 строк и содержит глобальное состояние сессий. Для 10/10 стоит выделить SessionManager и ProjectManager в отдельные сервисы.
+2. Тесты и надёжность: 9.5 / 10
+Что впечатляет:
+126/126 unit-тестов + live-набор (3/3) + бенчмарк (7/7 на qwen3:8b).
+AST bash guard (stage 71) — редко кто доходит до такого уровня безопасности в open-source.
+Windows-стабильность: errors="replace" в subprocess, обработка cp866/cp1251 — признак реального battle-testing.
+Crash recovery: checkpoint каждые 2 итерации + interrupted-маркер.
+Минус:
+Бенчмарк показывает, что только qwen3:8b проходит 7/7. qwen2.5-coder:7b — 5/7, deepseek-coder-v2:16b — 0/6. Это ограничение экосистемы моделей, не кода, но для end-user это значит: «работает только на одной модели».
+3. Безопасность: 9.0 / 10
+Что впечатляет:
+Whitelist (не blacklist) bash-команд.
+AST-проверка python -c/node -e через ast.parse + compile().
+Path jail с resolve() (symlink-safe).
+Docker-песочница с readonly-флагами.
+Авто-подтверждение только для новых файлов (AUTO_CONFIRM_SAFE).
+Минус:
+ALLOW_OUTSIDE=1 — слишком радикальный escape hatch. Для 10/10 стоит добавить режим «prompt-переподтверждение перед каждой операцией вне workspace» вместо полного снятия ограничений.
+4. AI-логика и промпты: 9.0 / 10
+Что впечатляет:
+Prompt compression: few-shot tier на итерациях 0–1, compact prompt с it≥3 — экономия ~1K токенов/вызов.
+Self-healing loop: при 2+ ошибках подряд — смена стратегии (edit → read→write).
+Task-level router: zero-shot классификация задачи перед циклом.
+RAG over plan: предзагрузка контекста по шагам плана.
+Минус:
+Нет оценки уверенности (confidence score) для tool calls. Модель иногда выдаёт broken blocks — система ловит это fallback'ом, но не отслеживает метрику «качество вызова».
+5. UX и UI: 8.5 / 10
+Что впечатляет:
+CodeMirror 6 (офлайн-бандл), xterm.js + WebSocket PTY, Tauri desktop.
+Анимации, типографика, VRAM-индикатор, plan tree UI.
+Голосовой ввод (Web Speech API + Whisper fallback).
+Минус:
+UI — это всё же inline-HTML строка в ui.py, а не отдельное SPA. Для 10/10 нужен либо полноценный React/Vue фронтенд, либо Monaco вместо CodeMirror. Сейчас это «достаточно хорошо», но не «превосходно».
+6. Документация и экосистема: 9.0 / 10
+Что впечатляет:
+USER_GUIDE.md, ARCHITECTURE.md, VIDEO_DEMO.md, RE_EVAL.md.
+Обучающие скиллы (SwiftMatch-класс приложений).
+Swagger UI на /docs.
+Минус:
+Документация разбросана по 5+ файлам (README.md, TODO.md, context.txt, AGENTS.md, KIMI_REVIEW_SUMMARY.md). Для 10/10 стоит свести в единый docs/ с MkDocs или хотя бы единым DEVELOPMENT.md.
+Что отделяет от 9.5–10.0
 Таблица
-Аспект	Комментарий
-Архитектура	Разумное разделение: agent.py (API), tools.py (ядро), rag.py (поиск), ui.py (view). Zero npm deps — смелое и рабочее решение для self-hosted инструмента.
-Tool calling	Prompt-based JSON blocks (\``tool) — правильный подход для Ollama, где нет нативного tool_calls`. Fallback на auto-execute при «yes»/«да» — удобно.
-RAG	Гибрид BM25 + cosine similarity с инкрементальным дисковым кэшем — это не просто «добавили векторный поиск», а продуманная система с _FILE_STATS и перестройкой индекса только для изменённых файлов.
-Контекст	Авто-суммаризация каждые 3 итерации через 1.5B модель — разумный trade-off для ограниченного контекста.
-UI/UX	CodeMirror с табами, тёмная тема, drag-and-drop, autocomplete @/#//, мобильная адаптация. Для inline-HTML без сборки — очень достойно.
-Мультипроектность	projects.json + переключение WORK_DIR с реинициализацией RAG и плагинов.
-Плагины	Динамическая загрузка .agent_plugins/*.py через importlib — расширяемость без форка.
-Критические баги и слабости (с указанием мест)
-1. patch / _apply_diff — полностью сломан (tools.py, ~строка 600)
-Python
-def _apply_diff(content, diff_text):
-    ...
-    for line in diff_text.split("\n"):
-        if line.startswith("+"):
-            new_lines.append(line[1:] + "\n")
-Этот код игнорирует номера строк из @@ -start,count +start,count @@. Он просто собирает все + строки в кучу и возвращает их как «новый файл». Любой patch, который не заменяет весь файл целиком, отработает некорректно. Это критично для coding agent.
-2. Bash sandbox — обходится в один ход (tools.py, ~строка 580)
-Python
-BASH_BLACKLIST = ["rm -rf /", "rm -rf ~", ...]
-Blacklist-подход не работает:
-rm -rf /tmp/.. обойдёт проверку.
-bash -c 'rm -rf /' тоже.
-Любая обфускация (r$(echo m) -rf /) пройдёт.
-Нужен whitelist разрешённых команд или shlex.split + валидация аргументов.
-3. Глобальное mutable-состояние — не thread-safe
-TODO_LIST = [] (tools.py)
-LLM_CACHE = {} (tools.py)
-RAG_CHUNKS, RAG_INDEX, _FILE_STATS (rag.py)
-FastAPI по умолчанию многопоточный (uvicorn). Два одновременных чата могут испортить кэш или todo-лист друг друга. Нужны threading.Lock() или asyncio.Lock().
-4. ensure_safe_path обходится симлинками (tools.py, ~строка 50)
-Python
-def ensure_safe_path(path):
-    p = resolve(path).resolve()
-    wk = WORK_DIR.resolve()
-    if wk not in p.parents and p != wk:
-        return "Error: ..."
-Если внутри WORK_DIR есть symlink на /etc, resolve() следует по нему и возвращает путь вне workspace. Нужно проверять до resolve().
-5. Нет graceful cancellation
-В UI есть кнопка Cancel (ac.abort()), но на бэкенде (agent.py, run_agent_loop) нет проверки флага отмены внутри длинных циклов. Запрос прервётся только на следующем fetch, но не во время выполнения bash или read.
-6. stream=False в call_ollama (tools.py, ~строка 380)
-Агент ждёт полный ответ модели целиком, прежде чем начать парсинг инструментов. Для 7B модели на RTX 3060 это десятки секунд молчания в UI. Хотя бы partial streaming для первого tool block дал бы ощущение скорости.
-7. RAG embedding — блокировка event loop
-Python
-r = requests.post(f"{OLLAMA_URL}/api/embed", ..., timeout=120)
-Выполняется в синхронном контексте. Если Ollama embed 50 файлов, сервер «висит».
-8. Нет schema-валидации аргументов инструментов
-validate_tool проверяет только наличие required fields. Нет проверки типов (path должен быть str, steps — list), диапазонов (top_k > 0) или формата (diff должен содержать @@).
-Что не сходится с заявленным в context.txt
+Приоритет	Что сделать	Ожидаемый прирост
+P1	Видео-демо (P0 из TODO.md) — запись полного цикла «создай датинг-приложение»	+0.2 (восприятие)
+P1	Модель-независимость: адаптер для deepseek-coder-v2:16b (она падает с 0/6)	+0.2 (реальная полезность)
+P2	Confidence scoring: логировать % успешных tool calls per model per task type	+0.1 (метрики)
+P2	Единый docs/: свести README/TODO/context/AGENTS в структурированную документацию	+0.1 (onboarding)
+P3	Monaco Editor вместо CodeMirror 6 для LSP-опыта уровня VS Code	+0.1 (UX)
+Сравнение с прошлыми оценками
 Таблица
-Заявлено	Реальность
-«15/15 smoke tests pass»	test_agent.py не приложен к загрузке — проверить невозможно.
-«LSP rename»	В tools.py есть вызов client.rename(...), но в загруженных файлах нет lsp.py — проверить реализацию нельзя.
-«Feature parity ~90% с OpenCode Desktop»	OpenCode Desktop имеет native IDE integration (VS Code extension), TUI, multi-file edit с планированием через AST. Здесь это веб-чат + CodeMirror. Паритет скорее 60-70%.
-Рекомендации по приоритетам
-P0 (критично):
-Переписать _apply_diff на нормальный unified diff parser (можно взять difflib + line-aware patch).
-Заменить bash blacklist на whitelist или shlex + валидация.
-Добавить threading.Lock() на TODO_LIST, LLM_CACHE и RAG-глобалы.
-P1 (важно):
-4. Добавить stream=True в call_ollama с парсингом tool blocks «на лету».
-5. Вынести RAG-индексацию в фоновый поток/процесс.
-6. Добавить pydantic-модели для аргументов каждого инструмента (валидация типов).
-P2 (улучшение):
-7. Перейти на CodeMirror 6 или Monaco (если готов пожертвовать zero-dep).
-8. Добавить AST-based multi-file edit (через parso для Python, tree-sitter для остального).
-9. Интерактивный терминал (xterm.js) — уже упомянуто в context.txt как low-priority.
-Итог
-Проект заслуживает 7.8/10 как инженерное решение для локального AI-агента. Это выше среднего open-source уровня: есть архитектура, есть продуманные механизмы (RAG, сессии, плагины), но не хватает зрелости в безопасности, корректности core-алгоритмов (diff) и многопоточности. С правкой patch и bash-sandbox можно смело ставить 8.5+.
-========================================================================
-ОЦЕНКА 2 (2026-08-05): 8.3 / 10 (с 7.8)
-========================================================================
-
-Общая оценка: 8.3 / 10 (↑ с 7.8)
-Проект перешёл границу между «пет-проектом» и «инструментом, которым можно
-пользоваться каждый день». Живой стриминг, гарды против галлюцинаций,
-FAISS-оптимизация и graceful cancellation — это серьёзные инженерные решения.
-Но архитектурный долг (монолиты по 1000+ строк) и фундаментальные ограничения
-7B-моделей не позволяют пока ставить 9+.
-
-1. Архитектура prompt-based tool calling для 7B — правильна ли?
-Оценка: 7/10 по архитектуре, 9/10 по реализации в рамках ограничений.
-Prompt-based tool calling для 7B — это не баг, а необходимость. Ollama до сих пор
-не стабилизировал нативный tools параметр для всех моделей, и подход с ```tool
-JSON-блоками — единственный рабочий способ.
-Что работает хорошо:
-- Разделение на planner (1.5B) + executor (7B) — правильное решение для экономии VRAM и скорости.
-- Bare-tool парсер как fallback — must have, потому что 7B-модели реально забывают ограждения ```tool.
-- Tool-error nudge с system-reminder — элегантный патч для «тупняка» модели после ошибки.
-Что улучшить:
-- Few-shot examples в system prompt. Сейчас в prompt перечислены схемы инструментов,
-  но нет примеров «хорошего» поведения. Добавьте 2-3 примера диалога
-  (user → assistant с tool → tool result → assistant). Для 7B-моделей это снижает
-  галлюцинации на 30-40%.
-- Structured output через Ollama format: json. Ollama поддерживает constrained JSON
-  generation ("format": "json" + JSON Schema). Это надёжнее парсинга регулярками,
-  но требует обёртки ответа модели в поле {"thought": "...", "tool": {...}}.
-  Пример схемы:
-  {
-    "type": "object",
-    "properties": {
-      "thought": {"type": "string"},
-      "tool": {
-        "type": "object",
-        "properties": {
-          "name": {"enum": ["read", "write", "edit", "bash"]},
-          "args": {"type": "object"}
-        }
-      }
-    }
-  }
-
-2. Анти-галлюцинационные гарды — достаточны ли?
-Оценка: 7.5/10. Хорошая база, но есть слепые зоны.
-Сильные стороны:
-- Блок абсурдных путей (/path/to, C:\Windows) — must have, работает.
-- Path traversal protection (ensure_safe_path) — критично для безопасности.
-- Plan-guard + anti-loop — хорошо для предотвращения зацикливания.
-- Формат-ретрай (2 попытки) — разумный компромисс между надёжностью и скоростью.
-Слабые стороны и рекомендации:
-| Угроза | Статус | Рекомендация |
-| Модель пишет код вместо ```tool | Ловится bare-парсером частично | Добавить «code detector»: если ответ содержит def/class/import без ```tool, автоматически вставить system-nudge «Не пиши код, используй write tool» |
-| Модель игнорирует [CONFIRM] | Есть auto-execute fallback | Добавить таймаут: если модель 3 раза подряд не выдаёт tool после CONFIRM, прервать цикл |
-| RAG-галлюцинации | BM25 + cosine | Добавить «source attribution» — модель должна цитировать [file:line] в ответах |
-| Bash-инъекции | Blacklist + whitelist | Перейти на whitelist-approach: разрешить только python, node, npm, git, pytest, cargo и т.д. Всё остальное — block by default. Критично: blacklist легко обходится (r\m -rf /, $(which rm)). |
-
-3. Риск деградации после выноса JS в static/
-Оценка: 2/10 риска. Всё под контролем.
-- Кэширование: FileResponse не ставит cache-headers, для localhost не проблема. Можно ?v=2 к URL.
-- CDN: CodeMirror 5 грузится с CDN — единственная внешняя зависимость. Если CDN упадёт,
-  редактор сломается. Рекомендация: vendoring — скачать codemirror.min.js + dracula.min.css
-  в static/vendor/.
-- Пути: FileResponse со static/ — стандартный паттерн, риск path traversal нулевой.
-- Рекомендация: StaticFiles mount: app.mount("/static", StaticFiles(directory="static")).
-
-4. Что важнее: рефакторинг монолитов или Docker-песочница?
-Приоритет: Docker-песочница > рефакторинг монолитов > AST-based edit
-- Docker-песочница (P1): bash-инструмент — самая опасная часть системы. Один промпт-инжект
-  или галлюцинация — и rm -rf ~ или curl ... | bash. Docker-изоляция (или firejail/nsjail)
-  превращает агента из «опасной игрушки» в «production-ready инструмент». Это блокер для
-  использования на реальных проектах.
-- Рефакторинг монолитов (P2): agent.py (1000 стр.) и tools.py (1050 стр.) — больно, но не
-  критично. Код работает, тесты проходят. Делайте постепенно: выносите по одному инструменту
-  в tools/ пакет.
-- AST-based multi-file edit (P3): крутая фича, но нишевый use-case. Сейчас edit через
-  str.replace работает для 80% случаев.
-Роадмап: Сейчас → Docker bash (1-2 недели) → Рефакторинг tools.py (3-4 недели) →
-CodeMirror 6/Monaco → AST edit.
-
-5. Что поднять до «production-ready»? (чеклист для 9/10)
-Безопасность (must have):
-[ ] Docker-изоляция bash — docker run --rm -v $(pwd):/workspace -w /workspace ...
-[ ] Whitelist bash вместо blacklist (УЖЕ СДЕЛАНО: BASH_ALLOWED whitelist + recursive python -c/-m, node -e)
-[ ] Git pre-backup перед batch-операциями (есть .agent_backups; добавить «restore all»)
-Надёжность модели (must have):
-[ ] Few-shot examples в system prompt (3 примера диалога)
-[ ] JSON Schema constrained output через Ollama format (экспериментально)
-[ ] Модель-роутер: авто-переключение на qwen2.5-coder, если deepseek-r1 начинает
-    галлюцинировать (по метрикам: % tool-blocks в ответе)
-UX (nice to have):
-[ ] CodeMirror 6 или Monaco — CodeMirror 5 морально устарел
-[ ] xterm.js для интерактивного терминала
-[ ] Inline diff preview перед подтверждением edit (как в Cursor)
-Масштабируемость (future):
-[ ] MCP client для внешних инструментов (браузер, базы данных) — mcp_client.py уже есть
-[ ] Multi-file AST edit через tree-sitter
-
-ИТОГОВЫЙ ВЕРДИКТ
-| Аспект | Оценка | Комментарий |
-| Архитектура | 8/10 | Prompt-based calling — единственный путь для 7B, реализовано грамотно |
-| Безопасность | 6/10 | Хорошая защита от path traversal, но bash всё ещё опасен |
-| Надёжность модели | 7/10 | Гарды работают, но 7B — это 7B. Few-shot + JSON schema помогут |
-| Производительность | 9/10 | Стриминг, FAISS, background RAG — отлично |
-| Код/поддерживаемость | 6/10 | Монолиты по 1000+ строк, но тесты 52/52 |
-| Общая | 8.3/10 | Production-ready для личного использования. Для команд — нужна Docker-песочница. |
-
-Главный совет: не гонитесь за рефакторингом. Вложите 2-3 вечера в Docker-изоляцию bash —
-это даст больше ценности, чем месяц разбивки tools.py на модули.
-========================================================================
-
-========================================================================
-ОЦЕНКА 3 (2026-08-06, Kimi): 8.7/10
-========================================================================
-Общая оценка: 8.7/10 — это зрелый production-ready прототип, который по функционалу уже обгоняет 80% open-source альтернатив Cursor/Claude Code. Разрыв до «доверия на реальном проекте» сузился до минимума.
-
-Что сделано выше среднего (9/10)
-- Prompt-based tool calling — инженерный подвиг. Вы не просто «заставили» 7B-модель выдавать JSON в ```tool — вы построили вокруг этого целую экосистему: lenient-парсер (одинарные кавычки, unquoted keys, trailing comma), yaml-fallback, bare-parser для JSON вне блоков, anti-loop guard, tool-error nudge, code detector, few-shot примеры. Это уровень зрелости, который обычно встречается только у коммерческих агентов (Claude Code, Devin).
-- Архитектура — модульная и продуманная. FastAPI + SSE streaming + фоновая RAG-индексация + LSP + MCP + плагины + сессии SQLite — всё это работает вместе без очевидных архитектурных трений. Отдельный респект за streaming tool execution: live-прогресс тулов в UI — это то, что отличает «игрушку» от «инструмента».
-- Безопасность — на уровне enterprise-прототипа. Whitelist bash (не blacklist), Docker-песочница (opt-in с fallback), directory traversal через resolve() + проверка, подтверждение деструктивных операций, audit-log. Это не «я добавил if 'rm' in cmd» — это системный подход.
-- Тесты — 57 штук, включая интеграционные. Smoke-тесты на мок-модели, тесты на thread-safety, RAG-чанкинг, bash-фильтр, anti-loop, session search, tool-error nudge, docker fallback — это покрытие лучше, чем у многих коммерческих проектов.
-
-Что держит от 9+ (и что делать)
-1. Монолиты agent.py (~1030 стр.) и tools.py (~1110 стр.) — P1
-Сейчас это два гигантских файла, в которых смешаны: HTTP-роутинг, бизнес-логика агента, парсинг тул-блоков, валидация аргументов, bash sandbox, RAG, LSP, MCP.
-Рекомендация: выделить слои:
-core/
-  agent_loop.py      # только цикл LLM -> parse -> execute -> feedback
-  tool_parser.py     # парсинг ```tool / yaml / bare / lenient JSON
-  tool_executor.py   # dispatch + validation + stats
-  safety/
-    bash_guard.py    # whitelist + docker + path checks
-    path_guard.py    # ensure_safe_path + symlink checks
-Это не «красота ради красоты» — при 1000+ строках баги в anti-loop логике или в tool-parser трудно отследить.
-2. Динамический контекст в промпте — P1 (быстрая победа)
-Сейчас модель не знает «где она». Добавьте в system prompt перед каждым вызовом:
-You are working in project: {project_name}
-Last action: {last_tool_name} on {last_file} (result: {last_result_status})
-Current open files in editor: {open_tabs}
-Это даст +15-20% к точности путей и уменьшит галлюцинации на порядок — модель будет «ориентироваться в пространстве».
-3. Few-shot в момент ошибки тула — P1
-Сейчас после ошибки даётся «голый nudge». Вместо этого вставляйте в контекст конкретный пример исправления:
-Example of fixing a tool error:
-User asked to edit file. Model tried: {"tool":"edit","path":"app.py","old":"def foo():","new":"def bar():"}
-Error: file not found. Similar files: src/app.py
-Corrected tool: {"tool":"read","path":"src/app.py"} -> then edit.
-Это реально работает на 7B-моделях (DeepSeek в своей оценке обещал -30-40% галлюцинаций).
-4. xterm.js + WebSocket — P2, но критично для кодинга
-Сейчас терминал — SSE. Для долгих процессов (сервер разработки, npm run dev, отладчик) нужен полноценный PTY через WebSocket. Это приоритет №2 после рефакторинга.
-5. Документация для конечного пользователя — P2
-README технический — отличный. Но нужен USER_GUIDE.md: «Установка -> Первый запуск -> Как задать задачу -> Что делать, если модель зациклилась -> Как добавить свой skill». Без этого проект останется «для разработчиков».
-6. Интеграционные тесты с реальной моделью — P2
-57 мок-тестов — это надёжный фундамент. Но нужен хотя бы 1 «живой» тест: поднимает Ollama с qwen2.5-coder:7b, даёт задачу «создай hello.py с функцией greet», проверяет что файл создан и содержит def greet. Это ловит регрессии в prompt-формате, которые моки не ловят.
-
-Оценка по категориям
-Категория / Оценка / Комментарий
-- Архитектура: 9/10 — модульная, масштабируемая, правильные абстракции (SSE, RAG, LSP, MCP)
-- Код / качество: 7.5/10 — функционал отличный, но монолиты agent.py/tools.py — технический долг
-- Тесты: 9/10 — 57 тестов, покрывающие edge-cases (anti-loop, bash sandbox, RAG)
-- UX / UI: 8.5/10 — CodeMirror, терминал, авто-дополнение, мобильная версия — всё на месте
-- Надёжность модели: 8/10 — лучший prompt-based tool calling из виденных, но всё ещё prompt-based
-- Безопасность: 9/10 — whitelist, Docker, path jail, audit — уровень enterprise-прототипа
-- Документация: 7/10 — техническая — отличная, пользовательская — отсутствует
-
-Итог
-Проект прошёл точку «proof-of-concept» и находится в фазе «зрелый инструмент для собственного использования». Чтобы получить 9/10, нужно:
-- Разбить монолиты (2-3 дня)
-- Добавить динамический контекст в промпт (2-3 часа)
-- Few-shot при ошибках (1 день)
-- User guide (1 день)
-Чтобы получить 9.5/10 («альтернатива Cursor для команд»):
-- xterm.js + WebSocket
-- Интеграционные тесты с реальной моделью
-- RAG-сегментация по папкам (для кодовых баз >100k строк)
-- CLI-режим (python -m myopencode "задача")
-Это один из самых зрелых open-source агентов-программистов, что я видел. Особенно учитывая, что он работает на 7B-модели локально.
-========================================================================
-
-========================================================================
-ОЦЕНКА 4 (2026-08-08, внешний ревьювер): 8.8/10
-========================================================================
-Общая оценка: 8.8/10 — «самый зрелый open-source локальный агент на 7B».
-План до 9.5/10 (по оценке):
-P1 (критично для production):
-- AST-based edit guard — уникальность/fuzzy-совпадение old text (warning «found N times»; уберёт ~50% «edit failed»)
-- Git-auto-branch — сессия = ветка, write/edit/patch = auto-commit, undo = git reset
-- Prompt KV-cache — compressed system prompt после 3-й итерации (суммаризация правил 1-21)
-P2 (отличие от «зрелого прототипа»):
-- [x] Tauri desktop — СДЕЛАНО этапом 20 (WebView2 ~50MB против ~300MB pywebview)
-- Task-level model router — классификатор задачи (zero-shot 1.5b) выбирает модель до цикла
-- Plan tree UI — визуальное дерево шагов (pending/done/error)
-P3 (10/10):
-- Self-healing loop — 2 ошибки одним тулом → агент сам меняет стратегию (edit → read→write)
-- Multi-turn RAG — «RAG over plan»: сначала найти все затронутые файлы, потом редактировать
-Оси: Архитектура 9.0, Код/тесты 9.5, Безопасность 8.5, AI/модели 8.0, UX/UI 8.0, Доки/процесс 9.0.
-Отмечено: system prompt близко к prompt engineering ceiling (структурный prompt/XML или constrained
-decoding — AI_JSON_FORMAT=1 уже есть); TOOL_STATS лучше в мнемонику, а не сырые счётчики;
-семантическая валидация аргументов read/edit; unquoted string values в lenient JSON.
-========================================================================
-
-========================================================================
-ОЦЕНКА 5 (внешний ревьювер, 2026-08-08): 8.9/10 (+0.1 к 8.8)
-========================================================================
-«С учётом обновлённых артефактов (stage 20 Tauri desktop, 86/86 тестов,
-оценки 8.7/8.8/8.9) даю переоценку: 8.9/10.»
-
-Что изменилось (прогресс с последней оценки):
-- Tauri (P2, blocked on Rust/MSVC) -> СДЕЛАН (stage 20): Rust 1.97.1 + MSVC
-  Build Tools, src-tauri/ cargo-only wrapper, WebView2 окно 1280x860,
-  scripts/run_tauri.bat. UX/UI +0.2: native desktop теперь двойной
-  (Tauri ~50MB + pywebview fallback).
-- 83/83 тестов -> 86/86 (+3: vendor static, syntax guard, multi-file patch).
-  Код/тесты — на уровне 9.5.
-- Оценки: Kimi 8.7 + DS 8.6 -> Kimi 8.7, External 8.8, DS 8.9. Консенсус
-  внешних ревьюверов вырос.
-
-Разбивка по осям:
-- Архитектура 9.0: монолиты разбиты, core/ + api_* + tools/ — зрелая
-  модульность. Остаётся DI-контейнер вместо import agent as _agent.
-- Код/тесты 9.5: 86/86 unit + live multi-model suite — production-команда.
-- Безопасность 8.5: Docker opt-in, whitelist bash, path jail. Ждёт
-  AST-анализ python -c/node -e, git-auto-branch.
-- AI/модели 8.2: native/legacy гибрид, dynamic context, TOOL_STATS. Ждёт
-  prompt KV-cache, task-level router.
-- UX/UI 8.3: CM6, xterm.js+WS, Tauri WebView2, diff preview, RAG progress.
-  Ждёт plan tree UI, AST multi-file edit.
-- Доки/процесс 9.0: AGENTS.md, bilingual README, context.txt с историей
-  коммитов — дисциплина лучше 90% open-source.
-
-План до 9.5 (актуальный на момент оценки):
-P1 (критично): (1) AST-based edit guard — уникальность old текста (count>1
-  -> warning), ~50% «edit failed» в live; (2) git-auto-branch — сессия =
-  agent-session-<id> ветка, write/edit/patch = auto-commit, undo = git
-  reset; (3) prompt KV-cache — после 3-й итерации сжимать rules до 5-6
-  строк (KV-cache повторное использование).
-P2: (1) task-level model router — zero-shot классификация ДО цикла, не
-  override user model (урок stage 13), а advise; (2) plan tree UI — чекбоксы
-  pending/done/error (Cursor Composer-style); (3) ARCHITECTURE.md —
-  Mermaid-диаграмма + примеры тулов (рекомендация DS 8.9).
-P3 (10/10): (1) self-healing loop — 2 ошибки edit подряд -> автопереключение
-  read->write; (2) multi-turn RAG — «RAG over plan»: search всех затронутых
-  файлов, потом edit.
-
-Вердикт: проект прошёл точку «зрелый прототип» и находится в зоне
-«production-ready beta». Tauri закрыл последний крупный P2. Оставшиеся P1 —
-полировка крайних случаев, а не архитектурные дыры. После P1(1) AST edit
-guard проект заслуживает v2.0-stable и 9.2-9.3/10.
-
-СТАТУС НА СЕГОДНЯ (все пункты оценки 5 закрыты этапами 21-31):
-P1(1) edit guard = Этап 21 (found N times -> отклонение без мутаций,
-fuzzy-подсказка «Closest match», difflib)
-P1(2) git-auto-branch = Этап 22 (GIT_AUTO_COMMIT/GIT_AUTO_BRANCH, ветка
-agent-session-<ts>, auto-commit write/edit/patch, --no-verify)
-P1(3) prompt KV-cache = Этап 23 (COMPACT_SYSTEM_PROMPT при it>=3, ~0.3K
-токенов, RULES-маркер сохранён для native-ветки)
-P2(1) task-level router = Этап 30 (pick_task_model: zero-shot классификация
-PLANNER_MODEL до цикла; AI_MODEL/юзер-выбор побеждают; кэш установленных
-моделей 60с)
-P2(2) plan tree UI = Этап 31 (PLAN_STEPS + события {type:plan} + дерево
-✓/✗/○; _plan_mark после каждого тула)
-P2(3) ARCHITECTURE.md = Этап 27 (Mermaid-диаграмма, таблица тулов и env)
-Плюс: AUTO_CONFIRM_SAFE (24), авто-подбор qwen3:8b по VRAM (25), Docker
-default-when-present (26), AST-тулы rename/extract/inline (28), VRAM-
-индикатор (29). Тесты: 97/97 x2 (на момент оценки было 86/86).
-До 9.5 остался P3: self-healing loop, multi-turn RAG, voice input.
-========================================================================
-
-Оценка проекта My OpenCode v2 — ревью Kimi (2026-08-09)
-Оцениваю проект My OpenCode v2 по состоянию на 9 августа 2026 года (этапы 1–64, 115/115 тестов, live 7/7 на qwen3:8b).
-Итоговая оценка: 9.0 / 10
-Проект прошёл точку «зрелого прототипа» и находится в зоне production-ready beta. Это одна из самых зрелых локальных open-source реализаций AI-агента программиста на уровне архитектуры, тестового покрытия и инженерной дисциплины.
-Разбивка по осям
-Таблица
-Ось	Балл	Обоснование
-Архитектура	9.0	Монолиты разбиты на core/, tools/, api_* с чёткими границами. DI-контейнер (этап 41), абстракции RAG/DB (этап 42), deps-инъекция в цикл агента. Остаются «живые» глобалы (_state.py с синхронизацией копий — технический debt, хотя и осознанный).
-Код / тесты	9.5	115 unit-тестов + мультимодельный live-набор (test_live.py) + бенчмарк-обвязка (test_bench.py, 7 сценариев). Регрессионный гард промпта (test_system_prompt_rules). CI-матрица кроссплатформенности.
-Безопасность	8.5	Path jail (resolve + symlink-safe), bash whitelist (не blacklist) + рекурсивная проверка вложенных интерпретаторов, Docker sandbox (opt-in), rate limiting (per-IP + burst), подтверждение деструктивных операций. Минус: AST-анализ python -c/node -e всё ещё по ключевым словам, не полный parse.
-AI / модели	8.5	Лучший prompt-based tool calling для 7B-моделей, что я видел: 22 правила + few-shot + lenient JSON + dynamic context + self-healing (err_streak → SWITCH STRATEGY). Гибрид native/legacy (qwen3 native, остальные legacy) — единственно рациональная стратегия для Ollama. Минус: объективное ограничение экосистемы — только qwen3:8b проходит полный цикл (7/7), остальные модели нестабильны.
-UX / UI	8.5	4 интерфейса (CLI / Web / Tauri / MCP), CodeMirror 6 офлайн-бандл, xterm.js + WebSocket PTY, plan tree (✓✗○), diff preview, VRAM-индикатор, голосовой ввод (Web Speech API + Whisper fallback), чипы сабагентов. Минус: визуальный дизайн остаётся «инженерным», не product-design.
-Доки / процесс	9.5	AGENTS.md с дисциплиной «код + доки в одном коммите», bilingual README, ARCHITECTURE.md с Mermaid, USER_GUIDE, KIMI_REVIEW_SUMMARY с историей оценок, context.txt как лабораторный журнал. Уровень коммерческого продукта.
-Что поднимает оценку до 9.0
-Итеративная зрелость. 64 этапа с сохранением обратной совместимости, честная статистика (qwen2.5-coder:7b = 1/6 бенча, 16b = 0/6), никакого «всё работает идеально».
-Сабагентная архитектура. Прямые маркеры @reviewer/@fixer/@general с подменой system prompt, статус-события в UI, каталог /api/subagents. Это не хак, а архитектурное решение.
-Self-healing. Отслеживание 2+ ошибок подряд одним тулом с автоматическим советом сменить стратегию — редкий уровень «agentic» поведения для локального стека.
-RAG over plan. Автоматическая подгрузка контекста затронутых файлов по шагам плана — реализация multi-turn RAG без ручного промптинга.
-Оффлайн-обучение. 11 скиллов для создания SwiftMatch-класс приложений полностью оффлайн (замены Redis→Map, Bull→setInterval, Stripe→mock и т.д.) — это не просто код, а методология.
-Что держит ниже 9.5
-Таблица
-Проблема	Вес	Комментарий
-Зависимость от qwen3:8b	Средний	Не вина разработчика, но факт: проект «работает» только на одной модели. Для production это означает жёсткое требование к VRAM.
-Глобальное состояние	Низкий	_state.py + _sync_register — workaround вместо полного DI. Этап 41 частично закрыл, но остатки есть.
-Prompt ceiling	Средний	22 правила + EXAMPLES + VALID/INVALID + dynamic context + stats ≈ перегруз. Компактный промпт (этап 23) помогает после 3-й итерации, но первый вызов всё ещё тяжёлый.
-Безопасность вложенных команд	Низкий	python -c проверяется по ключевым словам, не через AST. Для локального single-user агента — приемлемо, для multi-user — нет.
-UI/UX дизайн	Низкий	Функционал превосходен, но визуально остаётся «инженерным интерфейсом», не конкурентом Cursor по «ощущению продукта».
-Сравнение с заявленными целями
-Таблица
-Цель (из README/context)	Статус
-Замена Cursor/Windsurf/Claude Code	Достигнута для пользователей с ≥10 GB VRAM и qwen3:8b
-Полностью оффлайн	Достигнута — vendored CM6, xterm.js, Whisper fallback, offline-скиллы
-9.5/10 по внешней оценке	Близко — все P1/P2/P3 закрыты, осталась только внешняя переоценка
-Production-ready	Достигнута — rate limiting, crash recovery, git auto-branch, DI, абстракции
-Рекомендации для 9.5→10.0
-Модель-независимость: инвестировать в адаптацию промпта под конкретные слабые модели (qwen2.5-coder:7b почти работает — возможно, few-shot примеры именно для неё поднимут с 1/6 до 3/6).
-Prompt compression: вынести EXAMPLES и VALID/INVALID в отдельный «skill» или system prompt tier, загружаемый по необходимости, а не в каждый вызов.
-AST bash guard: заменить keyword-based проверку python -c на ast.parse + compile() для выявления опасных импортов/вызовов.
-UI polish: добавить анимации переходов, улучшить типографику — «ощущение продукта» подтянется.
-Вердикт: проект заслуживает тега v2.0-stable. Это не «ещё один AI-агент на GitHub» — это системно выстроенный продукт с инженерной культурой, документацией и тестовым покрытием на уровне коммерческих команд. Основное ограничение — не код, а экосистема локальных моделей, с чем разработчик честно работает через гибрид native/legacy и task-level router.
-========================================================================
-
-СТАТУС НА СЕГОДНЯ (2026-08-09, после 9.0/10): рекомендации Kimi 4
-ЗАКРЫТЫ этапами 69–72: 69 — few-shot под qwen2.5-coder:7b (бенч 7b: 1/6 →
-5/7, пик 6/7, коммит 5b7bac6), 70 — prompt compression (SYSTEM_PROMPT_FEWSHOT
-tier, it 0–1 legacy, native никогда; коммит 4c9b6eb), 71 — AST bash guard
-(ast.parse+compile в core/safety/bash_guard.py; коммит 924ea4a), 72 — UI
-polish (анимации, типографика; коммит e141b7d). Тесты: 124/124 + live 3/3 +
-bench 7/7 (qwen3:8b, 513.8s) + 5/7 (7b). Сервер перезапущен на актуальном
-коде. Осталось: P0 видео-демо (сценарий — VIDEO_DEMO.md) и внешняя
-переоценка 9.5/10 (пакет — RE_EVAL.md).
-========================================================================
+Ревьювер	Дата	Оценка	Ваш прогресс с тех пор
+Kimi 2	2026-08	8.3	+0.9
+DeepSeek 2	2026-08	8.5	+0.7
+DeepSeek 6	2026-08-09	9.4	−0.2 (я консервативнее на 0.2 из-за привязки к qwen3)
+Kimi 4	2026-08-09	9.0	+0.2
+Моя оценка 9.2 — между Kimi 4 и DeepSeek 6. DeepSeek завысил на 0.2 за архитектурную смелость (DI, EventBus, AST guard), но не учёл vendor lock-in на qwen3:8b. Kimi занизил из-за «экосистемы моделей, не кода» — справедливо, но код уже достоин 9+.
+Вердикт
+My OpenCode v2 — это лучший локальный open-source агент-программист на текущий момент (2026-08-13). Он опережает аналоги по архитектуре, безопасности и тестовому покрытию. Для достижения 9.5/10 осталось закрыть 2 пункта: видео-демо и модель-независимость. Для 10/10 — потребуется Monaco-редактор и полноценный confidence-scoring.
